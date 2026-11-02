@@ -1,5 +1,11 @@
-# Netlify: the PUBLIC site only. Management (/manage) is never served here; it
-# stays on the server and is reached through an SSH tunnel (deploy/staging/README.md).
+# Netlify: the whole site, including management (/manage). Every /api request
+# is proxied to the backend on schul-staging through its HTTPS gateway:
+#
+#   browser -> Netlify -> Cloudflare (rip-daktari.schul.co.ke:8443) -> Caddy -> app
+#
+# The gateway (deploy/staging/Caddyfile.tls) sends /api/manage/* to the
+# management listener (sign-in required; requests must come from this site)
+# and everything else to the public listener.
 #
 # This file lives in frontend/, so in the Netlify UI set "Base directory" to
 # `frontend` (Netlify then reads this file). `publish` is relative to `base`.
@@ -13,50 +19,17 @@
   # Same Node line as the Dockerfile's build stage (node:22.21-trixie-slim).
   NODE_VERSION = "22.21"
 
-# Rules are matched top to bottom; the first match wins.
-#
-# BACKEND ORIGIN: the backend's PUBLIC listener on schul-staging, port 8080
-# (deploy/staging/compose.yml). It serves only public data; the management
-# listener is never published there. Plain HTTP for now; move to an HTTPS name
-# (e.g. a Cloudflare-proxied subdomain) when one exists.
+# Rules are matched top to bottom; the first match wins. Proxies (status 200)
+# keep the browser on this site: no CORS, and `connect-src 'self'` holds.
 
-# 1. Management is not served from Netlify.
-[[redirects]]
-  from = "/manage"
-  to = "/"
-  status = 302
-  force = true
-
-[[redirects]]
-  from = "/manage/*"
-  to = "/"
-  status = 302
-  force = true
-
-# 2. Public API, proxied (status 200 = rewrite) so the browser stays same-origin:
-#    no CORS, and the app's `connect-src 'self'` policy holds.
-[[redirects]]
-  from = "/api/public/*"
-  to = "http://164.90.230.69:8080/api/public/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/health"
-  to = "http://164.90.230.69:8080/api/health"
-  status = 200
-  force = true
-
-# 3. Any other /api path also goes to the PUBLIC listener, which has no
-#    management routes and answers a JSON 404 the app understands (instead of
-#    index.html with 200 from the SPA fallback below).
+# 1. Every API request goes to the backend's HTTPS gateway.
 [[redirects]]
   from = "/api/*"
-  to = "http://164.90.230.69:8080/api/:splat"
+  to = "https://rip-daktari.schul.co.ke:8443/api/:splat"
   status = 200
   force = true
 
-# 4. Single-page app: every other path renders index.html.
+# 2. Single-page app: every other path (including /manage) renders index.html.
 [[redirects]]
   from = "/*"
   to = "/index.html"
