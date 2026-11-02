@@ -2,7 +2,7 @@
 // data only, so nothing private can appear.
 
 import { clsx } from "clsx";
-import { ArrowRight, Check, ChevronDown, Copy, FileText, MapPin, Megaphone, Phone, Share2 } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Copy, FileText, HandCoins, MapPin, Megaphone, Phone, Share2 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router";
 import { formatKesShort } from "@/lib/money";
@@ -133,13 +133,24 @@ export function Hero({ page }: { page: PublicPage }) {
               <span className="gold-sheen">{f.memorial_tribute}</span>
             </p>
           )}
+          {f.giving && (
+            <div className="hero-line pt-6" style={delay(850)}>
+              <Link
+                to="/contribute"
+                className="press glow-pulse inline-flex min-h-12 items-center gap-2 rounded-full bg-[#e8c27a] px-6 text-[17px] font-semibold text-[#1e1625] no-underline shadow-[0_10px_30px_-10px_rgb(232_194_122/0.8)] hover:bg-[#f0cf8e] hover:no-underline"
+              >
+                <HandCoins className="size-5" aria-hidden /> How do I contribute?
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </header>
   );
 }
 
-function CopyRow({ label, value }: { label: string; value: string }) {
+/** `display` is shown (e.g. 0711 672 840); `value` is what is copied (0711672840). */
+export function CopyRow({ label, value, display }: { label: string; value: string; display?: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     if (await copyText(value)) {
@@ -151,7 +162,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-2.5">
       <div className="min-w-0">
         <p className="text-[13px] text-stone-500">{label}</p>
-        <p className="text-[1.45rem] leading-snug font-semibold tracking-wide break-all text-stone-900 tabular-nums">{value}</p>
+        <p className="text-[1.45rem] leading-snug font-semibold tracking-wide break-all text-stone-900 tabular-nums">{display ?? value}</p>
       </div>
       <button
         type="button"

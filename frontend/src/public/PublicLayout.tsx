@@ -166,8 +166,7 @@ function PublicNav({ page }: { page: PublicPage }) {
 
   function contribute() {
     setOpen(false);
-    if (pathname === "/") document.getElementById("give")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    else navigate("/#give");
+    navigate("/contribute");
   }
 
   return (
@@ -299,19 +298,12 @@ function PublicNav({ page }: { page: PublicPage }) {
 /** Phones: giving and sharing stay in reach once the M-Pesa card scrolls away. */
 function ActionBar({ page }: { page: PublicPage }) {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
-  function contribute() {
-    if (pathname === "/") {
-      document.getElementById("give")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    } else {
-      navigate("/#give");
-    }
-  }
+  const contribute = () => navigate("/contribute");
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 flex gap-3 border-t border-stone-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
       {page.fundraiser.giving && (
         <BarButton primary onClick={contribute} icon={<HandCoins className="size-5" aria-hidden />}>
-          Contribute
+          How to contribute
         </BarButton>
       )}
       <BarButton grow={!page.fundraiser.giving} onClick={() => void sharePage(page)} icon={<Share2 className="size-5" aria-hidden />}>

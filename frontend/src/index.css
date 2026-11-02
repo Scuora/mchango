@@ -88,7 +88,8 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
-    color-scheme: light;
+    /* "only light": browsers in dark mode keep the site's own colours instead of inverting them. */
+    color-scheme: only light;
     font-feature-settings: "kern";
   }
   body {
