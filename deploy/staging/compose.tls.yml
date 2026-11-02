@@ -1,0 +1,36 @@
+# HTTPS gateway for Netlify (Caddyfile.tls). deploy.yml copies this to
+# /opt/mchango and adds it to the `mchango` project when mchango_tls_host is set:
+#
+#   docker compose -p mchango -f /opt/mchango/compose.yml -f /opt/mchango/compose.tls.yml up -d
+#
+# It joins only our own network (mchango_default), never `schul_default`, and
+# publishes only 8443. The app's management port stays on the host's loopback;
+# from outside it is reachable only through here, over HTTPS, with sign-in.
+
+services:
+  mchango-tls:
+    image: caddy:2.10-alpine
+    container_name: mchango-staging-tls
+    restart: unless-stopped
+    depends_on:
+      mchango:
+        condition: service_healthy
+    env_file:
+      - path: tls.env               # MCHANGO_TLS_HOST, MCHANGO_SITE_HOST (written by deploy.yml)
+        required: true
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./Caddyfile.tls:/etc/caddy/Caddyfile:ro
+      - tls-data:/data              # Caddy's local CA and certificate
+    mem_limit: 128m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  tls-data:
+    name: mchango-staging-tls-data

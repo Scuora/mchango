@@ -19,6 +19,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/public/memorial-photo", get(memorial_photo))
         .route("/api/public/share-image", get(share_image))
         .route("/api/public/check", axum::routing::post(check))
+        .route("/api/public/head", get(super::page::head))
 }
 
 async fn health(State(state): State<AppState>) -> AppResult<Json<Value>> {
@@ -146,7 +147,16 @@ impl CheckLimiter {
 
 /// The visitor's address: from the proxy's X-Forwarded-For when the request
 /// came through a local or private proxy (Caddy), otherwise the peer address.
-fn visitor(headers: &HeaderMap, peer: Option<std::net::SocketAddr>) -> String {
+fn visitor(headers: &HeaderMap, peer: Option<std::net::SocketAddr>, client_ip_header: Option<&str>) -> String {
+    // A proxy that names the visitor (Netlify) wins; the value must be an address.
+    if let Some(ip) = client_ip_header
+        .and_then(|name| headers.get(name))
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .and_then(|v| v.trim().parse::<std::net::IpAddr>().ok())
+    {
+        return ip.to_string();
+    }
     let via_proxy = peer.is_none_or(|p| match p.ip() {
         std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
         std::net::IpAddr::V6(v6) => v6.is_loopback() || (v6.segments()[0] & 0xfe00) == 0xfc00,
@@ -180,11 +190,29 @@ async fn check(
         return Err(AppError::field("code", "Paste only the M-Pesa code or the confirmation message."));
     }
     let peer = connect.map(|axum::Extension(axum::extract::ConnectInfo(addr))| addr);
-    if !state.check_limiter.allow(&visitor(&headers, peer)) {
+    if !state.check_limiter.allow(&visitor(&headers, peer, state.config.client_ip_header.as_deref())) {
         return Err(AppError::TooManyAttempts(
             "You have checked several codes in a short time. Please wait a few minutes and try again.".into(),
         ));
     }
     let mut conn = state.pool.acquire().await?;
     Ok(Json(publication::check_contribution(&mut conn, &request.code).await?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::visitor;
+    use axum::http::HeaderMap;
+
+    #[test]
+    fn the_named_header_identifies_the_visitor_behind_a_proxy() {
+        let netlify: std::net::SocketAddr = "54.84.1.1:443".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-nf-client-connection-ip", "102.68.1.20".parse().unwrap());
+        assert_eq!(visitor(&headers, Some(netlify), Some("x-nf-client-connection-ip")), "102.68.1.20");
+        // Without the setting, or with a value that is not an address, the proxy's address is used.
+        assert_eq!(visitor(&headers, Some(netlify), None), "54.84.1.1");
+        headers.insert("x-nf-client-connection-ip", "not-an-ip".parse().unwrap());
+        assert_eq!(visitor(&headers, Some(netlify), Some("x-nf-client-connection-ip")), "54.84.1.1");
+    }
 }

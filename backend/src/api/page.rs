@@ -21,6 +21,13 @@ pub async fn index(State(state): State<AppState>, headers: HeaderMap) -> Respons
     ([(header::CONTENT_TYPE, "text/html; charset=utf-8"), (header::CACHE_CONTROL, "no-cache")], html).into_response()
 }
 
+/// The same tags as JSON, for a front end served elsewhere (the Netlify edge
+/// function puts them into its copy of index.html). Null when the page is not published.
+pub async fn head(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let tags = head_tags(&state, &headers).await;
+    ([(header::CACHE_CONTROL, "public, max-age=60")], axum::Json(serde_json::json!({ "tags": tags }))).into_response()
+}
+
 async fn head_tags(state: &AppState, headers: &HeaderMap) -> Option<String> {
     let mut conn = state.pool.acquire().await.ok()?;
     let f = settings::fundraiser(&mut conn).await.ok()?;

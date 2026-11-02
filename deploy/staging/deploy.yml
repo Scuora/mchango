@@ -112,6 +112,14 @@
     mchango_container: mchango-staging-app
     mchango_public_port: 18080
     mchango_manage_port: 18081
+    # Behind Netlify. The site's name is what management requests are addressed
+    # to; the client-IP header lets per-visitor limits see visitors, not Netlify.
+    mchango_site_host: rip-daktari.netlify.app
+    mchango_client_ip_header: x-nf-client-connection-ip
+    # A Cloudflare-proxied name for this server (e.g. staging-mchango.schul.co.ke).
+    # When given, the HTTPS gateway (compose.tls.yml) is installed; it then stays
+    # installed on later runs without repeating this.
+    mchango_tls_host: ""
   tasks:
     - name: Take the release name from the build
       ansible.builtin.set_fact:
@@ -156,14 +164,49 @@
         mode: "0600"
         force: false
 
-    - name: Is the edge overlay installed? (compose.edge.yml, added later for Netlify)
+    - name: Settings for running behind Netlify (other server-local settings are kept)
+      ansible.builtin.lineinfile:
+        path: "{{ mchango_dir }}/mchango.env"
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+      loop:
+        - { key: CLIENT_IP_HEADER, value: "{{ mchango_client_ip_header }}" }
+        - { key: MANAGE_ALLOWED_HOSTS, value: "{{ mchango_site_host }}" }
+
+    - name: HTTPS gateway files
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ mchango_dir }}/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: [compose.tls.yml, Caddyfile.tls]
+      when: mchango_tls_host | length > 0
+
+    - name: HTTPS gateway names
+      ansible.builtin.copy:
+        content: |
+          MCHANGO_TLS_HOST={{ mchango_tls_host }}
+          MCHANGO_SITE_HOST={{ mchango_site_host }}
+        dest: "{{ mchango_dir }}/tls.env"
+        owner: root
+        group: root
+        mode: "0644"
+      when: mchango_tls_host | length > 0
+
+    - name: Is the HTTPS gateway installed?
+      ansible.builtin.stat:
+        path: "{{ mchango_dir }}/compose.tls.yml"
+      register: tls_file
+
+    - name: Is the edge overlay installed? (compose.edge.yml, the nginx alternative; unused)
       ansible.builtin.stat:
         path: "{{ mchango_dir }}/compose.edge.yml"
       register: edge_file
 
     - name: Compose command for this project
       ansible.builtin.set_fact:
-        mchango_compose: "{{ ['docker', 'compose', '-p', 'mchango', '-f', mchango_dir ~ '/compose.yml'] + (['-f', mchango_dir ~ '/compose.edge.yml'] if edge_file.stat.exists else []) }}"
+        mchango_compose: "{{ ['docker', 'compose', '-p', 'mchango', '-f', mchango_dir ~ '/compose.yml'] + (['-f', mchango_dir ~ '/compose.edge.yml'] if edge_file.stat.exists else []) + (['-f', mchango_dir ~ '/compose.tls.yml'] if tls_file.stat.exists else []) }}"
 
     - name: Compose file is valid
       ansible.builtin.command:
@@ -233,6 +276,17 @@
       failed_when: >-
         published.stdout_lines | select('search', '^8081/') | list | length == 0 or
         published.stdout_lines | select('search', '^8081/') | reject('search', '-> 127\.0\.0\.1:') | list | length > 0
+
+    - name: HTTPS gateway serves the public API and guards management (200, then 401)
+      ansible.builtin.shell: |
+        set -e
+        . {{ mchango_dir }}/tls.env
+        curl -sk --max-time 10 -o /dev/null -w '%{http_code} ' --resolve "$MCHANGO_TLS_HOST:8443:127.0.0.1" "https://$MCHANGO_TLS_HOST:8443/api/health"
+        curl -sk --max-time 10 -o /dev/null -w '%{http_code}' --resolve "$MCHANGO_TLS_HOST:8443:127.0.0.1" "https://$MCHANGO_TLS_HOST:8443/api/manage/auth/me"
+      register: gateway
+      changed_when: false
+      failed_when: gateway.stdout != '200 401'
+      when: tls_file.stat.exists
 
     - name: Record the release
       ansible.builtin.lineinfile:

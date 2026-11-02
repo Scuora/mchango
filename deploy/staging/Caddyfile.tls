@@ -1,0 +1,32 @@
+# HTTPS in front of Mchango, so Netlify can reach it securely
+# (compose.tls.yml; installed by deploy.yml when mchango_tls_host is set).
+#
+#   browser --HTTPS--> Netlify --HTTPS--> Cloudflare --HTTPS--> this Caddy :8443 --> app
+#
+# Cloudflare connects here on port 8443 (one of its HTTPS ports) for the proxied
+# name {$MCHANGO_TLS_HOST}. The certificate is Caddy's own (`tls internal`),
+# which Cloudflare's "Full" SSL mode accepts, as it does schul-nginx's.
+{
+	admin off
+	auto_https disable_redirects
+}
+
+https://{$MCHANGO_TLS_HOST}:8443 {
+	tls internal
+	encode gzip
+
+	# Management. The app only accepts requests addressed to the site people
+	# use, coming from that same site (rebinding and cross-site request forgery
+	# guards), so present the Netlify name. Sign-in is still required.
+	@manage path /api/manage/*
+	handle @manage {
+		reverse_proxy mchango:8081 {
+			header_up Host {$MCHANGO_SITE_HOST}
+		}
+	}
+
+	# Everything else goes to the public listener, which has no management routes.
+	handle {
+		reverse_proxy mchango:8080
+	}
+}

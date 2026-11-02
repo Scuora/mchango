@@ -21,6 +21,9 @@ pub struct Config {
     pub log_json: bool,
     /// The public page's address, used in shared updates (e.g. https://mchango.example.org).
     pub public_url: Option<String>,
+    /// A header naming the visitor's address, set by a proxy in front (e.g. Netlify's
+    /// `x-nf-client-connection-ip`), so per-visitor limits see each visitor and not the proxy.
+    pub client_ip_header: Option<String>,
 }
 
 impl Config {
@@ -54,6 +57,7 @@ impl Config {
             max_upload_bytes: max_upload_mb * 1024 * 1024,
             log_json: var("LOG_FORMAT", "text").eq_ignore_ascii_case("json"),
             public_url: public_url()?,
+            client_ip_header: client_ip_header()?,
         })
     }
 
@@ -71,6 +75,7 @@ impl Config {
             max_upload_bytes: 10 * 1024 * 1024,
             log_json: false,
             public_url: None,
+            client_ip_header: None,
         }
     }
 }
@@ -87,6 +92,17 @@ fn public_url() -> Result<Option<String>, String> {
     Ok(Some(url.to_string()))
 }
 
+fn client_ip_header() -> Result<Option<String>, String> {
+    let name = var("CLIENT_IP_HEADER", "").trim().to_ascii_lowercase();
+    if name.is_empty() {
+        return Ok(None);
+    }
+    if !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+        return Err(format!("CLIENT_IP_HEADER must be a header name such as x-nf-client-connection-ip, not {name:?}"));
+    }
+    Ok(Some(name))
+}
+
 fn var(name: &str, default: &str) -> String {
     std::env::var(name).ok().filter(|v| !v.trim().is_empty()).unwrap_or_else(|| default.to_string())
 }
@@ -96,7 +112,8 @@ fn parse_var<T: std::str::FromStr>(name: &str, default: &str) -> Result<T, Strin
     raw.trim().parse().map_err(|_| format!("{name} has an invalid value: {raw:?}"))
 }
 
-/// Management has no login yet, so it may only listen where the public cannot reach it.
+/// Management controls the money records, so it may only listen where the public cannot reach
+/// it directly (a proxy with HTTPS in front is how it is offered beyond the server).
 ///
 /// Loopback is always allowed. Private-network addresses (LAN, Tailscale/CGNAT,
 /// IPv6 ULA) are allowed with a warning. Anything else, including 0.0.0.0, needs
@@ -122,8 +139,8 @@ fn check_management_address(ip: IpAddr, confirmed: bool) -> Result<(), String> {
         return Ok(());
     }
     Err(format!(
-        "MANAGE_ADDR {ip} is not a loopback or private address. Management has no login yet, \
-         so it must not be reachable publicly. Use 127.0.0.1, a VPN address, or set \
+        "MANAGE_ADDR {ip} is not a loopback or private address. Management must not be \
+         reachable publicly without a proxy in front. Use 127.0.0.1, a VPN address, or set \
          MANAGE_ADDR_PRIVATE_CONFIRMED=true only if the port is otherwise private (e.g. a Docker \
          port published on 127.0.0.1)."
     ))
