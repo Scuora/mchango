@@ -1,7 +1,5 @@
-# Netlify: the site, including management (/manage). Every /api request is
-# proxied to the backend on schul-staging through its HTTPS gateway (Caddy on
-# :8443, deploy/staging/Caddyfile.tls), which sends /api/manage/* to the
-# management listener and everything else to the public one.
+# Netlify: the PUBLIC site only. Management (/manage) is never served here; it
+# stays on the server and is reached through an SSH tunnel (deploy/staging/README.md).
 #
 # This file lives in frontend/, so in the Netlify UI set "Base directory" to
 # `frontend` (Netlify then reads this file). `publish` is relative to `base`.
@@ -17,30 +15,44 @@
 
 # Rules are matched top to bottom; the first match wins.
 #
-# BACKEND ORIGIN: https://164.90.230.69:8443, the HTTPS gateway on schul-staging.
-# The hop is encrypted; its certificate is the gateway's own. When the
-# Cloudflare name staging-mchango.schul.co.ke exists, it can replace the address.
+# BACKEND ORIGIN: the backend's PUBLIC listener on schul-staging, port 8080
+# (deploy/staging/compose.yml). It serves only public data; the management
+# listener is never published there. Plain HTTP for now; move to an HTTPS name
+# (e.g. a Cloudflare-proxied subdomain) when one exists.
+
+# 1. Management is not served from Netlify.
+[[redirects]]
+  from = "/manage"
+  to = "/"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "/manage/*"
+  to = "/"
+  status = 302
+  force = true
 
 # 2. Public API, proxied (status 200 = rewrite) so the browser stays same-origin:
 #    no CORS, and the app's `connect-src 'self'` policy holds.
 [[redirects]]
   from = "/api/public/*"
-  to = "https://164.90.230.69:8443/api/public/:splat"
+  to = "http://164.90.230.69:8080/api/public/:splat"
   status = 200
   force = true
 
 [[redirects]]
   from = "/api/health"
-  to = "https://164.90.230.69:8443/api/health"
+  to = "http://164.90.230.69:8080/api/health"
   status = 200
   force = true
 
-# 3. Every other /api path, including management (/api/manage/*), which the
-#    gateway sends to the management listener: sign-in required, and requests
-#    must come from this site. Unknown paths get a JSON 404 the app understands.
+# 3. Any other /api path also goes to the PUBLIC listener, which has no
+#    management routes and answers a JSON 404 the app understands (instead of
+#    index.html with 200 from the SPA fallback below).
 [[redirects]]
   from = "/api/*"
-  to = "https://164.90.230.69:8443/api/:splat"
+  to = "http://164.90.230.69:8080/api/:splat"
   status = 200
   force = true
 
