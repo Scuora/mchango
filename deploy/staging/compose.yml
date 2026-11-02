@@ -8,9 +8,11 @@
 # from the Mac's live `mchango-data`, so a command run on the wrong machine
 # cannot touch the other instance's data.
 #
-# Both listeners are published on the host's loopback only. Nothing here is
-# reachable from the internet; see README.md for the SSH tunnel and for the
-# later Netlify wiring (compose.edge.yml + nginx-mchango.conf.example).
+# The PUBLIC listener is published on port 8080 of every interface: Netlify
+# (rip-daktari.netlify.app) proxies /api/* to it. It serves only the public page
+# and /api/public/*. The MANAGEMENT listener stays on the host's loopback and is
+# reached through an SSH tunnel (README.md). deploy.yml fails if it is ever
+# published anywhere else.
 
 name: mchango
 
@@ -31,7 +33,8 @@ services:
       # container is on its own network. Sign-in is required on top of that.
       MANAGE_ADDR_PRIVATE_CONFIRMED: "true"
     ports:
-      - "127.0.0.1:18080:8080"      # public page + /api/public/* + /api/health
+      - "8080:8080"                 # public page + /api/public/* + /api/health, for Netlify
+      - "127.0.0.1:18080:8080"      # the same, on loopback, for the playbook's checks
       - "127.0.0.1:18081:8081"      # management: reach it with an SSH tunnel only
     volumes:
       - data:/data

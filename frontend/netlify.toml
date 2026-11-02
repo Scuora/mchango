@@ -15,12 +15,10 @@
 
 # Rules are matched top to bottom; the first match wins.
 #
-# BACKEND ORIGIN PLACEHOLDER: replace every `https://mchango-backend.invalid`
-# with the backend's public HTTPS origin once it exists (e.g. a Cloudflare-
-# proxied name in front of schul-staging's nginx). `.invalid` can never
-# resolve, so an unreplaced value fails closed instead of leaking requests.
-# The origin must expose ONLY the backend's public listener (:8080), never
-# the management listener.
+# BACKEND ORIGIN: the backend's PUBLIC listener on schul-staging, port 8080
+# (deploy/staging/compose.yml). It serves only public data; the management
+# listener is never published there. Plain HTTP for now; move to an HTTPS name
+# (e.g. a Cloudflare-proxied subdomain) when one exists.
 
 # 1. Management is not served from Netlify.
 [[redirects]]
@@ -39,13 +37,13 @@
 #    no CORS, and the app's `connect-src 'self'` policy holds.
 [[redirects]]
   from = "/api/public/*"
-  to = "https://mchango-backend.invalid/api/public/:splat"
+  to = "http://164.90.230.69:8080/api/public/:splat"
   status = 200
   force = true
 
 [[redirects]]
   from = "/api/health"
-  to = "https://mchango-backend.invalid/api/health"
+  to = "http://164.90.230.69:8080/api/health"
   status = 200
   force = true
 
@@ -54,7 +52,7 @@
 #    index.html with 200 from the SPA fallback below).
 [[redirects]]
   from = "/api/*"
-  to = "https://mchango-backend.invalid/api/:splat"
+  to = "http://164.90.230.69:8080/api/:splat"
   status = 200
   force = true
 

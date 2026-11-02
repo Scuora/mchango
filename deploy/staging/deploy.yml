@@ -225,14 +225,14 @@
         url: "http://127.0.0.1:{{ mchango_public_port }}/api/manage/auth/me"
         status_code: 404
 
-    - name: Published ports must be on loopback only
+    - name: Management must be published on loopback only (the public listener is open for Netlify)
       ansible.builtin.command:
         argv: [docker, port, "{{ mchango_container }}"]
       register: published
       changed_when: false
       failed_when: >-
-        published.stdout_lines | length == 0 or
-        published.stdout_lines | reject('search', '-> 127\.0\.0\.1:') | list | length > 0
+        published.stdout_lines | select('search', '^8081/') | list | length == 0 or
+        published.stdout_lines | select('search', '^8081/') | reject('search', '-> 127\.0\.0\.1:') | list | length > 0
 
     - name: Record the release
       ansible.builtin.lineinfile:

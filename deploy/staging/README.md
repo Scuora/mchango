@@ -53,8 +53,8 @@ ansible-playbook deploy.yml -e mchango_build_on=mac           # build on the Mac
 
 1. It builds the image on the server by default. A ~0.3 MB tarball of the
    source is streamed over SSH into `docker build -`. The build is native
-   amd64, capped to 3 of 4 cores and 2 GB RAM. The first build took ~15 min;
-   later builds reuse the cached dependency layers.
+   amd64, capped to 3 of 4 cores and 2 GB RAM. Each build so far took 10–16
+   min; unchanged layers come from the server's cache.
 2. It writes `compose.yml`, plus `mchango.env` only if that file is missing.
 3. It backs up the running database to `/data/backups/pre-<release>-<time>.sqlite`.
 4. It retags `mchango:staging` and runs `docker compose -p mchango up -d --wait`.
@@ -75,8 +75,12 @@ ssh schul-staging cat /opt/mchango/releases.log                 # pick the previ
 ansible-playbook deploy.yml -e mchango_skip_build=true -e mchango_release=<previous release>
 ```
 
-Migrations only move forward. If the bad release changed the database, also put
-back the backup taken just before it. The commands below run on the server:
+Migrations only move forward. A release older than the data's newest migration
+will not start; sqlx reports "migration N was previously applied but is
+missing". For example, release `20261102-211022` predates `0010_pledge_groups`,
+so it cannot run on today's data. If the bad release changed the database,
+also put back the backup taken just before it. The commands below run on the
+server:
 
 ```sh
 docker compose -p mchango -f /opt/mchango/compose.yml stop mchango
