@@ -81,17 +81,17 @@ export function PledgesPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <ButtonLink to="/manage/add?kind=pledge&by=family" icon={<Users className="size-4" aria-hidden />}>
-            Family pledge
+            Family share
           </ButtonLink>
           <ButtonLink to="/manage/add?kind=pledge" variant="secondary" icon={<Plus className="size-4" aria-hidden />}>
-            Friend&rsquo;s pledge
+            Well-wisher&rsquo;s pledge
           </ButtonLink>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <GroupSummary title="The family" pledges={list} by="family" />
-        <GroupSummary title="Friends & well-wishers" pledges={list} by="friends" />
+        <GroupSummary title="The family&rsquo;s share" pledges={list} by="family" />
+        <GroupSummary title="Family, friends & well-wishers" pledges={list} by="friends" />
       </div>
 
       <Card>
@@ -103,8 +103,8 @@ export function PledgesPage() {
             onChange={setGroup}
             options={[
               ["all", "Everyone", list.length],
-              ["family", "Family", list.filter((p) => p.pledged_by === "family").length],
-              ["friends", "Friends", list.filter((p) => p.pledged_by === "friends").length],
+              ["family", "Family share", list.filter((p) => p.pledged_by === "family").length],
+              ["friends", "Well-wishers", list.filter((p) => p.pledged_by === "friends").length],
             ]}
           />
           <Filter

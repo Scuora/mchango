@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router";
 import { PledgeGroupTag, PledgeProgressBar, PledgeStatusBadge, STATUS_LABEL } from "@/components/pledges";
 import { CountUp } from "@/components/CountUp";
+import { capitalise, familyOf } from "@/lib/goal";
 import { formatKesShort } from "@/lib/money";
 import { daysAgoNairobi, formatDayHeading, formatNairobiTime, formatShortDate, formatShortDateTime, todayNairobi } from "@/lib/time";
 import type { PledgeStatus, PublicEntry, PublicPledge } from "@/lib/types";
@@ -183,7 +184,7 @@ function Initials({ name }: { name: string }) {
 }
 
 /** Pledges from the family and from friends, coloured by where each one stands. */
-function PledgesView({ pledges, showAmounts }: { pledges: PublicPledge[]; showAmounts: boolean }) {
+function PledgesView({ pledges, showAmounts, family }: { pledges: PublicPledge[]; showAmounts: boolean; family: string }) {
   const [status, setStatus] = useState<"all" | PledgeStatus>("all");
   const shown = pledges.filter((p) => status === "all" || p.status === status);
   const groups = (["family", "friends"] as const)
@@ -196,7 +197,7 @@ function PledgesView({ pledges, showAmounts }: { pledges: PublicPledge[]; showAm
         {groups.map((g) => (
           <div key={g.by} data-reveal className="rounded-2xl border border-stone-200 bg-white p-4">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[15px] text-stone-600">{g.by === "family" ? "Pledged by the family" : "Pledged by friends"}</p>
+              <p className="text-[15px] text-stone-600">{g.by === "family" ? capitalise(family) : "Family, friends & well-wishers"}</p>
               <PledgeGroupTag by={g.by} />
             </div>
             {showAmounts ? (
@@ -249,7 +250,7 @@ function PledgesView({ pledges, showAmounts }: { pledges: PublicPledge[]; showAm
             .map((g) => (
               <div key={g.by}>
                 <div className="sticky top-[var(--nav-h)] z-20 flex items-center justify-between gap-3 border-y border-stone-100 bg-white/95 px-5 py-2.5 backdrop-blur first:border-t-0">
-                  <h2 className="font-display text-[1.25rem] font-semibold text-stone-900">{g.by === "family" ? "The family" : "Friends & well-wishers"}</h2>
+                  <h2 className="font-display text-[1.25rem] font-semibold text-stone-900">{g.by === "family" ? capitalise(family) : "Family, friends & well-wishers"}</h2>
                   <p className="text-[14px] text-stone-500 tabular-nums">{count(g.rows.length)}</p>
                 </div>
                 <ul className="divide-y divide-stone-100">
@@ -447,7 +448,7 @@ export function ContributionsPage() {
           </div>
         )}
         {view === "pledges" ? (
-          <PledgesView pledges={pledges} showAmounts={showAmounts} />
+          <PledgesView pledges={pledges} showAmounts={showAmounts} family={familyOf(page.fundraiser.memorial_name)} />
         ) : (
         <>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

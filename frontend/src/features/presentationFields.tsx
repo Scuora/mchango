@@ -89,8 +89,8 @@ export function PresentationFields({ kind, draft, onChange, senderName, anonymou
           value={draft.pledgedBy}
           onChange={(v) => set("pledgedBy", v)}
           options={[
-            { value: "friends", label: "Friends & well-wishers" },
-            { value: "family", label: "The family (counts towards the family’s share)" },
+            { value: "friends", label: "Family, friends & well-wishers" },
+            { value: "family", label: "The family’s own share (the deceased’s family)" },
           ]}
         />
       )}

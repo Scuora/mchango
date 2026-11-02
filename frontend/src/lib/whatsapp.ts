@@ -2,7 +2,7 @@
 // shared message can never contain phone numbers, M-Pesa names or other
 // private details. WhatsApp formatting: *bold*, _italic_, plain lines.
 
-import { goalOf } from "./goal";
+import { familyOf, goalOf } from "./goal";
 import { formatKesShort } from "./money";
 import { formatNairobiDate, formatNairobiLongDate } from "./time";
 import type { PublicEntry, PublicPage } from "./types";
@@ -90,12 +90,11 @@ export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, tod
       lines.push("");
       if (goal.target !== null) lines.push(`*The goal: ${formatKesShort(goal.target)}*`);
       if (goal.familyPledged > 0) {
-        const received = goal.familyReceived > 0 ? ` (${formatKesShort(Math.min(goal.familyReceived, goal.familyPledged))} received)` : "";
-        lines.push(`Pledged by the family: ${formatKesShort(goal.familyPledged)}${received}`);
+        lines.push(`Paid by ${familyOf(fundraiser.memorial_name)}: ${formatKesShort(goal.familyPledged)}`);
         const share = goal.othersShare !== null ? ` of ${formatKesShort(goal.othersShare)}` : "";
-        lines.push(`From friends and well-wishers: ${formatKesShort(goal.othersReceived)}${share}`);
+        lines.push(`From family, friends and well-wishers: ${formatKesShort(goal.othersReceived)}${share}`);
       }
-      if (goal.othersOutstanding > 0) lines.push(`Pledged by friends, not yet received: ${formatKesShort(goal.othersOutstanding)}`);
+      if (goal.othersOutstanding > 0) lines.push(`Pledged by family, friends and well-wishers, not yet received: ${formatKesShort(goal.othersOutstanding)}`);
       if (goal.stillNeeded !== null) lines.push(goal.stillNeeded > 0 ? `*Still needed: ${formatKesShort(goal.stillNeeded)}*` : "*The target has been reached. Thank you.*");
     }
   }

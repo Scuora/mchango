@@ -38,7 +38,7 @@ export function PledgeGroupTag({ by, className }: { by: PledgedBy; className?: s
         className,
       )}
     >
-      {by === "family" ? "Family" : "Friend"}
+      {by === "family" ? "Family share" : "Well-wisher"}
     </span>
   );
 }

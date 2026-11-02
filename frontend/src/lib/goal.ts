@@ -44,3 +44,12 @@ export function goalOf(target: number | null, pledges: PledgeTotals | null, cont
     stillNeeded: target ? Math.max(0, target - covered) : null,
   };
 }
+
+/** "the family of Karisa Gonzi" from "Joseph Karisa Gonzi": the name without the given name. */
+export function familyOf(memorialName: string | null | undefined): string {
+  const words = (memorialName ?? "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "the family";
+  return `the family of ${(words.length >= 3 ? words.slice(1) : words).join(" ")}`;
+}
+
+export const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);

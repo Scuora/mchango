@@ -1,7 +1,7 @@
-// The target as two bars side by side, sized by their share of it: the
-// family's pledges, then the part asked of friends and well-wishers. Gold is
-// money received everywhere on the site; hatched gold is pledged but not yet
-// in; the pale track is what is still needed.
+// The target as two bars side by side, sized by their share of it: the part
+// paid by the family of the deceased, then the part asked of family, friends
+// and well-wishers. Gold is money received or paid; hatched gold is pledged
+// but not yet in; the pale track is what is still needed.
 
 import type { CSSProperties, ReactNode } from "react";
 import { CountUp } from "@/components/CountUp";
@@ -41,13 +41,14 @@ function Bar({ received, pledged, whole, wait }: { received: number; pledged: nu
   );
 }
 
-export function GoalBar({ goal, className }: { goal: Goal; className?: string }) {
+/** `family` is how the deceased's family is named, e.g. "the family of Karisa Gonzi" (see familyOf). */
+export function GoalBar({ goal, family, className }: { goal: Goal; family: string; className?: string }) {
   const { target, familyPledged, familyReceived, familyOutstanding, othersReceived, othersOutstanding, othersShare, stillNeeded } = goal;
   const twoParts = target !== null && familyPledged > 0 && othersShare !== null && othersShare > 0;
   const label = [
-    familyPledged > 0 && `Pledged by the family ${kes(familyPledged)}, ${kes(familyReceived)} received`,
-    `received from friends and well-wishers ${kes(othersReceived)}${othersShare !== null ? ` of ${kes(othersShare)}` : ""}`,
-    othersOutstanding > 0 && `pledged by friends, not yet received ${kes(othersOutstanding)}`,
+    familyPledged > 0 && `Paid by ${family} ${kes(familyPledged)}`,
+    `from family, friends and well-wishers ${kes(othersReceived)}${othersShare !== null ? ` of ${kes(othersShare)}` : ""}`,
+    othersOutstanding > 0 && `pledged by family, friends and well-wishers, not yet received ${kes(othersOutstanding)}`,
     stillNeeded !== null && `still needed ${kes(stillNeeded)}`,
   ]
     .filter(Boolean)
@@ -65,14 +66,15 @@ export function GoalBar({ goal, className }: { goal: Goal; className?: string })
           {twoParts && (
             <>
               {/* One row for both labels, so a narrow side never cuts its label short. */}
-              <p className="col-span-2 flex justify-between gap-3 text-[13px] font-semibold tracking-[0.08em] text-stone-500 uppercase">
-                <span>The family</span>
+              <p className="col-span-2 flex flex-wrap justify-between gap-x-3 text-[13px] font-semibold tracking-[0.08em] text-stone-500 uppercase">
+                <span>{family.replace(/^the /, "")}</span>
                 <span className="text-right">
                   <span className="sm:hidden">Well-wishers</span>
-                  <span className="hidden sm:inline">Friends &amp; well-wishers</span>
+                  <span className="hidden sm:inline">Family, friends &amp; well-wishers</span>
                 </span>
               </p>
-              <Bar received={familyReceived} pledged={familyOutstanding} whole={familyPledged} wait={250} />
+              {/* The family's share is paid by the family, so it is shown in full. */}
+              <Bar received={familyPledged} pledged={0} whole={familyPledged} wait={250} />
               <Bar received={othersReceived} pledged={othersOutstanding} whole={othersShare ?? 0} wait={650} />
             </>
           )}
@@ -84,27 +86,22 @@ export function GoalBar({ goal, className }: { goal: Goal; className?: string })
 
       <dl className="mt-3 divide-y divide-stone-100 text-[16px]">
         {familyPledged > 0 && (
-          <Row
-            swatch="pledged"
-            label="Pledged by the family"
-            note={familyReceived > 0 ? `${kes(Math.min(familyReceived, familyPledged))} of it received so far` : "Promised; counted as received once paid in"}
-            value={<CountUp value={familyPledged} format={kes} />}
-          />
+          <Row swatch="received" label={`Paid by ${family}`} value={<CountUp value={familyPledged} format={kes} />} />
         )}
         <Row
           swatch="received"
-          label={familyPledged > 0 ? "Received from friends and well-wishers" : "Received so far"}
+          label={familyPledged > 0 ? "From family, friends and well-wishers" : "Received so far"}
           note={othersShare !== null ? `of ${kes(othersShare)} asked for` : undefined}
           value={<CountUp value={familyPledged > 0 ? othersReceived : othersReceived + familyReceived} format={kes} />}
         />
         {othersOutstanding > 0 && (
-          <Row swatch="pledged" label="Pledged by friends, not yet received" value={<CountUp value={othersOutstanding} format={kes} />} />
+          <Row swatch="pledged" label="Pledged by family, friends and well-wishers, not yet received" value={<CountUp value={othersOutstanding} format={kes} />} />
         )}
         {stillNeeded !== null && (
           <Row
             swatch="needed"
             label="Still needed"
-            note={familyOutstanding + othersOutstanding > 0 ? "Once every pledge is paid in" : undefined}
+            note={othersOutstanding > 0 ? "Once every pledge is paid in" : undefined}
             value={stillNeeded === 0 ? "Reached" : <CountUp value={stillNeeded} format={kes} />}
           />
         )}

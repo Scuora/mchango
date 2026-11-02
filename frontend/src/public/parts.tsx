@@ -8,7 +8,7 @@ import { Link } from "react-router";
 import { formatKesShort } from "@/lib/money";
 import { CountUp } from "@/components/CountUp";
 import { GoalBar } from "@/components/GoalBar";
-import { goalOf } from "@/lib/goal";
+import { capitalise, familyOf, goalOf } from "@/lib/goal";
 import { formatNairobiLongDate, formatShortDate, formatShortDateTime } from "@/lib/time";
 import type { PublicEntry, PublicPage } from "@/lib/types";
 import { copyText, sharePage } from "./share";
@@ -290,12 +290,13 @@ function Swatch({ color, hollow }: { color: string; hollow?: boolean }) {
   );
 }
 
-/** The target: the family's own pledge first, then what friends and well-wishers are asked to raise. */
+/** The target: the part paid by the deceased's family, then what family, friends and well-wishers are asked to raise. */
 export function GoalCard({ page }: { page: PublicPage }) {
   const f = page.fundraiser;
   const goal = goalOf(f.target_minor, f.pledges, page.totals.contributions_minor);
   if (!goal) return null;
   const { target, familyPledged, othersShare, stillNeeded } = goal;
+  const family = familyOf(f.memorial_name);
   return (
     <PublicCard className="relative overflow-hidden">
       <div aria-hidden className="card-glow pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-ochre-200/40 blur-3xl" />
@@ -309,23 +310,23 @@ export function GoalCard({ page }: { page: PublicPage }) {
             <p className="mt-1.5 text-[15px] text-stone-600">needed in all</p>
           </>
         ) : (
-          <h2 className="font-display text-[1.65rem] leading-tight font-semibold text-stone-900">The family&rsquo;s pledge</h2>
+          <h2 className="font-display text-[1.65rem] leading-tight font-semibold text-stone-900">{capitalise(family)}</h2>
         )}
         <p className="mt-3 text-[16px] leading-relaxed text-stone-700">
           {familyPledged > 0 && target !== null && othersShare !== null ? (
             <>
-              The family has pledged <strong className="font-semibold text-stone-900">{kes(familyPledged)}</strong>. Friends and well-wishers are kindly
-              asked to help with the remaining <strong className="font-semibold text-stone-900">{kes(othersShare)}</strong>.
+              {capitalise(family)} has paid <strong className="font-semibold text-stone-900">{kes(familyPledged)}</strong>. Family, friends and
+              well-wishers are kindly asked to help with the remaining <strong className="font-semibold text-stone-900">{kes(othersShare)}</strong>.
             </>
           ) : familyPledged > 0 ? (
             <>
-              The family has pledged <strong className="font-semibold text-stone-900">{kes(familyPledged)}</strong> towards the funeral.
+              {capitalise(family)} has paid <strong className="font-semibold text-stone-900">{kes(familyPledged)}</strong> towards the funeral.
             </>
           ) : (
             "Every contribution, large or small, helps the family give him a dignified send-off."
           )}
         </p>
-        <GoalBar goal={goal} className="mt-5" />
+        <GoalBar goal={goal} family={family} className="mt-5" />
         {(page.promises?.pledges.length ?? 0) > 0 && (
           <Link to="/contributions?view=pledges" className="group mt-2 inline-flex min-h-11 items-center gap-1.5 font-semibold">
             See every pledge

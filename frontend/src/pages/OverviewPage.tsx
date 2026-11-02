@@ -8,7 +8,7 @@ import { TransactionRow } from "@/components/money";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, EmptyState } from "@/components/ui/misc";
 import { useResource } from "@/lib/api";
-import { goalOf } from "@/lib/goal";
+import { familyOf, goalOf } from "@/lib/goal";
 import { formatKes } from "@/lib/money";
 import { formatNairobiDate } from "@/lib/time";
 import type { Overview } from "@/lib/types";
@@ -70,7 +70,7 @@ export function OverviewPage() {
         <Card>
           <CardHeader
             title={goal.target !== null ? `Goal: ${formatKes(goal.target)}` : "Pledges"}
-            description="The family's pledges, then what friends and well-wishers are asked for. Link money received to its pledge so it is counted on the right side."
+            description="The part paid by the family, then what family, friends and well-wishers are asked for. Link money received to its pledge so it is counted on the right side."
             actions={
               <ButtonLink to="/manage/pledges" variant="secondary" size="sm">
                 Pledges
@@ -78,7 +78,7 @@ export function OverviewPage() {
             }
           />
           <CardBody>
-            <GoalBar goal={goal} />
+            <GoalBar goal={goal} family={familyOf(fundraiser.memorial_name)} />
           </CardBody>
         </Card>
       )}

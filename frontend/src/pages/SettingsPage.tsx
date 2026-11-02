@@ -154,7 +154,7 @@ function FundraiserForm({ fundraiser, accounts, onSaved }: { fundraiser: Fundrai
             error={err("target_minor")}
             hint={
               <>
-                The family&rsquo;s share is the sum of its <Link to="/manage/pledges">pledges</Link>; friends and well-wishers are asked for the rest.
+                The family&rsquo;s share is the sum of its <Link to="/manage/pledges">pledges</Link>; family, friends and well-wishers are asked for the rest.
               </>
             }
           >
