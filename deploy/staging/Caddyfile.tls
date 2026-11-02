@@ -3,15 +3,19 @@
 #
 #   browser --HTTPS--> Netlify --HTTPS--> Cloudflare --HTTPS--> this Caddy :8443 --> app
 #
-# Cloudflare connects here on port 8443 (one of its HTTPS ports) for the proxied
-# name {$MCHANGO_TLS_HOST}. The certificate is Caddy's own (`tls internal`),
-# which Cloudflare's "Full" SSL mode accepts, as it does schul-nginx's.
+# Netlify connects here by the server's address (MCHANGO_TLS_IP), or later
+# through Cloudflare by the proxied name MCHANGO_TLS_HOST (port 8443 is one of
+# Cloudflare's HTTPS ports). The certificate is Caddy's own (`tls internal`):
+# the hop is encrypted, but its certificate is not checked by Netlify, just as
+# Cloudflare's "Full" mode does not check it for schul-nginx.
 {
 	admin off
 	auto_https disable_redirects
+	# Connections by IP address carry no server name; answer them as the IP.
+	default_sni {$MCHANGO_TLS_IP}
 }
 
-https://{$MCHANGO_TLS_HOST}:8443 {
+https://{$MCHANGO_TLS_HOST}:8443, https://{$MCHANGO_TLS_IP}:8443 {
 	tls internal
 	encode gzip
 

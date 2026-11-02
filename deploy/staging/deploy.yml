@@ -120,6 +120,8 @@
     # When given, the HTTPS gateway (compose.tls.yml) is installed; it then stays
     # installed on later runs without repeating this.
     mchango_tls_host: ""
+    # The server's public address, also answered by the gateway (Netlify proxies to it).
+    mchango_tls_ip: 164.90.230.69
   tasks:
     - name: Take the release name from the build
       ansible.builtin.set_fact:
@@ -187,6 +189,7 @@
       ansible.builtin.copy:
         content: |
           MCHANGO_TLS_HOST={{ mchango_tls_host }}
+          MCHANGO_TLS_IP={{ mchango_tls_ip }}
           MCHANGO_SITE_HOST={{ mchango_site_host }}
         dest: "{{ mchango_dir }}/tls.env"
         owner: root
@@ -282,10 +285,11 @@
         set -e
         . {{ mchango_dir }}/tls.env
         curl -sk --max-time 10 -o /dev/null -w '%{http_code} ' --resolve "$MCHANGO_TLS_HOST:8443:127.0.0.1" "https://$MCHANGO_TLS_HOST:8443/api/health"
-        curl -sk --max-time 10 -o /dev/null -w '%{http_code}' --resolve "$MCHANGO_TLS_HOST:8443:127.0.0.1" "https://$MCHANGO_TLS_HOST:8443/api/manage/auth/me"
+        curl -sk --max-time 10 -o /dev/null -w '%{http_code} ' --resolve "$MCHANGO_TLS_HOST:8443:127.0.0.1" "https://$MCHANGO_TLS_HOST:8443/api/manage/auth/me"
+        curl -sk --max-time 10 -o /dev/null -w '%{http_code}' "https://$MCHANGO_TLS_IP:8443/api/manage/auth/me"
       register: gateway
       changed_when: false
-      failed_when: gateway.stdout != '200 401'
+      failed_when: gateway.stdout != '200 401 401'
       when: tls_file.stat.exists
 
     - name: Record the release
