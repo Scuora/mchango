@@ -1,0 +1,15 @@
+# HTTPS for the public page. Caddy obtains and renews certificates itself.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy mchango:8080
+}
+
+# Optional: manage from your phone over HTTPS on a separate name, e.g.
+# admin.example.org. Sign-in is required, but a VPN (Tailscale, WireGuard)
+# is still the safer choice. To enable: set ADMIN_DOMAIN in .env, add the same
+# name to MANAGE_ALLOWED_HOSTS, and uncomment this block.
+#
+# {$ADMIN_DOMAIN} {
+# 	encode zstd gzip
+# 	reverse_proxy mchango:8081
+# }

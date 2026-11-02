@@ -1,0 +1,81 @@
+# Netlify: the PUBLIC site only. Management (/manage) is never served here; it
+# stays on the server and is reached through an SSH tunnel (deploy/staging/README.md).
+#
+# This file lives in frontend/, so in the Netlify UI set "Base directory" to
+# `frontend` (Netlify then reads this file). `publish` is relative to `base`.
+
+[build]
+  base = "frontend"
+  command = "npm ci && npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Same Node line as the Dockerfile's build stage (node:22.21-trixie-slim).
+  NODE_VERSION = "22.21"
+
+# Rules are matched top to bottom; the first match wins.
+#
+# BACKEND ORIGIN PLACEHOLDER: replace every `https://mchango-backend.invalid`
+# with the backend's public HTTPS origin once it exists (e.g. a Cloudflare-
+# proxied name in front of schul-staging's nginx). `.invalid` can never
+# resolve, so an unreplaced value fails closed instead of leaking requests.
+# The origin must expose ONLY the backend's public listener (:8080), never
+# the management listener.
+
+# 1. Management is not served from Netlify.
+[[redirects]]
+  from = "/manage"
+  to = "/"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "/manage/*"
+  to = "/"
+  status = 302
+  force = true
+
+# 2. Public API, proxied (status 200 = rewrite) so the browser stays same-origin:
+#    no CORS, and the app's `connect-src 'self'` policy holds.
+[[redirects]]
+  from = "/api/public/*"
+  to = "https://mchango-backend.invalid/api/public/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/health"
+  to = "https://mchango-backend.invalid/api/health"
+  status = 200
+  force = true
+
+# 3. Any other /api path also goes to the PUBLIC listener, which has no
+#    management routes and answers a JSON 404 the app understands (instead of
+#    index.html with 200 from the SPA fallback below).
+[[redirects]]
+  from = "/api/*"
+  to = "https://mchango-backend.invalid/api/:splat"
+  status = 200
+  force = true
+
+# 4. Single-page app: every other path renders index.html.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Same security headers the backend sends with the page (backend/src/api/mod.rs).
+# Netlify does not add these to proxied responses; the backend sends its own.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "same-origin"
+    X-Frame-Options = "DENY"
+    Content-Security-Policy = "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+
+# Vite fingerprints everything under /assets, so it can be cached for a year.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en" class="booting">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#241a2d" />
+    <meta name="referrer" content="same-origin" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Mchango</title>
+    <style>
+      /* Opening screen, shown instantly while the app loads (no script needed). */
+      .boot{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;
+        background:radial-gradient(120% 90% at 50% 36%,#3b2c47 0%,#241a2d 48%,#140f18 100%);color:#f6efe4;text-align:center;
+        transition:opacity .9s ease,visibility .9s;cursor:default}
+      .boot.is-leaving{opacity:0;visibility:hidden}
+      .boot-stage{position:relative;width:min(54vw,212px);aspect-ratio:1;animation:boot-rise 1.4s ease-out both}
+      .boot-halo{position:absolute;inset:-50%;border-radius:50%;
+        background:radial-gradient(circle at 50% 54%,rgba(255,200,115,.5) 0%,rgba(244,156,72,.2) 36%,rgba(244,156,72,0) 68%);
+        animation:boot-glow 3.1s ease-in-out infinite}
+      .boot-portrait{position:absolute;inset:0;border-radius:50%;
+        background:#2e2338 url(/api/public/memorial-photo) 55% 45%/cover no-repeat;
+        animation:boot-rim 2.6s ease-in-out infinite}
+      .boot-light{position:absolute;inset:0;border-radius:inherit;
+        background:radial-gradient(ellipse at 50% 115%,rgba(255,176,88,.5),rgba(255,176,88,.14) 45%,rgba(255,176,88,0) 68%);
+        mix-blend-mode:screen;animation:boot-light 1.9s ease-in-out infinite}
+      .boot-candle{position:relative;width:12px;height:48px;margin-top:34px;animation:boot-rise 1.4s .25s ease-out both}
+      .boot-wax{position:absolute;bottom:0;left:0;right:0;height:30px;border-radius:3px 3px 2px 2px;
+        background:linear-gradient(90deg,#d9cdbd,#f8f1e6 45%,#c9bdac)}
+      .boot-flame{position:absolute;left:50%;bottom:29px;width:10px;height:19px;margin-left:-5px;
+        border-radius:50% 50% 50% 50%/62% 62% 38% 38%;
+        background:radial-gradient(ellipse at 50% 76%,#fffbe8 0%,#ffd56b 34%,#f39a3d 70%,rgba(243,154,61,0) 100%);
+        box-shadow:0 0 14px 4px rgba(255,190,90,.5);transform-origin:50% 92%;animation:boot-flame 1.7s ease-in-out infinite}
+      .boot-overline{margin:24px 0 0;font:600 12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.28em;
+        text-transform:uppercase;color:rgba(246,239,228,.72);animation:boot-fade 1.6s .45s ease-out both}
+      .boot-name{margin:10px 0 0;max-width:20ch;font:600 clamp(28px,7vw,42px)/1.15 "Cormorant Garamond",Georgia,serif;
+        opacity:0;transform:translateY(6px);transition:opacity .9s ease,transform .9s ease}
+      .boot-dates{margin:6px 0 0;font:400 20px/1.3 "Cormorant Garamond",Georgia,serif;color:rgba(246,239,228,.8);
+        opacity:0;transition:opacity .9s .2s ease}
+      .boot-tribute{margin:10px 0 0;max-width:28ch;font:italic 400 19px/1.35 "Cormorant Garamond",Georgia,serif;color:rgba(255,208,134,.9);
+        opacity:0;transition:opacity 1s .45s ease}
+      .boot-tribute:empty{display:none}
+      .boot.has-name .boot-name,.boot.has-name .boot-dates,.boot.has-name .boot-tribute{opacity:1;transform:none}
+      .boot-hint{position:absolute;bottom:max(20px,env(safe-area-inset-bottom));font:13px system-ui,sans-serif;
+        color:rgba(246,239,228,.45);animation:boot-fade 1s 2.4s both}
+      .boot-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+      @keyframes boot-rim{
+        0%,100%{border-radius:50%;box-shadow:0 0 0 1.5px rgba(255,214,150,.8),0 0 22px 5px rgba(255,180,90,.55),0 0 60px 16px rgba(240,150,70,.22),0 22px 50px rgba(0,0,0,.5)}
+        22%{border-radius:47% 53% 52% 48% / 55% 49% 51% 45%;box-shadow:0 0 0 1.5px rgba(255,222,160,.95),0 0 32px 8px rgba(255,186,96,.72),0 0 82px 22px rgba(244,156,72,.32),0 22px 50px rgba(0,0,0,.5)}
+        41%{border-radius:52% 48% 46% 54% / 47% 54% 46% 53%;box-shadow:0 0 0 1.5px rgba(255,206,140,.7),0 0 16px 3px rgba(255,176,86,.42),0 0 46px 10px rgba(240,150,70,.16),0 22px 50px rgba(0,0,0,.5)}
+        63%{border-radius:49% 51% 54% 46% / 53% 46% 54% 47%;box-shadow:0 0 0 1.5px rgba(255,220,156,.9),0 0 28px 7px rgba(255,184,94,.64),0 0 72px 19px rgba(244,154,70,.27),0 22px 50px rgba(0,0,0,.5)}
+        82%{border-radius:54% 46% 49% 51% / 48% 52% 47% 52%;box-shadow:0 0 0 1.5px rgba(255,210,146,.78),0 0 20px 4px rgba(255,178,88,.48),0 0 54px 12px rgba(240,150,70,.2),0 22px 50px rgba(0,0,0,.5)}}
+      @keyframes boot-light{0%,100%{opacity:.8}25%{opacity:1}45%{opacity:.62}70%{opacity:.92}}
+      @keyframes boot-glow{0%,100%{opacity:.85;transform:scale(1)}30%{opacity:1;transform:scale(1.03)}
+        55%{opacity:.76;transform:scale(.99)}78%{opacity:.95;transform:scale(1.015)}}
+      @keyframes boot-flame{0%,100%{transform:rotate(-2deg) scale(1,1)}25%{transform:rotate(2.5deg) scale(.95,1.09)}
+        50%{transform:rotate(-1deg) scale(1.05,.94)}75%{transform:rotate(1.5deg) scale(.98,1.06)}}
+      @keyframes boot-rise{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+      @keyframes boot-fade{from{opacity:0}to{opacity:1}}
+      @media (prefers-reduced-motion:reduce){.boot *{animation:none!important}.boot,.boot *{transition-duration:.3s!important}}
+    </style>
+  </head>
+  <body>
+    <div id="boot" class="boot" role="status" aria-live="polite">
+      <div class="boot-stage" aria-hidden="true">
+        <div class="boot-halo"></div>
+        <div class="boot-portrait"><div class="boot-light"></div></div>
+      </div>
+      <div class="boot-candle" aria-hidden="true"><span class="boot-flame"></span><span class="boot-wax"></span></div>
+      <p class="boot-overline">In loving memory</p>
+      <p class="boot-name" id="boot-name"></p>
+      <p class="boot-dates" id="boot-dates"></p>
+      <p class="boot-tribute" id="boot-tribute"></p>
+      <p class="boot-hint" id="boot-hint" hidden>Tap to continue</p>
+      <span class="boot-sr">Loading…</span>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

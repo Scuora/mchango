@@ -1,0 +1,327 @@
+---
+# One-time copy of the Mac's live Mchango data to schul-staging: database
+# (accounts as Argon2 hashes, records, settings) and uploads (memorial photo,
+# receipts, statements). Run deploy.yml first.
+#
+#   cd deploy/staging
+#   ansible-playbook migrate-data.yml -e mchango_src=<source the server image was built from>
+#   ansible-playbook migrate-data.yml -e mchango_use_copy=<dir with mchango.sqlite + uploads.tgz>
+#
+# * The Mac's `mchango-app` keeps running: the copy is made with the app's own
+#   `mchango backup` (SQLite VACUUM INTO, consistent while the server runs),
+#   written to the container's /tmp, not to the live volume. Uploads are tarred
+#   AFTER the database, so every file the copy references is included.
+# * The copy's applied migrations must match the source the server image was
+#   built from, in BOTH directions: an edited migration, or one the deployed
+#   code does not have yet, makes sqlx refuse to start.
+# * Sessions are dropped from the copy: everyone signs in again on staging.
+# * Refuses to replace a server database that has accounts (or cannot be read),
+#   unless `-e mchango_data_force=true`. The server's files are always copied to
+#   /data/backups first.
+# * No password is read, written or printed.
+
+- name: Take (or pick) a consistent copy on the Mac
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    mchango_local_container: mchango-app
+    mchango_src: "{{ (playbook_dir ~ '/../..') | realpath }}"
+  tasks:
+    - name: Name this copy
+      ansible.builtin.set_fact:
+        mchango_stamp: "{{ lookup('ansible.builtin.pipe', 'date +%Y%m%d-%H%M%S') }}"
+        mchango_copy_is_ours: "{{ mchango_use_copy is not defined }}"
+
+    - name: Where the copy lives
+      ansible.builtin.set_fact:
+        mchango_copy_dir: >-
+          {{ mchango_use_copy if mchango_use_copy is defined else
+             (lookup('ansible.builtin.env', 'TMPDIR') | default('/tmp/', true)) ~ 'mchango-migrate-' ~ mchango_stamp }}
+
+    - name: Take a fresh copy from the running app
+      when: mchango_copy_is_ours | bool
+      block:
+        - name: Private working directory (owner only)
+          ansible.builtin.file:
+            path: "{{ mchango_copy_dir }}"
+            state: directory
+            mode: "0700"
+
+        - name: Back up the live database inside the running container (VACUUM INTO /tmp)
+          ansible.builtin.command:
+            argv: [docker, exec, "{{ mchango_local_container }}", mchango, backup, "/tmp/mchango-migrate-{{ mchango_stamp }}.sqlite"]
+          changed_when: true
+
+        - name: Copy it out of the container
+          ansible.builtin.command:
+            argv: [docker, cp, "{{ mchango_local_container }}:/tmp/mchango-migrate-{{ mchango_stamp }}.sqlite", "{{ mchango_copy_dir }}/mchango.sqlite"]
+          changed_when: true
+
+        - name: Remove the temporary file from the container
+          ansible.builtin.command:
+            argv: [docker, exec, "{{ mchango_local_container }}", rm, -f, "/tmp/mchango-migrate-{{ mchango_stamp }}.sqlite"]
+          changed_when: true
+
+        - name: Uploads, streamed out read-only (taken after the database)
+          ansible.builtin.shell: |
+            set -o pipefail
+            docker exec "{{ mchango_local_container }}" tar czf - -C /data uploads > "{{ mchango_copy_dir }}/uploads.tgz"
+          args:
+            executable: /bin/bash
+          changed_when: true
+
+    - name: The copy has both files
+      ansible.builtin.stat:
+        path: "{{ mchango_copy_dir }}/{{ item }}"
+      loop: [mchango.sqlite, uploads.tgz]
+      register: copy_files
+      failed_when: not copy_files.stat.exists
+
+    - name: Drop sessions from the copy (fresh sign-in on staging)
+      ansible.builtin.command:
+        argv: [sqlite3, "{{ mchango_copy_dir }}/mchango.sqlite", "DELETE FROM sessions; VACUUM;"]
+      changed_when: true
+
+    - name: The copy passes SQLite's integrity check
+      ansible.builtin.command:
+        argv: [sqlite3, -readonly, "{{ mchango_copy_dir }}/mchango.sqlite", "PRAGMA integrity_check;"]
+      register: integrity
+      changed_when: false
+      failed_when: integrity.stdout | trim != 'ok'
+
+    - name: Applied migrations must match the source the server image was built from (both directions)
+      ansible.builtin.shell: |
+        set -o pipefail
+        db="{{ mchango_copy_dir }}/mchango.sqlite"
+        src="{{ mchango_src }}/backend/migrations"
+        status=0
+        for f in "$src"/*.sql; do
+          v=$((10#$(basename "$f" | cut -d_ -f1)))
+          want=$(sqlite3 -readonly "$db" "SELECT hex(checksum) FROM _sqlx_migrations WHERE version = $v;")
+          have=$(shasum -a 384 "$f" | cut -d' ' -f1 | tr 'a-f' 'A-F')
+          if [ -z "$want" ]; then echo "$v new"; elif [ "$want" = "$have" ]; then echo "$v unchanged"; else echo "$v CHANGED since it was applied"; status=1; fi
+        done
+        for v in $(sqlite3 -readonly "$db" "SELECT version FROM _sqlx_migrations ORDER BY version;"); do
+          if ! ls "$src"/$(printf '%04d' "$v")_*.sql >/dev/null 2>&1; then
+            echo "$v applied in the data but MISSING from the source (data is newer than the code; deploy that code first)"; status=1
+          fi
+        done
+        exit $status
+      args:
+        executable: /bin/bash
+      register: migrations
+      changed_when: false
+
+    - name: What is being copied (counts only)
+      ansible.builtin.command:
+        argv:
+          - sqlite3
+          - -readonly
+          - "{{ mchango_copy_dir }}/mchango.sqlite"
+          - >-
+            SELECT (SELECT count(*) FROM users) || ' accounts, ' ||
+                   (SELECT count(*) FROM transactions) || ' records, ' ||
+                   (SELECT count(*) FROM documents) || ' documents, ' ||
+                   (SELECT count(*) FROM announcements) || ' announcements';
+      register: counts
+      changed_when: false
+
+    - name: Remember the number of accounts
+      ansible.builtin.set_fact:
+        mchango_account_count: "{{ counts.stdout.split(' ')[0] | int }}"
+
+    - name: Checksums
+      ansible.builtin.shell: shasum -a 256 mchango.sqlite uploads.tgz > SHA256SUMS
+      args:
+        chdir: "{{ mchango_copy_dir }}"
+      changed_when: true
+
+    - name: Copy summary
+      ansible.builtin.debug:
+        msg: ["{{ counts.stdout }}", "migrations: {{ migrations.stdout_lines | join(', ') }}"]
+
+- name: Restore it on the server
+  hosts: mchango_server
+  gather_facts: false
+  vars:
+    mchango_dir: /opt/mchango
+    mchango_container: mchango-staging-app
+    mchango_volume: mchango-staging-data
+    mchango_data_force: false
+  tasks:
+    - name: Take names from the copy
+      ansible.builtin.set_fact:
+        mchango_stamp: "{{ hostvars['localhost']['mchango_stamp'] }}"
+        mchango_copy_dir: "{{ hostvars['localhost']['mchango_copy_dir'] }}"
+        mchango_account_count: "{{ hostvars['localhost']['mchango_account_count'] }}"
+
+    - name: deploy.yml must have run first (image and volume exist)
+      ansible.builtin.command:
+        argv: [docker, "{{ item.kind }}", inspect, "{{ item.name }}"]
+      loop:
+        - { kind: image, name: "mchango:staging" }
+        - { kind: volume, name: "{{ mchango_volume }}" }
+      changed_when: false
+
+    - name: Is the edge overlay installed?
+      ansible.builtin.stat:
+        path: "{{ mchango_dir }}/compose.edge.yml"
+      register: edge_file
+
+    - name: Compose command for this project
+      ansible.builtin.set_fact:
+        mchango_compose: "{{ ['docker', 'compose', '-p', 'mchango', '-f', mchango_dir ~ '/compose.yml'] + (['-f', mchango_dir ~ '/compose.edge.yml'] if edge_file.stat.exists else []) }}"
+
+    - name: Is our container running?
+      ansible.builtin.command:
+        argv: [docker, inspect, --format, !unsafe '{{.State.Running}}', "{{ mchango_container }}"]
+      register: current
+      changed_when: false
+      failed_when: false
+
+    - name: Accounts on the server now (inside the running app)
+      ansible.builtin.command:
+        argv: [docker, exec, "{{ mchango_container }}", mchango, user, list]
+      register: users_running
+      changed_when: false
+      failed_when: false
+      when: current.stdout | trim == 'true'
+
+    - name: Accounts on the server now (one-off, app not running)
+      ansible.builtin.command:
+        argv: [docker, run, --rm, --network, none, --volume, "{{ mchango_volume }}:/data", --env, DATABASE_PATH=/data/mchango.sqlite, --env, UPLOADS_DIR=/data/uploads, --entrypoint, mchango, "mchango:staging", user, list]
+      register: users_stopped
+      changed_when: false
+      failed_when: false
+      when: current.stdout | trim != 'true'
+
+    - name: Refuse to replace a server database that is in use or unreadable
+      vars:
+        users: "{{ users_running if current.stdout | trim == 'true' else users_stopped }}"
+      ansible.builtin.fail:
+        msg: >-
+          The server database has accounts, or could not be read ({{ users.stderr | default('') | trim }}).
+          It may hold newer data than this copy. Re-run with -e mchango_data_force=true only if you
+          really mean to replace it (its files are copied to /data/backups first).
+      when:
+        - users.rc != 0 or 'No accounts yet' not in users.stdout
+        - not (mchango_data_force | bool)
+
+    - name: Upload directory for this copy (root only)
+      ansible.builtin.file:
+        path: "{{ mchango_dir }}/migration/{{ mchango_stamp }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Upload the copy
+      ansible.builtin.copy:
+        src: "{{ mchango_copy_dir }}/{{ item }}"
+        dest: "{{ mchango_dir }}/migration/{{ mchango_stamp }}/{{ item }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop: [mchango.sqlite, uploads.tgz, SHA256SUMS]
+
+    - name: Checksums match after transfer
+      ansible.builtin.command: sha256sum -c SHA256SUMS
+      args:
+        chdir: "{{ mchango_dir }}/migration/{{ mchango_stamp }}"
+      changed_when: false
+
+    - name: Stop our app (only our container)
+      ansible.builtin.command:
+        argv: "{{ mchango_compose + ['stop', 'mchango'] }}"
+      changed_when: true
+
+    - name: Keep the server's current database files (app stopped, so a plain copy is consistent)
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --network
+          - none
+          - --user
+          - "0"
+          - --volume
+          - "{{ mchango_volume }}:/data"
+          - --entrypoint
+          - /bin/sh
+          - mchango:staging
+          - -c
+          - >-
+            set -e; mkdir -p /data/backups;
+            for f in mchango.sqlite mchango.sqlite-wal mchango.sqlite-shm; do
+              if [ -f "/data/$f" ]; then cp "/data/$f" "/data/backups/pre-import-{{ mchango_stamp }}-$f"; fi;
+            done;
+            chown -R 10001:10001 /data/backups
+      changed_when: true
+
+    - name: Restore into our volume (one-off container from our image, no network)
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --network
+          - none
+          - --user
+          - "0"
+          - --volume
+          - "{{ mchango_volume }}:/data"
+          - --volume
+          - "{{ mchango_dir }}/migration/{{ mchango_stamp }}:/in:ro"
+          - --entrypoint
+          - /bin/sh
+          - mchango:staging
+          - -c
+          - >-
+            set -e;
+            cp /in/mchango.sqlite /data/mchango.sqlite;
+            rm -f /data/mchango.sqlite-wal /data/mchango.sqlite-shm;
+            rm -rf /data/uploads;
+            tar xzf /in/uploads.tgz -C /data;
+            chown -R 10001:10001 /data
+      changed_when: true
+
+    - name: Start our app again
+      ansible.builtin.command:
+        argv: "{{ mchango_compose + ['up', '--detach', '--wait', '--wait-timeout', '120'] }}"
+      changed_when: true
+
+    - name: Accounts on the server now
+      ansible.builtin.command:
+        argv: [docker, exec, "{{ mchango_container }}", mchango, user, list]
+      register: after_users
+      changed_when: false
+
+    - name: Every account arrived
+      ansible.builtin.assert:
+        that: after_users.stdout_lines | select('search', '\(created ') | list | length == mchango_account_count | int
+        fail_msg: "Expected {{ mchango_account_count }} accounts on the server."
+        success_msg: "{{ mchango_account_count }} accounts restored."
+
+    - name: Public listener is healthy
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/health
+        return_content: true
+      register: health
+      failed_when: health.json.status | default('') != 'ok'
+
+- name: Remove the local copy (it contains personal data)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    mchango_keep_local_copy: false
+  tasks:
+    - name: Delete the working directory this run created
+      ansible.builtin.file:
+        path: "{{ mchango_copy_dir }}"
+        state: absent
+      when:
+        - mchango_copy_is_ours | bool
+        - not (mchango_keep_local_copy | bool)

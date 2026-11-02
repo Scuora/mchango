@@ -1,0 +1,251 @@
+---
+# Build, ship and (re)start Mchango on schul-staging. Safe to re-run: every run
+# builds a new image, loads it on the server and runs `up -d` for the `mchango`
+# compose project only. It never touches data (see migrate-data.yml for that),
+# the `schul` project, nginx, the firewall or system packages.
+#
+#   cd deploy/staging
+#   ansible-playbook deploy.yml                                    # build from the repo root
+#   ansible-playbook deploy.yml -e mchango_src=/path/to/snapshot   # build from a frozen copy
+#   ansible-playbook deploy.yml -e mchango_skip_build=true -e mchango_release=<old release>   # roll back
+#
+# Releases are listed in /opt/mchango/releases.log on the server.
+
+- name: Build the image
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    mchango_src: "{{ (playbook_dir ~ '/../..') | realpath }}"
+    mchango_ssh_host: schul-staging
+    mchango_skip_build: false
+    # Where to build:
+    #  server (default): a tarball of the source is piped over SSH into the
+    #    server's `docker build -`, so only ~0.3 MB crosses the slow home link and the
+    #    image lands directly in the server's image store (native amd64). The
+    #    build is capped to 3 of 4 cores and 2 GB RAM so the schul stack keeps
+    #    headroom. Uses the classic builder because only it accepts these caps.
+    #  mac: buildx for linux/amd64 under Rosetta, then docker save | ssh docker
+    #    load (~55 MB upload per release; base images ~330 MB on first build).
+    mchango_build_on: server
+    mchango_build_cpuset: "0-2"
+    mchango_build_memory: 2g
+    mchango_build_memory_swap: 3g
+  tasks:
+    - name: Name this release
+      ansible.builtin.set_fact:
+        mchango_release: "{{ mchango_release | default(lookup('ansible.builtin.pipe', 'date +%Y%m%d-%H%M%S')) }}"
+        mchango_stamp: "{{ lookup('ansible.builtin.pipe', 'date +%Y%m%d-%H%M%S') }}"
+
+    - name: Release name must be a plain tag
+      ansible.builtin.assert:
+        that: mchango_release is match('^[A-Za-z0-9._-]+$')
+        quiet: true
+
+    - name: The source tree must contain the Dockerfile
+      ansible.builtin.stat:
+        path: "{{ mchango_src }}/Dockerfile"
+      register: dockerfile
+      failed_when: not dockerfile.stat.exists
+      when: not (mchango_skip_build | bool)
+
+    # The context is streamed as a tarball into `docker build -` on the server.
+    # (Driving the server's Docker with DOCKER_HOST=ssh://... built fine but the
+    # client never returned after "Successfully tagged".) The excludes mirror
+    # .dockerignore; COPYFILE_DISABLE/--no-xattrs stop macOS tar from adding
+    # `._*` files, which sqlx would read as extra migrations.
+    - name: Build mchango:{{ mchango_release }} on the server (native amd64, CPU/RAM capped)
+      ansible.builtin.shell: |
+        set -o pipefail
+        COPYFILE_DISABLE=1 tar -C "{{ mchango_src }}" --no-xattrs \
+          --exclude='./.git' --exclude='node_modules' --exclude='target' --exclude='dist' \
+          --exclude='./data' --exclude='.env' --exclude='*.sqlite*' -czf - . \
+        | ssh "{{ mchango_ssh_host }}" \
+          'DOCKER_BUILDKIT=0 docker build --force-rm --cpuset-cpus {{ mchango_build_cpuset }} --memory {{ mchango_build_memory }} --memory-swap {{ mchango_build_memory_swap }} --tag mchango:{{ mchango_release }} -'
+      args:
+        executable: /bin/bash
+      register: server_build
+      changed_when: true
+      when:
+        - not (mchango_skip_build | bool)
+        - mchango_build_on == 'server'
+
+    - name: Build result
+      ansible.builtin.debug:
+        msg: "{{ server_build.stdout_lines | select('search', '^(Successfully|Step [0-9]+/)') | list | last }}"
+      when:
+        - not (mchango_skip_build | bool)
+        - mchango_build_on == 'server'
+
+    - name: Build mchango:{{ mchango_release }} on this Mac for linux/amd64
+      ansible.builtin.command:
+        argv: [docker, buildx, build, --platform, linux/amd64, --tag, "mchango:{{ mchango_release }}", --load, "{{ mchango_src }}"]
+      changed_when: true
+      when:
+        - not (mchango_skip_build | bool)
+        - mchango_build_on == 'mac'
+
+    - name: Ship the image (docker save | gzip | ssh docker load)
+      ansible.builtin.shell: |
+        set -o pipefail
+        docker save "mchango:{{ mchango_release }}" | gzip -1 | ssh "{{ mchango_ssh_host }}" 'gunzip | docker load'
+      args:
+        executable: /bin/bash
+      changed_when: true
+      when:
+        - not (mchango_skip_build | bool)
+        - mchango_build_on == 'mac'
+
+    - name: Drop the local amd64 tag (the build cache keeps the layers)
+      ansible.builtin.command:
+        argv: [docker, image, rm, "mchango:{{ mchango_release }}"]
+      changed_when: true
+      when:
+        - not (mchango_skip_build | bool)
+        - mchango_build_on == 'mac'
+
+- name: Run the release on the server
+  hosts: mchango_server
+  gather_facts: false
+  vars:
+    mchango_dir: /opt/mchango
+    mchango_container: mchango-staging-app
+    mchango_public_port: 18080
+    mchango_manage_port: 18081
+  tasks:
+    - name: Take the release name from the build
+      ansible.builtin.set_fact:
+        mchango_release: "{{ hostvars['localhost']['mchango_release'] }}"
+        mchango_stamp: "{{ hostvars['localhost']['mchango_stamp'] }}"
+
+    - name: Docker Compose must already be installed (this playbook never installs anything)
+      ansible.builtin.command: docker compose version
+      changed_when: false
+
+    - name: The release image must be on the server
+      ansible.builtin.command:
+        argv: [docker, image, inspect, --format, !unsafe '{{.Id}}', "mchango:{{ mchango_release }}"]
+      register: release_image
+      changed_when: false
+
+    - name: Directories owned by this deployment
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ mchango_dir }}", mode: "0750" }
+        - { path: "{{ mchango_dir }}/migration", mode: "0700" }
+
+    - name: Compose file
+      ansible.builtin.copy:
+        src: compose.yml
+        dest: "{{ mchango_dir }}/compose.yml"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Settings file (created once; later edits on the server are kept)
+      ansible.builtin.copy:
+        src: mchango.env.example
+        dest: "{{ mchango_dir }}/mchango.env"
+        owner: root
+        group: root
+        mode: "0600"
+        force: false
+
+    - name: Is the edge overlay installed? (compose.edge.yml, added later for Netlify)
+      ansible.builtin.stat:
+        path: "{{ mchango_dir }}/compose.edge.yml"
+      register: edge_file
+
+    - name: Compose command for this project
+      ansible.builtin.set_fact:
+        mchango_compose: "{{ ['docker', 'compose', '-p', 'mchango', '-f', mchango_dir ~ '/compose.yml'] + (['-f', mchango_dir ~ '/compose.edge.yml'] if edge_file.stat.exists else []) }}"
+
+    - name: Compose file is valid
+      ansible.builtin.command:
+        argv: "{{ mchango_compose + ['config', '--quiet'] }}"
+      changed_when: false
+
+    - name: Is our container running?
+      ansible.builtin.command:
+        argv: [docker, inspect, --format, !unsafe '{{.State.Running}}', "{{ mchango_container }}"]
+      register: current
+      changed_when: false
+      failed_when: false
+
+    - name: Before the first start, ports {{ mchango_public_port }} and {{ mchango_manage_port }} must be free
+      ansible.builtin.shell: >-
+        ss -ltnH | awk '{print $4}' | grep -E ':({{ mchango_public_port }}|{{ mchango_manage_port }})$' || true
+      register: busy_ports
+      changed_when: false
+      failed_when: busy_ports.stdout | trim | length > 0
+      when: current.stdout | trim != 'true'
+
+    - name: Back up the database before the new release runs its migrations
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ mchango_container }}"
+          - mchango
+          - backup
+          - "/data/backups/pre-{{ mchango_release }}-{{ mchango_stamp }}.sqlite"
+      changed_when: true
+      when: current.stdout | trim == 'true'
+
+    - name: Point mchango:staging at this release
+      ansible.builtin.command:
+        argv: [docker, tag, "mchango:{{ mchango_release }}", "mchango:staging"]
+      changed_when: true
+
+    - name: Start or update the `mchango` project (no other project is touched)
+      ansible.builtin.command:
+        argv: "{{ mchango_compose + ['up', '--detach', '--wait', '--wait-timeout', '120'] }}"
+      register: compose_up
+      changed_when: compose_up.stderr is search('Creat|Recreat|Start')
+
+    - name: Public listener answers /api/health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ mchango_public_port }}/api/health"
+        return_content: true
+      register: health
+      failed_when: health.json.status | default('') != 'ok'
+
+    - name: Management listener answers (401 = not signed in, as expected)
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ mchango_manage_port }}/api/manage/auth/me"
+        status_code: 401
+
+    - name: Public listener does not serve management (404 expected)
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ mchango_public_port }}/api/manage/auth/me"
+        status_code: 404
+
+    - name: Published ports must be on loopback only
+      ansible.builtin.command:
+        argv: [docker, port, "{{ mchango_container }}"]
+      register: published
+      changed_when: false
+      failed_when: >-
+        published.stdout_lines | length == 0 or
+        published.stdout_lines | reject('search', '-> 127\.0\.0\.1:') | list | length > 0
+
+    - name: Record the release
+      ansible.builtin.lineinfile:
+        path: "{{ mchango_dir }}/releases.log"
+        line: "{{ mchango_stamp }} mchango:{{ mchango_release }} {{ release_image.stdout }}"
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "Running mchango:{{ mchango_release }} as {{ mchango_container }}"
+          - "Public:     http://127.0.0.1:{{ mchango_public_port }}/ (server loopback only)"
+          - "Management: ssh -N -L {{ mchango_manage_port }}:127.0.0.1:{{ mchango_manage_port }} {{ inventory_hostname }}  then  http://127.0.0.1:{{ mchango_manage_port }}/manage"

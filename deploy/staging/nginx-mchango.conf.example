@@ -1,0 +1,56 @@
+# LATER, WITH APPROVAL — not applied. Exposes ONLY Mchango's public listener on
+# one hostname through schul-staging's existing nginx (schul-nginx,
+# jonasal/nginx-certbot), for Netlify to proxy /api/public/* to.
+#
+# Where it goes: /opt/schul/nginx/conf.d/ is rendered by Ansible
+# (roles/staging_vm_stack, "do not edit on the host"). Add this to that role as
+# its own template (e.g. mchango.conf, auto-included into the http block like
+# the other *.conf files) and apply it the way that role normally does. Do not
+# hand-edit site.conf.
+#
+# Before applying:
+#   1. compose.edge.yml is running, so `mchango-staging-edge` is on schul_default.
+#   2. DNS: a Cloudflare record for the hostname, PROXIED (orange cloud), like
+#      staging-core.schul.co.ke. TLS works as for every other host here:
+#      Cloudflare terminates public TLS; nginx-certbot (USE_LOCAL_CA=1) issues
+#      the origin certificate for this server_name itself from the
+#      ssl_certificate_key path below when nginx reloads.
+#   3. No Cloudflare "Cache Everything" rule and no Bot Fight / JS challenge on
+#      this hostname: Netlify's servers call it, not browsers.
+#
+# Replace `mchango-backend.invalid` (3 places) with the real hostname, e.g.
+# staging-mchango.schul.co.ke, and use the same origin in frontend/netlify.toml.
+
+upstream mchango_public_8080 {
+    zone mchango_public_8080 64k;
+    server mchango-staging-edge:8080 resolve;    # re-resolved, like the schul upstreams
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name mchango-backend.invalid;
+
+    ssl_certificate     /etc/letsencrypt/live/mchango-backend.invalid/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mchango-backend.invalid/privkey.pem;
+
+    # Not including snippets/security-headers.inc: the app already sends
+    # X-Frame-Options DENY, nosniff, Referrer-Policy and a CSP, and the snippet's
+    # SAMEORIGIN / strict-origin-when-cross-origin values would be sent as
+    # second, conflicting copies.
+
+    # The only request with a body is POST /api/public/check (a short JSON code).
+    client_max_body_size 64k;
+
+    # No limit_req / limit_conn: this nginx has no real_ip setup, so behind
+    # Cloudflare (and Netlify) $binary_remote_addr is a Cloudflare edge address
+    # shared by many visitors. The app rate-limits "check my contribution" itself.
+
+    # The public listener has no management routes; refuse the path here anyway.
+    location ^~ /manage { return 404; }
+
+    location / {
+        proxy_pass http://mchango_public_8080;
+        include /etc/nginx/user_conf.d/snippets/proxy.inc;
+    }
+}

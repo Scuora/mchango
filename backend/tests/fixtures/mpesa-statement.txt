@@ -1,0 +1,30 @@
+                                                M-PESA STATEMENT
+
+Customer Name:        AMINA ODHIAMBO
+Mobile Number:        0712345678
+Email Address:
+Statement Period:     01 Jun 2024 - 30 Jun 2024
+Request Date:         01 Jul 2024
+
+SUMMARY
+TRANSACTION TYPE                          PAID IN              PAID OUT
+SEND MONEY:                                  0.00              1,013.00
+RECEIVED MONEY:                          6,500.00                  0.00
+TOTAL:                                   6,500.00              5,542.00
+
+DETAILED STATEMENT
+Receipt No.   Completion Time       Details                                     Transaction Status       Paid In      Withdrawn        Balance
+SF55EEE005    2024-06-12 13:00:00   Withdrawal Charge                           Completed                                -29.00       1,158.00
+SF55EEE005    2024-06-12 13:00:00   Customer Withdrawal At Agent Till 654321 -  Completed                             -2,000.00       1,187.00
+                                    XYZ AGENCIES
+SF44DDD004    2024-06-10 09:00:00   Merchant Payment to 123456 - TENT HIRE LTD  Completed                             -2,500.00       3,187.00
+SF33CCC003    2024-06-05 12:20:10   Customer Transfer of Funds Charge           Completed                                -13.00       5,687.00
+
+Disclaimer: This record is produced for your information only.                       Page 1 of 2
+Receipt No.   Completion Time       Details                                     Transaction Status       Paid In      Withdrawn        Balance
+SF33CCC003    2024-06-05 12:20:10   Customer Transfer to - 0712***333           Completed                             -1,000.00       5,700.00
+                                    JANE MWANGI
+SF22BBB002    2024-06-03 18:40:05   Funds received from - 0733***222            Completed               5,000.00                      6,700.00
+                                    PETER OTIENO
+SF11AAA001    2024-06-02 10:15:22   Funds received from - 0722***111            Completed               1,500.00                      1,700.00
+                                    GRACE WANJIRU

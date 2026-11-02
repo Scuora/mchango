@@ -1,0 +1,525 @@
+@import "tailwindcss";
+
+/*
+ * A calm, dignified palette for a funeral fundraiser: warm ivory and stone
+ * neutrals, deep muted plum for actions, and softened status colours that
+ * still meet WCAG AA contrast. Nothing bright or celebratory.
+ *
+ *   plum   primary actions, links, focus
+ *   stone  text, borders, surfaces (warm greys; stone-50 is the ivory page)
+ *   sage   money in, matched, success
+ *   brick  money out, errors, removals
+ *   ochre  needs review, uncertain values
+ */
+@theme {
+  --font-sans: "Source Sans 3 Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Names and page headings only; never for small text, inputs or amounts. */
+  --font-display: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --spacing-13: 3.25rem;
+
+  --color-plum-50: #f7f4f9;
+  --color-plum-100: #efe9f3;
+  --color-plum-200: #ddd1e5;
+  --color-plum-300: #c4b1d1;
+  --color-plum-400: #a48bb6;
+  --color-plum-500: #84699a;
+  --color-plum-600: #6a5180;
+  --color-plum-700: #4b3a5a;
+  --color-plum-800: #3c2e49;
+  --color-plum-900: #2e2338;
+  --color-plum-950: #1e1625;
+
+  --color-stone-50: #faf8f5;
+  --color-stone-100: #f3efea;
+  --color-stone-200: #e7e2dc;
+  --color-stone-300: #d6cfc6;
+  --color-stone-400: #a39b92;
+  --color-stone-500: #6f685f;
+  --color-stone-600: #5a544d;
+  --color-stone-700: #46413b;
+  --color-stone-800: #322e2a;
+  --color-stone-900: #1f1d1b;
+  --color-stone-950: #12110f;
+
+  --color-sage-50: #f2f6f3;
+  --color-sage-100: #e1ebe4;
+  --color-sage-200: #c3d6c9;
+  --color-sage-300: #9dbba7;
+  --color-sage-400: #6f9a7d;
+  --color-sage-500: #52805f;
+  --color-sage-600: #3f6b4f;
+  --color-sage-700: #335a42;
+  --color-sage-800: #2a4a37;
+  --color-sage-900: #213b2c;
+  --color-sage-950: #13241a;
+
+  --color-brick-50: #fbf3f2;
+  --color-brick-100: #f6e4e2;
+  --color-brick-200: #ecc8c4;
+  --color-brick-300: #dda29c;
+  --color-brick-400: #c7756d;
+  --color-brick-500: #b3564e;
+  --color-brick-600: #9a3b3b;
+  --color-brick-700: #833232;
+  --color-brick-800: #6c2b2b;
+  --color-brick-900: #5a2727;
+  --color-brick-950: #321212;
+
+  --color-ochre-50: #fbf6ea;
+  --color-ochre-100: #f6ebcd;
+  --color-ochre-200: #ecd69e;
+  --color-ochre-300: #e0bc69;
+  --color-ochre-400: #d3a142;
+  --color-ochre-500: #b8862a;
+  --color-ochre-600: #9a6b1f;
+  --color-ochre-700: #8a6116;
+  --color-ochre-800: #6b4a15;
+  --color-ochre-900: #573d15;
+  --color-ochre-950: #321f08;
+
+  /* Chart and funds-bar colours, validated for colour-vision deficiency and
+     contrast (dataviz validator, light surface): */
+  --color-data-in: #b8862a; /* money received: candle gold */
+  --color-data-out: #6f4c94; /* money spent: plum */
+  --color-data-charge: #c0563a; /* charges: brick */
+  --color-data-track: #ece6f1; /* what remains: the unfilled track */
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    color-scheme: light;
+    font-feature-settings: "kern";
+  }
+  body {
+    @apply bg-stone-50 font-sans text-[16px] text-stone-900 antialiased;
+    /* Nothing may push the page wider than the screen. */
+    overflow-x: clip;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline-color: var(--color-plum-600);
+  }
+  a {
+    @apply text-plum-700 underline-offset-2;
+  }
+  a:hover {
+    @apply underline;
+  }
+  ::selection {
+    @apply bg-plum-200 text-plum-950;
+  }
+}
+
+/* Page titles use the display serif, set a little larger to suit its small x-height. */
+@utility page-title {
+  @apply font-display text-[1.9rem] leading-tight font-semibold text-stone-900;
+}
+
+/* The memorial portrait: a circle lit by a burning candle. The warm glow, the
+   gold rim and the light falling across the photo flicker like a flame, and
+   the circle's outline wavers with it. */
+.memorial-frame {
+  --frame-w: 128px;
+  position: relative;
+  width: var(--frame-w);
+  aspect-ratio: 1;
+  flex-shrink: 0;
+}
+.memorial-frame--lg {
+  --frame-w: clamp(136px, 38vw, 176px);
+}
+.memorial-glow {
+  position: absolute;
+  inset: -48%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 54%, rgb(255 200 115 / 0.5) 0%, rgb(244 156 72 / 0.2) 36%, transparent 68%);
+  animation: candle-glow 3.1s ease-in-out infinite;
+  pointer-events: none;
+}
+.memorial-photo {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #2e2338;
+  animation: candle-rim 2.6s ease-in-out infinite;
+}
+.memorial-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 55% 45%;
+}
+/* Candlelight falling across the photo from below. */
+.memorial-light {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 115%, rgb(255 176 88 / 0.5), rgb(255 176 88 / 0.14) 45%, transparent 68%);
+  mix-blend-mode: screen;
+  animation: candle-light 1.9s ease-in-out infinite;
+  pointer-events: none;
+}
+.memorial-candle {
+  position: absolute;
+  left: 50%;
+  bottom: -42px;
+  width: 11px;
+  height: 32px;
+  transform: translateX(-50%);
+}
+.memorial-candle .wax {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 20px;
+  border-radius: 3px 3px 2px 2px;
+  background: linear-gradient(90deg, #d9cdbd, #f8f1e6 45%, #c9bdac);
+}
+.memorial-candle .flame {
+  position: absolute;
+  left: 50%;
+  bottom: 19px;
+  width: 9px;
+  height: 16px;
+  margin-left: -4.5px;
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  background: radial-gradient(ellipse at 50% 76%, #fffbe8 0%, #ffd56b 34%, #f39a3d 70%, transparent 100%);
+  box-shadow: 0 0 14px 5px rgb(255 190 90 / 0.5);
+  transform-origin: 50% 92%;
+  animation: candle-flame 1.7s ease-in-out infinite;
+}
+@keyframes candle-rim {
+  0%, 100% {
+    border-radius: 50%;
+    box-shadow: 0 0 0 1.5px rgb(255 214 150 / 0.8), 0 0 20px 4px rgb(255 180 90 / 0.5), 0 0 56px 14px rgb(240 150 70 / 0.2), 0 22px 50px rgb(0 0 0 / 0.5);
+  }
+  22% {
+    border-radius: 47% 53% 52% 48% / 55% 49% 51% 45%;
+    box-shadow: 0 0 0 1.5px rgb(255 222 160 / 0.95), 0 0 30px 7px rgb(255 186 96 / 0.7), 0 0 76px 20px rgb(244 156 72 / 0.3), 0 22px 50px rgb(0 0 0 / 0.5);
+  }
+  41% {
+    border-radius: 52% 48% 46% 54% / 47% 54% 46% 53%;
+    box-shadow: 0 0 0 1.5px rgb(255 206 140 / 0.7), 0 0 16px 3px rgb(255 176 86 / 0.4), 0 0 44px 10px rgb(240 150 70 / 0.16), 0 22px 50px rgb(0 0 0 / 0.5);
+  }
+  63% {
+    border-radius: 49% 51% 54% 46% / 53% 46% 54% 47%;
+    box-shadow: 0 0 0 1.5px rgb(255 220 156 / 0.9), 0 0 26px 6px rgb(255 184 94 / 0.62), 0 0 68px 18px rgb(244 154 70 / 0.26), 0 22px 50px rgb(0 0 0 / 0.5);
+  }
+  82% {
+    border-radius: 54% 46% 49% 51% / 48% 52% 47% 52%;
+    box-shadow: 0 0 0 1.5px rgb(255 210 146 / 0.78), 0 0 19px 4px rgb(255 178 88 / 0.46), 0 0 52px 12px rgb(240 150 70 / 0.2), 0 22px 50px rgb(0 0 0 / 0.5);
+  }
+}
+@keyframes candle-glow {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  20% { opacity: 1; transform: scale(1.04); }
+  38% { opacity: 0.72; transform: scale(0.98); }
+  61% { opacity: 0.96; transform: scale(1.03); }
+  80% { opacity: 0.8; transform: scale(1); }
+}
+@keyframes candle-light {
+  0%, 100% { opacity: 0.8; }
+  25% { opacity: 1; }
+  45% { opacity: 0.62; }
+  70% { opacity: 0.92; }
+}
+@keyframes candle-flame {
+  0%, 100% { transform: rotate(-2deg) scale(1, 1); }
+  25% { transform: rotate(2.5deg) scale(0.95, 1.09); }
+  50% { transform: rotate(-1deg) scale(1.05, 0.94); }
+  75% { transform: rotate(1.5deg) scale(0.98, 1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .memorial-glow,
+  .memorial-photo,
+  .memorial-light,
+  .memorial-candle .flame {
+    animation: none;
+  }
+  .memorial-photo {
+    box-shadow: 0 0 0 1.5px rgb(255 214 150 / 0.8), 0 0 24px 5px rgb(255 180 90 / 0.55), 0 22px 50px rgb(0 0 0 / 0.5);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Motion. Calm and unhurried; nothing bounces. While the opening screen is up
+   (html.booting) page animations wait, so they play as it fades. Everything
+   here is switched off for people who prefer reduced motion. */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes grow-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes grow-y {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes draw-line {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes portrait-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+
+.page-enter { animation: rise-in 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.hero-line { animation: rise-in 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
+.hero-portrait { animation: portrait-in 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.bar-grow { transform-origin: left; animation: grow-x 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) var(--d, 0.25s) both; }
+.col-grow { transform-box: fill-box; transform-origin: bottom; animation: grow-y 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
+.line-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw-line 1.8s ease-out 0.2s forwards; }
+.pop { animation: pop 0.35s ease-out both; }
+.stagger > * { animation: rise-in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(n + 6) { animation-delay: 200ms; }
+.lift { transition: transform 0.25s ease, box-shadow 0.25s ease; }
+.lift:hover { transform: translateY(-2px); box-shadow: 0 12px 30px -14px rgb(31 29 27 / 0.22); }
+
+/* Cards reveal as they scroll into view (see src/lib/reveal.ts). */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+[data-reveal].is-revealed { opacity: 1; transform: none; }
+
+html.booting .hero-line,
+html.booting .hero-portrait,
+html.booting .bar-grow,
+html.booting .page-enter {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter, .hero-line, .hero-portrait, .bar-grow, .col-grow, .pop, .stagger > * { animation: none; }
+  .line-draw { animation: none; stroke-dashoffset: 0; }
+  [data-reveal] { opacity: 1; transform: none; transition: none; }
+  .lift:hover { transform: none; }
+}
+
+/* ---- Going further: embers, breathing light, sheen, glow, shimmer. ---- */
+.embers {
+  position: absolute;
+  left: 50%;
+  bottom: -36px;
+  width: 220px;
+  height: 340px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.embers span {
+  position: absolute;
+  bottom: 0;
+  left: var(--x);
+  width: var(--s, 4px);
+  height: var(--s, 4px);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff1c4 0%, #ffc56b 45%, rgb(255 160 70 / 0) 70%);
+  opacity: 0;
+  animation: ember var(--t, 6s) linear var(--delay, 0s) infinite;
+}
+@keyframes ember {
+  0% { opacity: 0; transform: translate(0, 0) scale(1); }
+  12% { opacity: 0.95; }
+  70% { opacity: 0.45; }
+  100% { opacity: 0; transform: translate(var(--drift, 10px), -320px) scale(0.35); }
+}
+.hero-breathe {
+  background-size: 160% 160%;
+  animation: breathe 16s ease-in-out infinite alternate;
+}
+@keyframes breathe {
+  from { background-position: 40% 30%; }
+  to { background-position: 60% 55%; }
+}
+.gold-sheen {
+  background: linear-gradient(100deg, #ffd086 0%, #ffd086 40%, #fff6dc 50%, #ffd086 60%, #ffd086 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sheen 7s ease-in-out 2s infinite;
+}
+@keyframes sheen {
+  0% { background-position: 100% 0; }
+  45%, 100% { background-position: -50% 0; }
+}
+.glow-pulse { animation: glow-pulse 4.5s ease-in-out infinite; }
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(201 149 47 / 0); }
+  50% { box-shadow: 0 0 0 6px rgb(201 149 47 / 0.12), 0 12px 32px -12px rgb(201 149 47 / 0.4); }
+}
+.draw-check circle,
+.draw-check path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw-line 0.8s ease-out 0.15s forwards;
+}
+.draw-check path { animation-delay: 0.6s; }
+.skeleton {
+  border-radius: 0.5rem;
+  background: linear-gradient(90deg, var(--color-stone-100) 25%, var(--color-stone-200) 37%, var(--color-stone-100) 63%);
+  background-size: 400% 100%;
+  animation: skeleton 1.4s ease infinite;
+}
+@keyframes skeleton {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+.press { transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease; }
+.press:active { transform: scale(0.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  .embers { display: none; }
+  .hero-breathe, .glow-pulse, .skeleton { animation: none; }
+  .gold-sheen { animation: none; background: none; color: #ffd086; }
+  .draw-check circle, .draw-check path { animation: none; stroke-dashoffset: 0; }
+  .press:active { transform: none; }
+}
+
+/* Anything clickable shows the pointing hand (Tailwind 4 resets buttons to the arrow). */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"],
+  summary,
+  select,
+  label:has(> input[type="checkbox"]:not(:disabled)),
+  label:has(> input[type="radio"]:not(:disabled)),
+  .p-dropdown,
+  .p-datepicker-trigger {
+    cursor: pointer;
+  }
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
+.sheet-in { animation: sheet-in 0.25s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes sheet-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-in { animation: none; }
+}
+
+/* Chart labels and fills arrive after the marks have drawn. */
+.fade-label { animation: fade-in 0.6s ease-out 0.7s both; }
+@media (prefers-reduced-motion: reduce) {
+  .fade-label { animation: none; }
+}
+
+/* Trend curves (src/public/TrendsPage.tsx). Each line draws itself while its
+   fill sweeps in behind and a spark rides the tip; points pop as the tip
+   reaches them; the latest figure keeps a slow candle-like pulse. The 1.7s
+   draw matches DRAW_MS there. */
+@keyframes wipe-in {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes spark-life {
+  0% { opacity: 0; }
+  6%, 86% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes halo {
+  0% { transform: scale(1); opacity: 0; }
+  12% { opacity: 0.4; }
+  100% { transform: scale(3.4); opacity: 0; }
+}
+@keyframes badge-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes tip-in {
+  from { opacity: 0; scale: 0.94; }
+  to { opacity: 1; scale: 1; }
+}
+@keyframes card-glow {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  45% { opacity: 1; transform: scale(1.08) translate(-6px, 4px); }
+  70% { opacity: 0.8; transform: scale(0.97) translate(4px, -3px); }
+}
+.curve-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw-line 1.7s cubic-bezier(0.65, 0, 0.35, 1) var(--d, 0ms) forwards; }
+.curve-wipe { animation: wipe-in 1.7s cubic-bezier(0.65, 0, 0.35, 1) var(--d, 0ms) both; }
+.spark { animation: spark-life 1.7s linear var(--d, 0ms) both; }
+.dot-pop { transform-box: fill-box; transform-origin: center; animation: pop 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) var(--d, 0ms) both; }
+.halo { transform-box: fill-box; transform-origin: center; animation: halo 3s ease-out var(--d, 2s) infinite both; pointer-events: none; }
+.badge-in { transform-box: fill-box; transform-origin: center bottom; animation: badge-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1.2) var(--d, 1.6s) both; }
+.grid-in { transform-box: fill-box; transform-origin: left; animation: grow-x 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) var(--d, 0ms) both; }
+.fade-label { animation-delay: var(--d, 0.7s); }
+.tip-in { animation: tip-in 0.25s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.card-glow { animation: card-glow 9s ease-in-out infinite; }
+.stat-chip {
+  display: flex; align-items: baseline; gap: 0.6rem;
+  border-radius: 9999px; padding: 0.4rem 0.95rem;
+  background: rgb(255 255 255 / 0.7); font-size: 15px;
+  box-shadow: inset 0 0 0 1px rgb(231 229 228 / 0.9);
+  backdrop-filter: blur(6px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .curve-draw { animation: none; stroke-dashoffset: 0; }
+  .curve-wipe, .dot-pop, .badge-in, .grid-in, .tip-in, .card-glow { animation: none; }
+  .halo, .spark { display: none; }
+}
+
+/* Goal bars (src/components/GoalBar.tsx): hatched gold is the family's pledge
+   (promised, not yet in), solid gold is money received, the pale track is
+   what is still needed. The hatch drifts slowly; a light passes over the gold. */
+.goal-pledged { background-image: repeating-linear-gradient(135deg, #e3c47e 0 5px, #f6ebcd 5px 10px); }
+.goal-received { background: var(--color-data-in); }
+.goal-needed { background: var(--color-data-track); }
+.goal-swatch.goal-pledged { background-image: repeating-linear-gradient(135deg, #d4a94f 0 2px, #f6ebcd 2px 4px); box-shadow: inset 0 0 0 1px #d4a94f; }
+.goal-swatch.goal-needed { box-shadow: inset 0 0 0 1.5px var(--color-plum-200); }
+@keyframes hatch-drift { to { background-position: 28.284px 0; } }
+.hatch-drift { animation: hatch-drift 7s linear infinite; }
+@keyframes bar-sheen {
+  0% { transform: translateX(-120%); }
+  45%, 100% { transform: translateX(120%); }
+}
+.bar-sheen { position: relative; overflow: hidden; }
+.bar-sheen::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgb(255 255 255 / 0.55) 50%, transparent 80%);
+  transform: translateX(-120%);
+  animation: bar-sheen 5s ease-in-out 2.2s infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hatch-drift, .bar-sheen::after { animation: none; }
+}
+
+/* Contribution rows rise in, a chunk at a time (src/public/ContributionsPage.tsx). */
+.row-in { animation: rise-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) var(--d, 0ms) both; }
+/* Small drawn lines wait for the opening screen, like the rest of the page. */
+html.booting .curve-draw,
+html.booting .curve-wipe,
+html.booting .dot-pop,
+html.booting .row-in {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-in { animation: none; }
+}

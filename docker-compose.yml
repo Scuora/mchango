@@ -1,0 +1,60 @@
+# Mchango with Docker Compose.
+#
+#   docker compose up -d --build            # app on http://localhost:8080 (public) and :8081 (management)
+#   docker compose --profile https up -d    # also run Caddy for HTTPS on $DOMAIN
+#
+# Values below come from .env (copy .env.example). See README.md.
+
+name: mchango
+
+services:
+  mchango:
+    build: .
+    image: mchango:local
+    container_name: mchango-app
+    restart: unless-stopped
+    environment:
+      DATABASE_PATH: /data/${MCHANGO_DB:-mchango.sqlite}
+      UPLOADS_DIR: /data/${MCHANGO_UPLOADS:-uploads}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      MANAGE_ALLOWED_HOSTS: ${MANAGE_ALLOWED_HOSTS:-}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      RUST_LOG: ${RUST_LOG:-info,sqlx=warn}
+      # Inside the container management listens on all interfaces. That is only
+      # acceptable because the port is published on the host's loopback (or a VPN
+      # address) below, never on 0.0.0.0. Sign-in is required on top of that.
+      MANAGE_ADDR_PRIVATE_CONFIRMED: "true"
+    ports:
+      # Public page. Kept on loopback by default; Caddy serves it to the world.
+      - "${PUBLIC_BIND:-127.0.0.1}:${PUBLIC_PORT:-8080}:8080"
+      # Management. Loopback (use an SSH tunnel) or a VPN address such as a Tailscale IP.
+      - "${MANAGE_BIND:-127.0.0.1}:${MANAGE_PORT:-8081}:8081"
+    volumes:
+      - mchango-data:/data
+    stop_grace_period: 20s
+
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: mchango-caddy
+    profiles: ["https"]
+    restart: unless-stopped
+    depends_on: [mchango]
+    environment:
+      DOMAIN: ${DOMAIN:-}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  mchango-data:
+    name: mchango-data
+  caddy-data:
+    name: mchango-caddy-data
+  caddy-config:
+    name: mchango-caddy-config

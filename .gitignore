@@ -1,0 +1,18 @@
+# Runtime data, secrets and logs never go in the repository.
+/data/
+/backend/data/
+/backups/
+.env
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.log
+
+# Build output and dependencies (lockfiles ARE committed).
+/backend/target/
+/frontend/node_modules/
+/frontend/dist/
+.DS_Store
+
+# Generated from PrimeReact by frontend/scripts/prime-theme.mjs
+/frontend/src/styles/prime-theme.css

@@ -1,0 +1,62 @@
+# LATER, WITH APPROVAL — not used yet. Needed only when Netlify starts proxying
+# /api/public/* to this server through schul-staging's nginx.
+#
+# Why: the existing nginx (`schul-nginx`) runs in a container on the
+# `schul_default` network, so it cannot reach the host's 127.0.0.1:18080. This
+# overlay adds a tiny TCP forwarder that sits on BOTH networks and forwards only
+# the PUBLIC port. The app itself (and its management port 8081) stays off
+# `schul_default`, so no schul container can reach management.
+#
+#   docker compose -p mchango -f /opt/mchango/compose.yml -f /opt/mchango/compose.edge.yml up -d
+#
+# deploy.yml and migrate-data.yml pick this file up automatically once it exists
+# in /opt/mchango. Then add nginx-mchango.conf.example to the nginx config.
+#
+# Untested so far: check once with `docker run --rm nginx:1.28-alpine nginx -V`
+# (needs --with-stream; nginx >= 1.27.3 for `resolve` in a stream upstream).
+#
+# Caveat: while this container is attached, a `docker compose down` of the
+# `schul` project cannot delete `schul_default` (it reports the network as in
+# use and leaves it). Tell whoever runs that stack.
+
+services:
+  mchango-edge:
+    image: nginx:1.28-alpine
+    container_name: mchango-staging-edge
+    restart: unless-stopped
+    depends_on: [mchango]
+    networks:
+      - default
+      - schul
+    configs:
+      - source: edge_nginx
+        target: /etc/nginx/nginx.conf
+    mem_limit: 64m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  schul:
+    name: schul_default
+    external: true
+
+configs:
+  edge_nginx:
+    content: |
+      worker_processes 1;
+      events { worker_connections 1024; }
+      stream {
+        resolver 127.0.0.11 valid=10s ipv6=off;
+        upstream mchango_public {
+          zone mchango_public 64k;
+          server mchango-staging-app:8080 resolve;
+        }
+        server {
+          listen 8080;
+          proxy_pass mchango_public;
+        }
+      }

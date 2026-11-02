@@ -1,0 +1,42 @@
+/* PrimeReact's theme lives in its own cascade layer. The adjustments below are
+ deliberately unlayered, which makes them win over anything in that layer. */
+@import "./prime-theme.css" layer(primereact);
+
+/* Match the app's controls: 44px touch targets, 8px corners, 16px text. */
+.p-dropdown,
+.p-calendar .p-inputtext {
+  min-height: 2.75rem;
+  border-radius: 0.5rem;
+}
+.p-dropdown .p-dropdown-label,
+.p-calendar .p-inputtext {
+  font-size: 16px;
+  padding-block: 0.6rem;
+}
+.p-calendar {
+  width: 100%;
+}
+.p-calendar.p-calendar-w-btn .p-inputtext {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.p-calendar .p-datepicker-trigger {
+  border-top-right-radius: 0.5rem;
+  border-bottom-right-radius: 0.5rem;
+}
+/* A value read from a message that must be checked. */
+.is-uncertain.p-dropdown,
+.is-uncertain .p-inputtext {
+  border-color: var(--color-ochre-500);
+  background: var(--color-ochre-50);
+  box-shadow: 0 0 0 1px var(--color-ochre-400);
+}
+.p-dialog .p-dialog-header .p-dialog-title {
+  font-family: var(--font-sans);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+/* Keep the space between month and year in the date picker header. */
+.p-datepicker .p-datepicker-header .p-datepicker-title .p-datepicker-month {
+  margin-right: 0.5rem;
+}

@@ -1,0 +1,70 @@
+# Mchango on schul-staging. Copied by deploy.yml to /opt/mchango/compose.yml.
+#
+#   docker compose -p mchango -f /opt/mchango/compose.yml ps
+#
+# Everything here is namespaced so it cannot collide with the `schul` project on
+# the same host: project `mchango`, container `mchango-staging-app`, volume
+# `mchango-staging-data`, network `mchango_default`. The volume name also differs
+# from the Mac's live `mchango-data`, so a command run on the wrong machine
+# cannot touch the other instance's data.
+#
+# Both listeners are published on the host's loopback only. Nothing here is
+# reachable from the internet; see README.md for the SSH tunnel and for the
+# later Netlify wiring (compose.edge.yml + nginx-mchango.conf.example).
+
+name: mchango
+
+services:
+  mchango:
+    image: mchango:staging          # retagged by deploy.yml on every release
+    pull_policy: never              # built on the Mac and loaded with `docker load`
+    container_name: mchango-staging-app
+    restart: unless-stopped
+    env_file:
+      - path: mchango.env           # server-local settings (PUBLIC_URL etc.), never overwritten by deploy.yml
+        required: true
+    environment:
+      DATABASE_PATH: /data/mchango.sqlite
+      UPLOADS_DIR: /data/uploads
+      # Management listens on all interfaces INSIDE the container. That is only
+      # acceptable because its port is published on 127.0.0.1 below and the
+      # container is on its own network. Sign-in is required on top of that.
+      MANAGE_ADDR_PRIVATE_CONFIRMED: "true"
+    ports:
+      - "127.0.0.1:18080:8080"      # public page + /api/public/* + /api/health
+      - "127.0.0.1:18081:8081"      # management: reach it with an SSH tunnel only
+    volumes:
+      - data:/data
+    healthcheck:
+      # The runtime image has no curl/wget; bash's /dev/tcp is enough for a
+      # plain HTTP/1.0 request to the public health endpoint (it runs SELECT 1).
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8080 &&
+          printf 'GET /api/health HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          grep -q '"status":"ok"' <&3
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+    stop_grace_period: 20s
+    # Shared staging box (7.8 GB RAM, already swapping a little): cap what we can take.
+    mem_limit: 768m
+    cpus: 1.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:
+    name: mchango-staging-data
+
+networks:
+  default:
+    name: mchango_default
