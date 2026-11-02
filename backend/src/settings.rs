@@ -13,6 +13,8 @@ use crate::money::{Amount, format_kes};
 pub struct Fundraiser {
     pub name: String,
     pub description: String,
+    /// Kiswahili version of `description`; empty shows the English in both languages.
+    pub description_sw: String,
     /// The person being remembered, e.g. "Mzee Joseph Ochieng Otieno".
     pub memorial_name: String,
     /// Free text such as "1948 – 2026".
@@ -72,7 +74,7 @@ pub struct Organiser {
 
 pub async fn fundraiser(conn: &mut SqliteConnection) -> AppResult<Fundraiser> {
     let mut f: Fundraiser = sqlx::query_as(
-        "SELECT name, description, memorial_name, memorial_dates, memorial_tribute, target_minor, start_date, opening_funds_minor, opening_funds_date,
+        "SELECT name, description, description_sw, memorial_name, memorial_dates, memorial_tribute, target_minor, start_date, opening_funds_minor, opening_funds_date,
                 opening_funds_note, opening_funds_account_id, anonymous_label, show_reference_hint,
                 show_promises, public_page_enabled, is_demo, updated_at, memorial_photo_updated_at,
                 giving_method, giving_number, giving_account, giving_name, funeral_when, funeral_where,
@@ -90,6 +92,9 @@ pub struct FundraiserUpdate {
     pub name: String,
     #[serde(default)]
     pub description: String,
+    /// Left out by older forms, which keeps the saved text.
+    #[serde(default)]
+    pub description_sw: Option<String>,
     #[serde(default)]
     pub memorial_name: String,
     #[serde(default)]
@@ -162,8 +167,13 @@ pub async fn update_fundraiser(conn: &mut SqliteConnection, update: FundraiserUp
     };
 
     let before = fundraiser(conn).await?;
+    let description_sw =
+        update.description_sw.map(|d| d.trim().to_string()).unwrap_or_else(|| before.description_sw.clone());
+    if description_sw.chars().count() > 2000 {
+        return Err(AppError::field("description_sw", "Keep the description under 2,000 characters."));
+    }
     sqlx::query(
-        "UPDATE fundraiser SET name = ?, description = ?, memorial_name = ?, memorial_dates = ?, memorial_tribute = ?,
+        "UPDATE fundraiser SET name = ?, description = ?, description_sw = ?, memorial_name = ?, memorial_dates = ?, memorial_tribute = ?,
                 target_minor = ?, start_date = ?,
                 opening_funds_minor = ?, opening_funds_date = ?, opening_funds_note = ?,
                 opening_funds_account_id = ?, anonymous_label = ?, show_reference_hint = ?,
@@ -172,6 +182,7 @@ pub async fn update_fundraiser(conn: &mut SqliteConnection, update: FundraiserUp
     )
     .bind(&name)
     .bind(&description)
+    .bind(&description_sw)
     .bind(&memorial_name)
     .bind(&memorial_dates)
     .bind(&memorial_tribute)

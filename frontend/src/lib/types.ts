@@ -36,6 +36,8 @@ export interface AccountInput {
 export interface Fundraiser {
   name: string;
   description: string;
+  /** Kiswahili version of `description`; empty shows the English in both languages. */
+  description_sw: string;
   memorial_name: string;
   memorial_dates: string;
   memorial_tribute: string;
@@ -88,6 +90,9 @@ export interface Announcement {
   id: number;
   title: string;
   body: string;
+  /** Kiswahili versions; empty when not added. */
+  title_sw: string;
+  body_sw: string;
   pinned: boolean;
   published: boolean;
   created_at: string;
@@ -97,6 +102,8 @@ export interface Announcement {
 export interface AnnouncementInput {
   title: string;
   body: string;
+  title_sw: string;
+  body_sw: string;
   pinned: boolean;
   published: boolean;
 }
@@ -104,6 +111,7 @@ export interface AnnouncementInput {
 export interface FundraiserUpdate {
   name: string;
   description: string;
+  description_sw: string;
   memorial_name: string;
   memorial_dates: string;
   memorial_tribute: string;

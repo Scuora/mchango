@@ -40,6 +40,9 @@ pub struct PublicAnnouncement {
     pub id: i64,
     pub title: String,
     pub body: String,
+    /// Kiswahili versions, when the family has added them.
+    pub title_sw: Option<String>,
+    pub body_sw: Option<String>,
     pub pinned: bool,
     pub published_at: String,
 }
@@ -64,6 +67,7 @@ pub struct PublicFuneral {
 pub struct PublicFundraiser {
     pub name: String,
     pub description: String,
+    pub description_sw: Option<String>,
     pub memorial_name: Option<String>,
     pub memorial_dates: Option<String>,
     pub memorial_tribute: Option<String>,
@@ -269,6 +273,7 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
         fundraiser: PublicFundraiser {
             name: fundraiser.name.clone(),
             description: fundraiser.description.clone(),
+            description_sw: Some(fundraiser.description_sw.clone()).filter(|s| !s.is_empty()),
             memorial_name: Some(fundraiser.memorial_name.clone()).filter(|s| !s.is_empty()),
             memorial_dates: Some(fundraiser.memorial_dates.clone()).filter(|s| !s.is_empty()),
             memorial_tribute: Some(fundraiser.memorial_tribute.clone()).filter(|s| !s.is_empty()),
@@ -330,6 +335,8 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
                 id: a.id,
                 title: a.title,
                 body: a.body,
+                title_sw: Some(a.title_sw).filter(|s| !s.is_empty()),
+                body_sw: Some(a.body_sw).filter(|s| !s.is_empty()),
                 pinned: a.pinned,
                 published_at: a.created_at,
             })

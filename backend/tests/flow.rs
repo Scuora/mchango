@@ -21,7 +21,7 @@ use mchango::transactions::totals::{
     PledgeStatus, Totals, fundraiser_records, funds_by_account, pledge_progress, pledge_totals,
 };
 use mchango::transactions::{self, CorrectionRequest, CreateRequest, Kind, MovementInput, PledgedBy, Presentation};
-use mchango::{db, money::Amount, publication, seed};
+use mchango::{announcements, db, money::Amount, publication, seed};
 
 fn temp_dir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("mchango-test-{}", storage::random_hex(6)));
@@ -308,6 +308,19 @@ async fn demo_flow() {
     assert!(found.found && found.contribution.as_ref().unwrap().listed_as == "Mama Brian");
     let personal = publication::check_contribution(&mut conn, "TJ5P6Q7R8S").await.unwrap();
     assert!(!personal.found && personal.contribution.is_none());
+
+    // A Kiswahili version is published beside the English; left blank, the English stands alone.
+    let update = |title_sw: &str| {
+        serde_json::from_value(
+            serde_json::json!({ "title": "Burial on Saturday", "title_sw": title_sw, "body": "At home." }),
+        )
+        .unwrap()
+    };
+    announcements::create(&mut conn, update("Mazishi Jumamosi")).await.unwrap();
+    announcements::create(&mut conn, update("  ")).await.unwrap();
+    let page = publication::page(&mut conn).await.unwrap();
+    let titles: Vec<_> = page.announcements.iter().map(|a| (a.title.as_str(), a.title_sw.as_deref())).collect();
+    assert_eq!(titles, [("Burial on Saturday", None), ("Burial on Saturday", Some("Mazishi Jumamosi"))]);
     drop(conn);
 
     // Everything survives a restart.

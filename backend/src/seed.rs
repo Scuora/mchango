@@ -45,6 +45,7 @@ pub async fn run(pool: &SqlitePool, storage: &Storage, data_dir: &Path) -> AppRe
             description: "Contributions towards mortuary fees, the casket, transport and the burial at home in \
                           Siaya, and support for the family. This is demo data: every name and record is fictional."
                 .into(),
+            description_sw: None,
             memorial_name: "Mzee Joseph Ochieng Odhiambo".into(),
             memorial_dates: "1948 – 2026".into(),
             memorial_tribute: "Lala salama, Mzee.".into(),

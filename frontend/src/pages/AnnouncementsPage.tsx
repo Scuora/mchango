@@ -10,7 +10,7 @@ import { formatNairobi } from "@/lib/time";
 import type { Announcement, AnnouncementInput, Fundraiser, PublicPreview } from "@/lib/types";
 import { copyText } from "@/public/share";
 
-const empty: AnnouncementInput = { title: "", body: "", pinned: false, published: true };
+const empty: AnnouncementInput = { title: "", body: "", title_sw: "", body_sw: "", pinned: false, published: true };
 
 /** Funeral arrangements and updates from family meetings, for the public Updates page. */
 export function AnnouncementsPage() {
@@ -72,12 +72,21 @@ export function AnnouncementsPage() {
               </div>
               <h2 className="font-display text-2xl font-semibold text-stone-900">{a.title}</h2>
               {a.body && <p className="leading-relaxed whitespace-pre-line text-stone-700">{a.body}</p>}
+              {(a.title_sw || a.body_sw) && (
+                <div lang="sw" className="border-l-2 border-stone-200 pl-3">
+                  <p className="text-[13px] font-semibold tracking-wide text-stone-500 uppercase">Kiswahili</p>
+                  {a.title_sw && <p className="font-semibold text-stone-800">{a.title_sw}</p>}
+                  {a.body_sw && <p className="leading-relaxed whitespace-pre-line text-stone-700">{a.body_sw}</p>}
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 pt-2">
                 <Button
                   variant="secondary"
                   size="sm"
                   icon={<Pencil className="size-4" aria-hidden />}
-                  onClick={() => setEditing({ id: a.id, input: { title: a.title, body: a.body, pinned: a.pinned, published: a.published } })}
+                  onClick={() =>
+                    setEditing({ id: a.id, input: { title: a.title, body: a.body, title_sw: a.title_sw, body_sw: a.body_sw, pinned: a.pinned, published: a.published } })
+                  }
                 >
                   Edit
                 </Button>
@@ -166,9 +175,19 @@ function Editor({ id, initial, onDone }: { id: number | null; initial: Announcem
           <Field label="Message" htmlFor="an-body" optional error={fieldError(error, "body")} hint="Line breaks are kept.">
             <Textarea id="an-body" rows={6} value={input.body} onChange={(e) => set("body", e.target.value)} />
           </Field>
+          <fieldset className="space-y-4 rounded-xl border border-stone-200 p-4">
+            <legend className="px-1 font-semibold text-stone-800">In Kiswahili (optional)</legend>
+            <p className="-mt-1 text-sm text-stone-600">Shown when a visitor switches the public page to Kiswahili. Left empty, the English is shown.</p>
+            <Field label="Title in Kiswahili" htmlFor="an-title-sw" optional error={fieldError(error, "title_sw")}>
+              <Input id="an-title-sw" lang="sw" value={input.title_sw} maxLength={120} placeholder="e.g. Mazishi Jumamosi tarehe 14 Novemba" onChange={(e) => set("title_sw", e.target.value)} />
+            </Field>
+            <Field label="Message in Kiswahili" htmlFor="an-body-sw" optional error={fieldError(error, "body_sw")}>
+              <Textarea id="an-body-sw" lang="sw" rows={6} value={input.body_sw} onChange={(e) => set("body_sw", e.target.value)} />
+            </Field>
+          </fieldset>
           <Checkbox checked={input.pinned} onChange={(e) => set("pinned", e.target.checked)} label="Pin to the top" hint="The pinned announcement shows near the top of the public home page." />
           <Checkbox checked={input.published} onChange={(e) => set("published", e.target.checked)} label="Publish now" hint="Leave unticked to keep it as a draft." />
-          <SaveError error={error && !fieldError(error, "title") && !fieldError(error, "body") ? error : null} />
+          <SaveError error={error && !["title", "body", "title_sw", "body_sw"].some((f) => fieldError(error, f)) ? error : null} />
           <div className="flex gap-3">
             <Button type="submit" busy={busy} icon={<Save className="size-4" aria-hidden />}>
               {input.published ? "Save and publish" : "Save draft"}

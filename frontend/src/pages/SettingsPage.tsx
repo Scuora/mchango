@@ -55,6 +55,7 @@ function FundraiserForm({ fundraiser, accounts, onSaved }: { fundraiser: Fundrai
   const initial = () => ({
     name: fundraiser.name,
     description: fundraiser.description,
+    descriptionSw: fundraiser.description_sw,
     memorialName: fundraiser.memorial_name,
     memorialDates: fundraiser.memorial_dates,
     memorialTribute: fundraiser.memorial_tribute,
@@ -97,6 +98,7 @@ function FundraiserForm({ fundraiser, accounts, onSaved }: { fundraiser: Fundrai
     const body: FundraiserUpdate = {
       name: form.name,
       description: form.description,
+      description_sw: form.descriptionSw,
       memorial_name: form.memorialName,
       memorial_dates: form.memorialDates,
       memorial_tribute: form.memorialTribute,
@@ -146,6 +148,16 @@ function FundraiserForm({ fundraiser, accounts, onSaved }: { fundraiser: Fundrai
           </Field>
           <Field label="Purpose" htmlFor="s-description" error={err("description")} className="sm:col-span-2" hint="Shown at the top of the public page.">
             <Textarea id="s-description" rows={3} value={form.description} onChange={(e) => set("description", e.target.value)} />
+          </Field>
+          <Field
+            label="Purpose in Kiswahili"
+            htmlFor="s-description-sw"
+            optional
+            error={err("description_sw")}
+            className="sm:col-span-2"
+            hint="Shown when a visitor switches the public page to Kiswahili. Left empty, the English is shown."
+          >
+            <Textarea id="s-description-sw" rows={3} lang="sw" value={form.descriptionSw} onChange={(e) => set("descriptionSw", e.target.value)} />
           </Field>
           <Field
             label="Target (KES)"
@@ -218,7 +230,7 @@ function FundraiserForm({ fundraiser, accounts, onSaved }: { fundraiser: Fundrai
         </CardBody>
       </Card>
 
-      {error !== null && Object.keys(localErrors).length === 0 && !["name", "description", "target_minor", "start_date", "opening_funds_minor", "opening_funds_date", "opening_funds_note", "opening_funds_account_id", "anonymous_label"].some((f) => fieldError(error, f)) ? (
+      {error !== null && Object.keys(localErrors).length === 0 && !["name", "description", "description_sw", "target_minor", "start_date", "opening_funds_minor", "opening_funds_date", "opening_funds_note", "opening_funds_account_id", "anonymous_label"].some((f) => fieldError(error, f)) ? (
         <SaveError error={error} />
       ) : null}
       <div className="sticky bottom-0 z-10 -mx-4 flex gap-3 border-t border-stone-200 bg-white/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:shadow-lg items-center">
