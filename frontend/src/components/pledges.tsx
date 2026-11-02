@@ -6,6 +6,7 @@ import { clsx } from "clsx";
 import { Check, CircleDashed, HandHeart } from "lucide-react";
 import type { CSSProperties } from "react";
 import type { PledgeStatus, PledgedBy } from "@/lib/types";
+import { useTr } from "@/public/i18n";
 
 export const STATUS_LABEL: Record<PledgeStatus, string> = {
   pledged: "Pledged",
@@ -19,17 +20,31 @@ const STATUS_STYLE: Record<PledgeStatus, string> = {
   received: "bg-sage-100 text-sage-800 ring-sage-200",
 };
 
+const STATUS_LABEL_SW: Record<PledgeStatus, string> = {
+  pledged: "Ahadi",
+  part_received: "Imepokelewa kiasi",
+  received: "Imepokelewa",
+};
+
+/** The status in the visitor's language (English in management). */
+export function useStatusLabel(): (status: PledgeStatus) => string {
+  const tr = useTr();
+  return (status) => tr(STATUS_LABEL[status], STATUS_LABEL_SW[status]);
+}
+
 export function PledgeStatusBadge({ status, className }: { status: PledgeStatus; className?: string }) {
+  const label = useStatusLabel();
   const Icon = status === "received" ? Check : status === "part_received" ? CircleDashed : HandHeart;
   return (
     <span className={clsx("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[13px] font-semibold whitespace-nowrap ring-1 ring-inset", STATUS_STYLE[status], className)}>
       <Icon className="size-3.5" aria-hidden />
-      {STATUS_LABEL[status]}
+      {label(status)}
     </span>
   );
 }
 
 export function PledgeGroupTag({ by, className }: { by: PledgedBy; className?: string }) {
+  const tr = useTr();
   return (
     <span
       className={clsx(
@@ -38,7 +53,7 @@ export function PledgeGroupTag({ by, className }: { by: PledgedBy; className?: s
         className,
       )}
     >
-      {by === "family" ? "Family share" : "Well-wisher"}
+      {by === "family" ? tr("Family share", "Sehemu ya familia") : tr("Well-wisher", "Mhisani")}
     </span>
   );
 }

@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { goalOf } from "@/lib/goal";
 import type { PublicPage } from "@/lib/types";
+import { langPath, useLang, useTr, type Lang } from "./i18n";
 import { CopyForWhatsApp } from "./pages";
 import { CardTitle, CopyRow, PageHeader, PublicCard, kes } from "./parts";
 import { usePublicPage } from "./PublicLayout";
@@ -21,7 +22,20 @@ function spaced(number: string): string {
 
 const strong = (text: string) => <strong className="font-semibold text-stone-900">{text}</strong>;
 
-function steps(g: Giving): ReactNode[] {
+function steps(g: Giving, lang: Lang): ReactNode[] {
+  if (lang === "sw") {
+    const open = <>Fungua {strong("M-PESA")} kwenye simu yako: programu ya M-PESA, au menyu ya SIM.</>;
+    const amount = <>Weka {strong("kiasi")} unachotaka kuchangia.</>;
+    const check = <>Kabla ya kuweka PIN yako, hakikisha M-Pesa inaonyesha jina {strong(g.name)}.</>;
+    const pin = <>Weka {strong("PIN yako ya M-PESA")} kisha utume. Utapokea ujumbe wa uthibitisho wenye namba ya muamala.</>;
+    if (g.method === "paybill") {
+      return [open, <>Chagua {strong("Lipa na M-PESA")}, kisha {strong("Pay Bill")}.</>, <>Weka namba ya biashara {strong(g.number)}.</>, <>Weka namba ya akaunti {strong(g.account ?? "")}.</>, amount, check, pin];
+    }
+    if (g.method === "till") {
+      return [open, <>Chagua {strong("Lipa na M-PESA")}, kisha {strong("Buy Goods and Services")}.</>, <>Weka namba ya till {strong(g.number)}.</>, amount, check, pin];
+    }
+    return [open, <>Chagua {strong("Tuma Pesa")}.</>, <>Weka namba {strong(spaced(g.number))}.</>, amount, check, pin];
+  }
   const open = <>Open {strong("M-PESA")} on your phone: the M-PESA app, or the SIM menu.</>;
   const amount = <>Enter the {strong("amount")} you wish to give.</>;
   const check = (
@@ -39,57 +53,83 @@ function steps(g: Giving): ReactNode[] {
   return [open, <>Choose {strong("Send Money")}.</>, <>Enter the number {strong(spaced(g.number))}.</>, amount, check, pin];
 }
 
-function whatsAppText(page: PublicPage, g: Giving): string {
+function whatsAppText(page: PublicPage, g: Giving, lang: Lang): string {
   const name = page.fundraiser.memorial_name || page.fundraiser.name;
+  const link = publicLink(langPath("/contribute", lang));
+  if (lang === "sw") {
+    const how =
+      g.method === "paybill"
+        ? [`M-Pesa → Lipa na M-PESA → Pay Bill`, `Namba ya biashara: ${g.number}`, `Akaunti: ${g.account ?? ""}`]
+        : g.method === "till"
+          ? [`M-Pesa → Lipa na M-PESA → Buy Goods`, `Namba ya till: ${g.number}`]
+          : [`M-Pesa → Tuma Pesa`, `Namba: ${g.number}`];
+    return [`*Jinsi ya kuchangia: mazishi ya ${name}*`, "", ...how, `Jina litakaloonyeshwa: ${g.name}`, "_Hakikisha jina kabla ya kuweka PIN yako._", "", link].join("\n");
+  }
   const how =
     g.method === "paybill"
       ? [`M-Pesa → Lipa na M-PESA → Pay Bill`, `Business number: ${g.number}`, `Account: ${g.account ?? ""}`]
       : g.method === "till"
         ? [`M-Pesa → Lipa na M-PESA → Buy Goods`, `Till number: ${g.number}`]
         : [`M-Pesa → Send Money`, `Number: ${g.number}`];
-  return [`*How to contribute: funeral of ${name}*`, "", ...how, `Name shown: ${g.name}`, "_Check the name before entering your PIN._", "", publicLink("/contribute")].join("\n");
+  return [`*How to contribute: funeral of ${name}*`, "", ...how, `Name shown: ${g.name}`, "_Check the name before entering your PIN._", "", link].join("\n");
 }
 
 export function ContributePage() {
   const page = usePublicPage();
+  const tr = useTr();
+  const lang = useLang();
   const f = page.fundraiser;
   const g = f.giving;
   const goal = goalOf(f.target_minor, f.pledges, page.totals.contributions_minor);
 
   if (!g) {
-    return <PageHeader title="How do I contribute?">The family will share how to give here soon.</PageHeader>;
+    return (
+      <PageHeader title={tr("How do I contribute?", "Nitachangiaje?")}>
+        {tr("The family will share how to give here soon.", "Familia itaweka hapa maelezo ya jinsi ya kuchangia hivi karibuni.")}
+      </PageHeader>
+    );
   }
-  const list = steps(g);
+  const list = steps(g, lang);
   const checkStep = list.length - 2;
   return (
     <>
-      <PageHeader title="How do I contribute?">
-        Through M-Pesa, in a few steps. Every contribution goes to the funeral of {f.memorial_name || f.name} and is listed on this site once it is recorded.
+      <PageHeader title={tr("How do I contribute?", "Nitachangiaje?")}>
+        {tr(
+          `Through M-Pesa, in a few steps. Every contribution goes to the funeral of ${f.memorial_name || f.name} and is listed on this site once it is recorded.`,
+          `Kupitia M-Pesa, kwa hatua chache. Kila mchango unaenda kwenye mazishi ya ${f.memorial_name || f.name} na huorodheshwa kwenye tovuti hii ukisharekodiwa.`,
+        )}
       </PageHeader>
       <div className="mx-auto max-w-3xl space-y-4 px-4 pt-4 md:px-6">
         <PublicCard className="relative overflow-hidden border-ochre-200 shadow-lg">
           <div aria-hidden className="card-glow pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-ochre-200/45 blur-3xl" />
           <div className="relative space-y-3">
             <p className="text-[13px] font-semibold tracking-[0.14em] text-ochre-800 uppercase">
-              M-Pesa · {g.method === "paybill" ? "Pay Bill" : g.method === "till" ? "Buy Goods" : "Send Money"}
+              M-Pesa · {g.method === "paybill" ? "Pay Bill" : g.method === "till" ? "Buy Goods" : tr("Send Money", "Tuma Pesa")}
             </p>
             <CopyRow
-              label={g.method === "paybill" ? "Business number" : g.method === "till" ? "Till number" : "Send money to"}
+              label={
+                g.method === "paybill"
+                  ? tr("Business number", "Namba ya biashara")
+                  : g.method === "till"
+                    ? tr("Till number", "Namba ya till")
+                    : tr("Send money to", "Tuma pesa kwa")
+              }
               value={g.number}
               display={spaced(g.number)}
             />
-            {g.account && <CopyRow label="Account number" value={g.account} />}
+            {g.account && <CopyRow label={tr("Account number", "Namba ya akaunti")} value={g.account} />}
             <p className="flex gap-3 rounded-xl bg-ochre-50 px-4 py-3 text-[16px] leading-relaxed text-ochre-950">
               <ShieldCheck className="mt-0.5 size-5 shrink-0 text-ochre-700" aria-hidden />
               <span>
-                Before you enter your PIN, check that M-Pesa shows the name <strong className="font-semibold">{g.name}</strong>.
+                {tr("Before you enter your PIN, check that M-Pesa shows the name", "Kabla ya kuweka PIN yako, hakikisha M-Pesa inaonyesha jina")}{" "}
+                <strong className="font-semibold">{g.name}</strong>.
               </span>
             </p>
           </div>
         </PublicCard>
 
         <PublicCard>
-          <CardTitle>Step by step</CardTitle>
+          <CardTitle>{tr("Step by step", "Hatua kwa hatua")}</CardTitle>
           <ol className="stagger">
             {list.map((step, i) => (
               <li key={i} className="relative flex gap-4 pb-5 last:pb-0">
@@ -110,17 +150,24 @@ export function ContributePage() {
         </PublicCard>
 
         <PublicCard>
-          <CardTitle>After you send</CardTitle>
+          <CardTitle>{tr("After you send", "Baada ya kutuma")}</CardTitle>
           <ul className="space-y-3 text-[16px] leading-relaxed text-stone-700">
             <li className="flex gap-3">
               <MessageSquareText className="mt-1 size-5 shrink-0 text-plum-600" aria-hidden />
-              <span>Keep the M-Pesa message. Its code (for example TK3AB12CD4) lets you check your contribution here.</span>
+              <span>
+                {tr(
+                  "Keep the M-Pesa message. Its code (for example TK3AB12CD4) lets you check your contribution here.",
+                  "Hifadhi ujumbe wa M-Pesa. Namba yake ya muamala (kwa mfano TK3AB12CD4) itakuwezesha kuhakiki mchango wako hapa.",
+                )}
+              </span>
             </li>
             <li className="flex gap-3">
               <ListChecks className="mt-1 size-5 shrink-0 text-plum-600" aria-hidden />
               <span>
-                Once the family records it, your contribution appears on the list under your name as M-Pesa shows it. You can ask the family to list you
-                differently, or anonymously.
+                {tr(
+                  "Once the family records it, your contribution appears on the list under your name as M-Pesa shows it. You can ask the family to list you differently, or anonymously.",
+                  "Familia ikisharekodi, mchango wako utaonekana kwenye orodha kwa jina lako kama M-Pesa inavyolionyesha. Unaweza kuiomba familia ikuorodheshe kwa jina tofauti, au bila jina.",
+                )}
               </span>
             </li>
           </ul>
@@ -129,13 +176,13 @@ export function ContributePage() {
               to="/check"
               className="press inline-flex min-h-12 items-center gap-2 rounded-xl bg-plum-800 px-5 text-[16px] font-semibold text-white no-underline hover:bg-plum-700 hover:no-underline"
             >
-              Check my contribution
+              {tr("Check my contribution", "Hakiki mchango wangu")}
             </Link>
             <Link
               to="/contributions"
               className="press inline-flex min-h-12 items-center gap-2 rounded-xl border border-stone-300 bg-white px-5 text-[16px] font-semibold text-stone-900 no-underline hover:bg-stone-50 hover:no-underline"
             >
-              See all contributions
+              {tr("See all contributions", "Tazama michango yote")}
             </Link>
           </div>
         </PublicCard>
@@ -146,19 +193,19 @@ export function ContributePage() {
             className="group lift flex items-center justify-between gap-4 rounded-2xl border border-stone-200 bg-white px-5 py-4 text-stone-900 no-underline shadow-sm hover:no-underline"
           >
             <span>
-              <span className="block text-[15px] text-stone-600">Still needed</span>
+              <span className="block text-[15px] text-stone-600">{tr("Still needed", "Bado kinahitajika")}</span>
               <span className="block font-display text-[1.6rem] leading-tight font-semibold">{kes(goal.stillNeeded)}</span>
             </span>
             <span className="flex items-center gap-1.5 text-[15px] font-semibold text-plum-700">
-              See the goal <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" aria-hidden />
+              {tr("See the goal", "Tazama lengo")} <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" aria-hidden />
             </span>
           </Link>
         ) : null}
 
         <PublicCard>
-          <p className="font-semibold text-stone-900">Share how to give</p>
-          <p className="mt-1 text-[15px] text-stone-600">Send these details to family and friends on WhatsApp.</p>
-          <CopyForWhatsApp text={whatsAppText(page, g)} />
+          <p className="font-semibold text-stone-900">{tr("Share how to give", "Shiriki jinsi ya kuchangia")}</p>
+          <p className="mt-1 text-[15px] text-stone-600">{tr("Send these details to family and friends on WhatsApp.", "Tuma maelezo haya kwa familia na marafiki kwenye WhatsApp.")}</p>
+          <CopyForWhatsApp text={whatsAppText(page, g, lang)} />
         </PublicCard>
       </div>
     </>

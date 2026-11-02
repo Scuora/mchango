@@ -529,6 +529,8 @@ export interface PublicPage {
     memorial_dates: string | null;
     memorial_tribute: string | null;
     photo_url: string | null;
+    /** Kiswahili version of `description`, when the family has added it. */
+    description_sw?: string | null;
     target_minor: number | null;
     start_date: string | null;
     anonymous_label: string;
@@ -564,6 +566,9 @@ export interface PublicAnnouncement {
   id: number;
   title: string;
   body: string;
+  /** Kiswahili versions, when the family has added them. */
+  title_sw?: string | null;
+  body_sw?: string | null;
   pinned: boolean;
   published_at: string;
 }

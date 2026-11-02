@@ -13,6 +13,7 @@ import { formatShortDate, todayNairobi } from "@/lib/time";
 import type { PublicPage } from "@/lib/types";
 import { CardTitle, PageHeader, PublicCard, kes } from "./parts";
 import { usePublicPage } from "./PublicLayout";
+import { useLang, useTr } from "./i18n";
 
 interface Bucket {
   /** First day of the bucket, YYYY-MM-DD. */
@@ -132,8 +133,8 @@ function useSeen(ref: React.RefObject<HTMLElement | null>): boolean {
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function bucketLabel(b: Bucket, weekly: boolean): string {
-  return weekly ? `Week of ${formatShortDate(b.key)}` : formatShortDate(b.key);
+function bucketLabel(b: Bucket, weekly: boolean, sw = false): string {
+  return weekly ? `${sw ? "Wiki ya" : "Week of"} ${formatShortDate(b.key)}` : formatShortDate(b.key);
 }
 
 const IN = "var(--color-data-in)";
@@ -273,14 +274,16 @@ function Spark({ line: lineKey, path, color, delay }: { line: string; path: stri
 
 function CurveChart({ buckets, weekly, showIn, view }: { buckets: Bucket[]; weekly: boolean; showIn: boolean; view: View }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const tr = useTr();
+  const sw = useLang() === "sw";
   const [ref, width] = useWidth<HTMLDivElement>();
   const seen = useSeen(ref);
   const [active, setActive] = useState<number | null>(null);
   const [motion] = useState(() => !reducedMotion());
   const running = view === "running";
   const series: Series[] = [
-    ...(showIn ? [{ key: "in" as const, label: "Received", color: IN, hex: "#b8862a", value: (b: Bucket) => (running ? b.cumIn : b.in) }] : []),
-    { key: "out", label: "Spent", color: OUT, hex: "#6f4c94", value: (b: Bucket) => (running ? b.cumOut : b.out) },
+    ...(showIn ? [{ key: "in" as const, label: tr("Received", "Zilizopokelewa"), color: IN, hex: "#b8862a", value: (b: Bucket) => (running ? b.cumIn : b.in) }] : []),
+    { key: "out", label: tr("Spent", "Zilizotumika"), color: OUT, hex: "#6f4c94", value: (b: Bucket) => (running ? b.cumOut : b.out) },
   ];
 
   // Position 0 is the opening, before anything came in; position i is the end of bucket i - 1.
@@ -340,7 +343,10 @@ function CurveChart({ buckets, weekly, showIn, view }: { buckets: Bucket[]; week
       ref={ref}
       className="relative rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-plum-600"
       tabIndex={0}
-      aria-label={`${running ? "Running totals" : weekly ? "Week by week" : "Day by day"}. Use the arrow keys to move through the ${weekly ? "weeks" : "days"}.`}
+      aria-label={tr(
+        `${running ? "Running totals" : weekly ? "Week by week" : "Day by day"}. Use the arrow keys to move through the ${weekly ? "weeks" : "days"}.`,
+        `${running ? "Jumla inayoongezeka" : weekly ? "Wiki kwa wiki" : "Siku kwa siku"}. Tumia vitufe vya mishale kupitia ${weekly ? "wiki" : "siku"}.`,
+      )}
       onKeyDown={onKey}
       onFocus={() => setActive((a) => a ?? n)}
       onBlur={() => setActive(null)}
@@ -348,7 +354,7 @@ function CurveChart({ buckets, weekly, showIn, view }: { buckets: Bucket[]; week
       {!(seen && width > 0) ? (
         <div style={{ height: HEIGHT }} />
       ) : (
-        <svg width={width} height={HEIGHT} role="img" aria-label="Money received and spent over time; the figures are in the table below." className="block overflow-visible">
+        <svg width={width} height={HEIGHT} role="img" aria-label={tr("Money received and spent over time; the figures are in the table below.", "Pesa zilizopokelewa na kutumika kwa muda; takwimu ziko kwenye jedwali hapa chini.")} className="block overflow-visible">
           <defs>
             {lines.map((l) => (
               <linearGradient key={l.key} id={`${id}-${l.key}`} x1="0" y1="0" x2="0" y2="1">
@@ -449,7 +455,7 @@ function CurveChart({ buckets, weekly, showIn, view }: { buckets: Bucket[]; week
               className={clsx("fade-label text-[12px]", p === 0 ? "fill-stone-400 italic" : "fill-stone-500", active !== null && "opacity-30 transition-opacity")}
               style={delay(300 + (p / Math.max(1, n)) * 600)}
             >
-              {p === 0 ? "Opened" : formatShortDate(buckets[p - 1].key)}
+              {p === 0 ? tr("Opened", "Mwanzo") : formatShortDate(buckets[p - 1].key)}
             </text>
           ))}
 
@@ -501,7 +507,7 @@ function CurveChart({ buckets, weekly, showIn, view }: { buckets: Bucket[]; week
           role="status"
         >
           <p className="mb-1.5 text-[12px] font-semibold tracking-[0.12em] text-stone-500 uppercase">
-            {running ? `Up to ${bucketLabel(at, weekly).replace(/^W/, "w")}` : bucketLabel(at, weekly)}
+            {running ? tr(`Up to ${bucketLabel(at, weekly).replace(/^W/, "w")}`, `Hadi ${bucketLabel(at, weekly, true).replace(/^W/, "w")}`) : bucketLabel(at, weekly, sw)}
           </p>
           {lines.map((l) => (
             <div key={l.key} className="flex items-baseline justify-between gap-3 py-0.5">
@@ -512,14 +518,14 @@ function CurveChart({ buckets, weekly, showIn, view }: { buckets: Bucket[]; week
               <span className="text-right">
                 <span className="font-semibold text-stone-900 tabular-nums">{kes(l.value(at))}</span>
                 {running && (
-                  <span className="block text-[12px] text-stone-500 tabular-nums">+{kes(l.key === "in" ? at.in : at.out)} {weekly ? "that week" : "that day"}</span>
+                  <span className="block text-[12px] text-stone-500 tabular-nums">+{kes(l.key === "in" ? at.in : at.out)} {weekly ? tr("that week", "wiki hiyo") : tr("that day", "siku hiyo")}</span>
                 )}
               </span>
             </div>
           ))}
           {running && showIn && (
             <p className="mt-1.5 flex justify-between border-t border-stone-200/70 pt-1.5 text-[13px] text-stone-600">
-              Not yet spent <span className="font-semibold text-stone-900 tabular-nums">{kes(at.cumIn - at.cumOut)}</span>
+              {tr("Not yet spent", "Bado hazijatumika")} <span className="font-semibold text-stone-900 tabular-nums">{kes(at.cumIn - at.cumOut)}</span>
             </p>
           )}
         </div>
@@ -530,20 +536,23 @@ function CurveChart({ buckets, weekly, showIn, view }: { buckets: Bucket[]; week
 
 /** One card for both views, switched with a sliding segmented control. */
 function TrendsCard({ buckets, weekly, showIn }: { buckets: Bucket[]; weekly: boolean; showIn: boolean }) {
+  const tr = useTr();
   const [view, setView] = useState<View>("running");
   const received = buckets.reduce((sum, b) => sum + b.in, 0);
   const spent = buckets.reduce((sum, b) => sum + b.out, 0);
   const views = [
-    ["running", "Running total"],
-    ["daily", weekly ? "Week by week" : "Day by day"],
+    ["running", tr("Running total", "Jumla")],
+    ["daily", weekly ? tr("Week by week", "Wiki kwa wiki") : tr("Day by day", "Siku kwa siku")],
   ] as const;
   return (
     <PublicCard className="relative overflow-hidden">
       <div aria-hidden className="card-glow pointer-events-none absolute -top-28 -right-20 size-72 rounded-full bg-ochre-200/45 blur-3xl" />
       <div aria-hidden className="card-glow pointer-events-none absolute -bottom-32 -left-24 size-72 rounded-full bg-plum-200/35 blur-3xl [animation-delay:-3s]" />
       <div className="relative flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <CardTitle eyebrow={`Since ${formatShortDate(buckets[0].key)}`}>Money in and out</CardTitle>
-        <div role="tablist" aria-label="Chart view" className="relative grid grid-cols-2 rounded-full bg-stone-100/90 p-1 text-[14px] ring-1 ring-stone-200/70">
+        <CardTitle eyebrow={tr(`Since ${formatShortDate(buckets[0].key)}`, `Tangu ${formatShortDate(buckets[0].key)}`)}>
+          {tr("Money in and out", "Pesa zilizoingia na kutoka")}
+        </CardTitle>
+        <div role="tablist" aria-label={tr("Chart view", "Mwonekano wa chati")} className="relative grid grid-cols-2 rounded-full bg-stone-100/90 p-1 text-[14px] ring-1 ring-stone-200/70">
           <span
             aria-hidden
             className="absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-full bg-white shadow-[0_2px_10px_-3px_rgb(46_35_56/0.3)] transition-transform duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
@@ -572,7 +581,7 @@ function TrendsCard({ buckets, weekly, showIn }: { buckets: Bucket[]; weekly: bo
           <div className="stat-chip">
             <dt className="flex items-center gap-2 text-stone-600">
               <span className="size-2.5 rounded-full" style={{ background: IN }} aria-hidden />
-              Received
+              {tr("Received", "Zilizopokelewa")}
             </dt>
             <dd className="font-semibold text-stone-900 tabular-nums">
               <CountUp value={received} format={kes} />
@@ -582,7 +591,7 @@ function TrendsCard({ buckets, weekly, showIn }: { buckets: Bucket[]; weekly: bo
         <div className="stat-chip">
           <dt className="flex items-center gap-2 text-stone-600">
             <span className="size-2.5 rounded-full" style={{ background: OUT }} aria-hidden />
-            Spent
+            {tr("Spent", "Zilizotumika")}
           </dt>
           <dd className="font-semibold text-stone-900 tabular-nums">
             <CountUp value={spent} format={kes} />
@@ -590,7 +599,7 @@ function TrendsCard({ buckets, weekly, showIn }: { buckets: Bucket[]; weekly: bo
         </div>
         {showIn && (
           <div className="stat-chip">
-            <dt className="text-stone-600">Not yet spent</dt>
+            <dt className="text-stone-600">{tr("Not yet spent", "Bado hazijatumika")}</dt>
             <dd className="font-semibold text-stone-900 tabular-nums">
               <CountUp value={received - spent} format={kes} />
             </dd>
@@ -604,9 +613,12 @@ function TrendsCard({ buckets, weekly, showIn }: { buckets: Bucket[]; weekly: bo
       <p className="relative mt-2 text-[14px] text-stone-500">
         {view === "running"
           ? showIn
-            ? "The space between the gold and plum lines is money received but not yet spent."
-            : "Spending added up over time."
-          : `What came in and went out each ${weekly ? "week" : "day"}. Hover, tap or use the arrow keys for the figures.`}
+            ? tr("The space between the gold and plum lines is money received but not yet spent.", "Nafasi kati ya mstari wa dhahabu na wa zambarau ni pesa zilizopokelewa ambazo bado hazijatumika.")
+            : tr("Spending added up over time.", "Matumizi yakijumlishwa kwa muda.")
+          : tr(
+              `What came in and went out each ${weekly ? "week" : "day"}. Hover, tap or use the arrow keys for the figures.`,
+              `Kilichoingia na kutoka kila ${weekly ? "wiki" : "siku"}. Gusa, elekeza au tumia vitufe vya mishale kuona takwimu.`,
+            )}
       </p>
     </PublicCard>
   );
@@ -630,43 +642,73 @@ export function TrendsPage() {
   const spent = t.expenses_minor + t.charges_minor;
   const hasData = buckets.some((b) => b.in > 0 || b.out > 0);
   const goal = goalOf(page.fundraiser.target_minor, page.fundraiser.pledges, t.contributions_minor);
+  const tr = useTr();
   return (
     <>
-      <PageHeader title="Trends">How contributions and spending have moved {weekly ? "week by week" : "day by day"}.</PageHeader>
+      <PageHeader title={tr("Trends", "Mwenendo")}>
+        {tr(
+          `How contributions and spending have moved ${weekly ? "week by week" : "day by day"}.`,
+          `Jinsi michango na matumizi yalivyokwenda ${weekly ? "wiki kwa wiki" : "siku kwa siku"}.`,
+        )}
+      </PageHeader>
       <div className="mx-auto max-w-4xl space-y-4 px-4 pt-4 md:px-6">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatTile label="Received" value={kes(t.contributions_minor)} note={`${t.contributions_count} contributions`} />
-          <StatTile label="Spent" value={kes(spent)} note={t.charges_minor > 0 ? `incl. ${kes(t.charges_minor)} charges` : undefined} />
-          <StatTile label="Remaining" value={kes(t.remaining_minor)} />
+          <StatTile
+            label={tr("Received", "Zilizopokelewa")}
+            value={kes(t.contributions_minor)}
+            note={tr(
+              `${t.contributions_count} contribution${t.contributions_count === 1 ? "" : "s"}`,
+              t.contributions_count === 1 ? "mchango 1" : `michango ${t.contributions_count}`,
+            )}
+          />
+          <StatTile
+            label={tr("Spent", "Zilizotumika")}
+            value={kes(spent)}
+            note={t.charges_minor > 0 ? tr(`incl. ${kes(t.charges_minor)} charges`, `pamoja na gharama ${kes(t.charges_minor)}`) : undefined}
+          />
+          <StatTile label={tr("Remaining", "Iliyobaki")} value={kes(t.remaining_minor)} />
           {goal?.stillNeeded != null ? (
-            <StatTile label="Still needed" value={kes(goal.stillNeeded)} note={goal.target !== null ? `of ${kes(goal.target)}` : undefined} />
+            <StatTile
+              label={tr("Still needed", "Bado kinahitajika")}
+              value={kes(goal.stillNeeded)}
+              note={goal.target !== null ? tr(`of ${kes(goal.target)}`, `kati ya ${kes(goal.target)}`) : undefined}
+            />
           ) : (
-            <StatTile label={weekly ? "Largest week" : "Largest day"} value={hasData ? kes(Math.max(...buckets.map((b) => b.in))) : "—"} note="received" />
+            <StatTile
+              label={weekly ? tr("Largest week", "Wiki kubwa zaidi") : tr("Largest day", "Siku kubwa zaidi")}
+              value={hasData ? kes(Math.max(...buckets.map((b) => b.in))) : "—"}
+              note={tr("received", "zilizopokelewa")}
+            />
           )}
         </div>
 
         {!hasData ? (
           <PublicCard>
-            <p className="text-stone-700">The charts will appear once the first contribution or expense is recorded.</p>
+            <p className="text-stone-700">
+              {tr("The charts will appear once the first contribution or expense is recorded.", "Chati zitaonekana mchango au matumizi ya kwanza yakisharekodiwa.")}
+            </p>
           </PublicCard>
         ) : (
           <>
             {!showIn && (
               <p className="rounded-xl bg-stone-100 px-4 py-3 text-[15px] text-stone-700">
-                The family has chosen not to show individual amounts, so the charts show spending only.
+                {tr(
+                  "The family has chosen not to show individual amounts, so the charts show spending only.",
+                  "Familia imeamua kutoonyesha kiasi cha kila mchango, kwa hivyo chati zinaonyesha matumizi pekee.",
+                )}
               </p>
             )}
             <TrendsCard buckets={buckets} weekly={weekly} showIn={showIn} />
             <details className="rounded-2xl border border-stone-200 bg-white p-5">
-              <summary className="cursor-pointer font-semibold text-stone-900">Show the figures as a table</summary>
+              <summary className="cursor-pointer font-semibold text-stone-900">{tr("Show the figures as a table", "Onyesha takwimu kama jedwali")}</summary>
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-left text-[15px]">
                   <thead className="text-stone-500">
                     <tr>
-                      <th className="py-2 pr-4 font-medium">{weekly ? "Week of" : "Day"}</th>
-                      {showIn && <th className="py-2 pr-4 text-right font-medium">Received</th>}
-                      <th className="py-2 pr-4 text-right font-medium">Spent</th>
-                      {showIn && <th className="py-2 text-right font-medium">Received less spent</th>}
+                      <th className="py-2 pr-4 font-medium">{weekly ? tr("Week of", "Wiki ya") : tr("Day", "Siku")}</th>
+                      {showIn && <th className="py-2 pr-4 text-right font-medium">{tr("Received", "Zilizopokelewa")}</th>}
+                      <th className="py-2 pr-4 text-right font-medium">{tr("Spent", "Zilizotumika")}</th>
+                      {showIn && <th className="py-2 text-right font-medium">{tr("Received less spent", "Baki")}</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100 tabular-nums">

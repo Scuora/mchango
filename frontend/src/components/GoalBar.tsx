@@ -7,6 +7,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { CountUp } from "@/components/CountUp";
 import type { Goal } from "@/lib/goal";
 import { formatKesShort } from "@/lib/money";
+import { useTr } from "@/public/i18n";
 
 const kes = formatKesShort;
 const delay = (ms: number) => ({ "--d": `${ms}ms` }) as CSSProperties;
@@ -43,13 +44,14 @@ function Bar({ received, pledged, whole, wait }: { received: number; pledged: nu
 
 /** `family` is how the deceased's family is named, e.g. "the family of Karisa Gonzi" (see familyOf). */
 export function GoalBar({ goal, family, className }: { goal: Goal; family: string; className?: string }) {
+  const tr = useTr();
   const { target, familyPledged, familyReceived, familyOutstanding, othersReceived, othersOutstanding, othersShare, stillNeeded } = goal;
   const twoParts = target !== null && familyPledged > 0 && othersShare !== null && othersShare > 0;
   const label = [
-    familyPledged > 0 && `Received from ${family} ${kes(familyPledged)}`,
-    `from family, friends and well-wishers ${kes(othersReceived)}${othersShare !== null ? ` of ${kes(othersShare)}` : ""}`,
-    othersOutstanding > 0 && `pledged by family, friends and well-wishers, not yet received ${kes(othersOutstanding)}`,
-    stillNeeded !== null && `still needed ${kes(stillNeeded)}`,
+    familyPledged > 0 && `${tr("Received from", "Kutoka kwa")} ${family} ${kes(familyPledged)}`,
+    `${tr("from family, friends and well-wishers", "kutoka kwa familia, marafiki na wahisani")} ${kes(othersReceived)}${othersShare !== null ? ` ${tr("of", "kati ya")} ${kes(othersShare)}` : ""}`,
+    othersOutstanding > 0 && `${tr("pledged, not yet received", "ahadi ambazo bado hazijapokelewa")} ${kes(othersOutstanding)}`,
+    stillNeeded !== null && `${tr("still needed", "bado kinahitajika")} ${kes(stillNeeded)}`,
   ]
     .filter(Boolean)
     .join("; ");
@@ -69,8 +71,8 @@ export function GoalBar({ goal, family, className }: { goal: Goal; family: strin
               <p className="col-span-2 flex flex-wrap justify-between gap-x-3 text-[13px] font-semibold tracking-[0.08em] text-stone-500 uppercase">
                 <span>{family.replace(/^the /, "")}</span>
                 <span className="text-right">
-                  <span className="sm:hidden">Well-wishers</span>
-                  <span className="hidden sm:inline">Family, friends &amp; well-wishers</span>
+                  <span className="sm:hidden">{tr("Well-wishers", "Wahisani")}</span>
+                  <span className="hidden sm:inline">{tr("Family, friends & well-wishers", "Familia, marafiki na wahisani")}</span>
                 </span>
               </p>
               {/* The family's share is counted as received from the family, so it is shown in full. */}
@@ -86,23 +88,27 @@ export function GoalBar({ goal, family, className }: { goal: Goal; family: strin
 
       <dl className="mt-3 divide-y divide-stone-100 text-[16px]">
         {familyPledged > 0 && (
-          <Row swatch="received" label={`Received from ${family}`} value={<CountUp value={familyPledged} format={kes} />} />
+          <Row swatch="received" label={`${tr("Received from", "Kutoka kwa")} ${family}`} value={<CountUp value={familyPledged} format={kes} />} />
         )}
         <Row
           swatch="received"
-          label={familyPledged > 0 ? "From family, friends and well-wishers" : "Received so far"}
-          note={othersShare !== null ? `of ${kes(othersShare)} asked for` : undefined}
+          label={familyPledged > 0 ? tr("From family, friends and well-wishers", "Kutoka kwa familia, marafiki na wahisani") : tr("Received so far", "Zilizopokelewa hadi sasa")}
+          note={othersShare !== null ? tr(`of ${kes(othersShare)} asked for`, `kati ya ${kes(othersShare)} zilizoombwa`) : undefined}
           value={<CountUp value={familyPledged > 0 ? othersReceived : othersReceived + familyReceived} format={kes} />}
         />
         {othersOutstanding > 0 && (
-          <Row swatch="pledged" label="Pledged by family, friends and well-wishers, not yet received" value={<CountUp value={othersOutstanding} format={kes} />} />
+          <Row
+            swatch="pledged"
+            label={tr("Pledged by family, friends and well-wishers, not yet received", "Ahadi za familia, marafiki na wahisani ambazo bado hazijapokelewa")}
+            value={<CountUp value={othersOutstanding} format={kes} />}
+          />
         )}
         {stillNeeded !== null && (
           <Row
             swatch="needed"
-            label="Still needed"
-            note={othersOutstanding > 0 ? "Once every pledge is paid in" : undefined}
-            value={stillNeeded === 0 ? "Reached" : <CountUp value={stillNeeded} format={kes} />}
+            label={tr("Still needed", "Bado kinahitajika")}
+            note={othersOutstanding > 0 ? tr("Once every pledge is paid in", "Ahadi zote zikishalipwa") : undefined}
+            value={stillNeeded === 0 ? tr("Reached", "Limefikiwa") : <CountUp value={stillNeeded} format={kes} />}
           />
         )}
       </dl>

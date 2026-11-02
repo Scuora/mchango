@@ -3,7 +3,7 @@
 // are promises; money received is linked to the pledge it fulfils, so it is
 // never counted twice and each side shows what is promised and what is in.
 
-import type { PledgeTotals } from "./types";
+import type { PledgeTotals, PledgedBy } from "./types";
 
 export interface Goal {
   target: number | null;
@@ -45,11 +45,19 @@ export function goalOf(target: number | null, pledges: PledgeTotals | null, cont
   };
 }
 
-/** "the family of Karisa Gonzi" from "Joseph Karisa Gonzi": the name without the given name. */
-export function familyOf(memorialName: string | null | undefined): string {
+/**
+ * Whether a pledge is listed publicly as a pledge. The family's share is shown
+ * as received from the family, so only pledges from family, friends and
+ * well-wishers are listed (and counted as "not yet received").
+ */
+export const listedAsPledge = (p: { pledged_by: PledgedBy }) => p.pledged_by === "friends";
+
+/** "the family of Karisa Gonzi" (or "familia ya Karisa Gonzi") from "Joseph Karisa Gonzi": the name without the given name. */
+export function familyOf(memorialName: string | null | undefined, lang: "en" | "sw" = "en"): string {
   const words = (memorialName ?? "").trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "the family";
-  return `the family of ${(words.length >= 3 ? words.slice(1) : words).join(" ")}`;
+  if (words.length === 0) return lang === "sw" ? "familia" : "the family";
+  const surname = (words.length >= 3 ? words.slice(1) : words).join(" ");
+  return lang === "sw" ? `familia ya ${surname}` : `the family of ${surname}`;
 }
 
 export const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);

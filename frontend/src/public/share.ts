@@ -2,16 +2,19 @@
 // otherwise WhatsApp. Uses public page data only.
 
 import type { PublicPage } from "@/lib/types";
+import { langPath, localiseDates, type Lang } from "./i18n";
 
 export function publicLink(path = "/"): string {
   return `${window.location.origin}${path}`;
 }
 
-export function shareText(page: PublicPage): string {
+export function shareText(page: PublicPage, lang: Lang = "en"): string {
   const f = page.fundraiser;
+  const sw = lang === "sw";
   const lines: string[] = [];
   if (f.memorial_name) {
-    lines.push(`In loving memory of ${f.memorial_name}${f.memorial_dates ? ` (${f.memorial_dates})` : ""}.`);
+    const dates = f.memorial_dates ? ` (${localiseDates(f.memorial_dates, lang)})` : "";
+    lines.push(sw ? `Kwa kumbukumbu ya ${f.memorial_name}${dates}.` : `In loving memory of ${f.memorial_name}${dates}.`);
   } else {
     lines.push(f.name);
   }
@@ -19,18 +22,25 @@ export function shareText(page: PublicPage): string {
     const g = f.giving;
     const how =
       g.method === "paybill"
-        ? `Paybill ${g.number}, account ${g.account ?? ""}`
+        ? sw
+          ? `Paybill ${g.number}, akaunti ${g.account ?? ""}`
+          : `Paybill ${g.number}, account ${g.account ?? ""}`
         : g.method === "till"
-          ? `Till number ${g.number}`
-          : `Send money to ${g.number}`;
-    lines.push(`To contribute through M-Pesa: ${how} (${g.name}).`);
+          ? sw
+            ? `Namba ya till ${g.number}`
+            : `Till number ${g.number}`
+          : sw
+            ? `Tuma pesa kwa ${g.number}`
+            : `Send money to ${g.number}`;
+    lines.push(sw ? `Kuchangia kupitia M-Pesa: ${how} (${g.name}).` : `To contribute through M-Pesa: ${how} (${g.name}).`);
   }
-  lines.push(`Every contribution and expense is listed here: ${publicLink()}`);
+  const link = publicLink(langPath("/", lang));
+  lines.push(sw ? `Kila mchango na matumizi yameorodheshwa hapa: ${link}` : `Every contribution and expense is listed here: ${link}`);
   return lines.join("\n");
 }
 
-export async function sharePage(page: PublicPage): Promise<void> {
-  const text = shareText(page);
+export async function sharePage(page: PublicPage, lang: Lang = "en"): Promise<void> {
+  const text = shareText(page, lang);
   const title = page.fundraiser.memorial_name ?? page.fundraiser.name;
   if (navigator.share) {
     try {

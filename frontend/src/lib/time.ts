@@ -4,30 +4,28 @@
 const TZ = "Africa/Nairobi";
 const OFFSET_MS = 3 * 60 * 60 * 1000;
 
-const dateTimeFormat = new Intl.DateTimeFormat("en-GB", {
-  timeZone: TZ,
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-});
+// Dates follow the public site's language (English or Kiswahili); management
+// always uses English. Formatters are built once per language.
+let locale = "en-GB";
+const formatters = new Map<string, Intl.DateTimeFormat>();
 
-const dateFormat = new Intl.DateTimeFormat("en-GB", {
-  timeZone: TZ,
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-});
+export function setTimeLocale(lang: "en" | "sw"): void {
+  locale = lang === "sw" ? "sw-KE" : "en-GB";
+}
 
-const longDateFormat = new Intl.DateTimeFormat("en-GB", {
-  timeZone: TZ,
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-});
+function format(name: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${locale}|${name}`;
+  let formatter = formatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, { timeZone: TZ, ...options });
+    formatters.set(key, formatter);
+  }
+  return formatter;
+}
+
+const dateTimeFormat = { format: (d: Date) => format("dateTime", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true }).format(d) };
+const dateFormat = { format: (d: Date) => format("date", { day: "numeric", month: "short", year: "numeric" }).format(d) };
+const longDateFormat = { format: (d: Date) => format("longDate", { weekday: "short", day: "numeric", month: "short", year: "numeric" }).format(d) };
 
 function toDate(value: string): Date {
   // A bare calendar date is a Nairobi date; anchor it at Nairobi midday.
@@ -79,15 +77,8 @@ export function daysAgoNairobi(days: number): string {
   return new Date(Date.now() + OFFSET_MS - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-const shortFormat = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, day: "numeric", month: "short" });
-const shortTimeFormat = new Intl.DateTimeFormat("en-GB", {
-  timeZone: TZ,
-  day: "numeric",
-  month: "short",
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-});
+const shortFormat = { format: (d: Date) => format("short", { day: "numeric", month: "short" }).format(d) };
+const shortTimeFormat = { format: (d: Date) => format("shortTime", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(d) };
 
 /** e.g. `5 Nov` (Nairobi). */
 export function formatShortDate(value: string): string {
@@ -101,8 +92,8 @@ export function formatShortDateTime(value: string): string {
   return Number.isNaN(date.getTime()) ? value : shortTimeFormat.format(date).replace(" am", " am").replace(" pm", " pm");
 }
 
-const timeOnlyFormat = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true });
-const dayHeadingFormat = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
+const timeOnlyFormat = { format: (d: Date) => format("timeOnly", { hour: "numeric", minute: "2-digit", hour12: true }).format(d) };
+const dayHeadingFormat = { format: (d: Date) => format("dayHeading", { weekday: "long", day: "numeric", month: "long" }).format(d) };
 
 /** e.g. `2:36 pm` (Nairobi). */
 export function formatNairobiTime(value: string): string {

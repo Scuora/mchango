@@ -9,6 +9,7 @@ import { showBootMemorial, useDismissBoot } from "@/lib/boot";
 import { useReveal } from "@/lib/reveal";
 import { formatNairobi } from "@/lib/time";
 import type { PublicPage } from "@/lib/types";
+import { LangProvider, LangToggle, useLang, useTr } from "./i18n";
 import { sharePage } from "./share";
 
 interface PublicContext {
@@ -19,13 +20,13 @@ export function usePublicPage(): PublicPage {
   return useOutletContext<PublicContext>().page;
 }
 
-const LINKS = [
-  { to: "/", label: "Home", end: true },
-  { to: "/updates", label: "Updates" },
-  { to: "/contributions", label: "Contributions" },
-  { to: "/expenses", label: "Expenses" },
-  { to: "/trends", label: "Trends" },
-  { to: "/check", label: "Check my contribution" },
+const LINKS: { to: string; label: [string, string]; end?: boolean }[] = [
+  { to: "/", label: ["Home", "Nyumbani"], end: true },
+  { to: "/updates", label: ["Updates", "Taarifa"] },
+  { to: "/contributions", label: ["Contributions", "Michango"] },
+  { to: "/expenses", label: ["Expenses", "Matumizi"] },
+  { to: "/trends", label: ["Trends", "Mwenendo"] },
+  { to: "/check", label: ["Check my contribution", "Hakiki mchango"] },
 ];
 
 /**
@@ -33,29 +34,30 @@ const LINKS = [
  * page, on every visit. It can be hidden, but only until the next visit.
  */
 function Ribbon({ page }: { page: PublicPage }) {
+  const tr = useTr();
   const pinned = page.announcements.find((a) => a.pinned);
   const [hidden, setHidden] = useState(false);
   if (!pinned || hidden) return null;
   const { place, map_url } = page.fundraiser.funeral;
   const to = `/updates/${pinned.id}`;
   return (
-    <div role="region" aria-label="Important announcement" className="ribbon-in relative overflow-hidden bg-plum-950 text-[#f6efe4]">
+    <div role="region" aria-label={tr("Important announcement", "Tangazo muhimu")} className="ribbon-in relative overflow-hidden bg-plum-950 text-[#f6efe4]">
       <div aria-hidden className="ribbon-sheen pointer-events-none absolute inset-0" />
       <div className="relative mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5 md:px-6">
         <Flame className="flicker size-5 shrink-0 text-ochre-300" aria-hidden />
         <Link to={to} className="min-w-0 flex-1 font-display text-[17px] leading-snug text-[#f6efe4] no-underline hover:text-white hover:no-underline sm:text-[18px]">
-          {pinned.title}
+          {tr(pinned.title, pinned.title_sw || pinned.title)}
         </Link>
         <Link
           to={to}
           className="press inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full bg-ochre-300 px-3.5 text-[14px] font-semibold text-plum-950 no-underline hover:bg-ochre-200 hover:no-underline"
         >
-          {place || map_url ? "Directions" : "Details"}
+          {place || map_url ? tr("Directions", "Maelekezo") : tr("Details", "Maelezo")}
           <ChevronRight className="size-4" aria-hidden />
         </Link>
         <button
           type="button"
-          aria-label="Hide until your next visit"
+          aria-label={tr("Hide until your next visit", "Ficha hadi utakaporudi")}
           onClick={() => setHidden(true)}
           className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full text-[#f6efe4]/70 hover:bg-white/10 hover:text-white"
         >
@@ -68,6 +70,16 @@ function Ribbon({ page }: { page: PublicPage }) {
 
 /** The public site: one load of the public data shared by every page. */
 export function PublicLayout() {
+  return (
+    <LangProvider>
+      <PublicSite />
+    </LangProvider>
+  );
+}
+
+function PublicSite() {
+  const lang = useLang();
+  const tr = useTr();
   const resource = useResource<PublicPage>("/api/public/page");
   const { pathname, hash } = useLocation();
   useReveal();
@@ -86,9 +98,9 @@ export function PublicLayout() {
 
   useEffect(() => {
     if (fundraiser) {
-      document.title = fundraiser.memorial_name ? `${fundraiser.memorial_name} – funeral contributions` : fundraiser.name;
+      document.title = fundraiser.memorial_name ? `${fundraiser.memorial_name} – ${lang === "sw" ? "michango ya mazishi" : "funeral contributions"}` : fundraiser.name;
     }
-  }, [fundraiser]);
+  }, [fundraiser, lang]);
 
   if (!page) {
     const unpublished = resource.error instanceof ApiError && resource.error.status === 404;
@@ -96,8 +108,8 @@ export function PublicLayout() {
       <div className="min-h-dvh bg-stone-50 px-4 pt-[18vh] text-[17px]">
         <div className="mx-auto max-w-md">
           {unpublished ? (
-            <EmptyState icon={<Flower2 className="size-8" />} title="This page hasn't been published yet">
-              Please check back later.
+            <EmptyState icon={<Flower2 className="size-8" />} title={tr("This page hasn't been published yet", "Ukurasa huu bado haujachapishwa")}>
+              {tr("Please check back later.", "Tafadhali rudi baadaye.")}
             </EmptyState>
           ) : (
             <LoadState loading={resource.loading} error={resource.error} onRetry={resource.reload} />
@@ -111,15 +123,22 @@ export function PublicLayout() {
     <div className="min-h-dvh overflow-x-clip bg-stone-50 pb-24 text-[17px] text-stone-900 md:pb-0">
       <Ribbon page={page} />
       {page.is_demo && (
-        <p className="bg-ochre-100 px-4 py-1.5 text-center text-[14px] text-ochre-900">Demo: every name and record on this page is fictional.</p>
+        <p className="bg-ochre-100 px-4 py-1.5 text-center text-[14px] text-ochre-900">
+          {tr("Demo: every name and record on this page is fictional.", "Maonyesho: kila jina na rekodi kwenye ukurasa huu ni ya kubuni.")}
+        </p>
       )}
       <PublicNav page={page} />
-      <div key={pathname} className="page-enter">
+      {/* Keyed by language too, so a switch redraws every date and label. */}
+      <div key={`${pathname}-${lang}`} className="page-enter">
         <Outlet context={{ page } satisfies PublicContext} />
       </div>
       <footer className="mx-auto max-w-3xl space-y-2 px-4 pt-10 pb-12 text-center">
-        <p className="font-display text-2xl text-stone-800">Thank you for standing with the family.</p>
-        {page.last_updated && <p className="text-[15px] text-stone-500">Last updated {formatNairobi(page.last_updated)} (Nairobi time)</p>}
+        <p className="font-display text-2xl text-stone-800">{tr("Thank you for standing with the family.", "Asanteni kwa kusimama pamoja na familia.")}</p>
+        {page.last_updated && (
+          <p className="text-[15px] text-stone-500">
+            {tr("Last updated", "Imesasishwa")} {formatNairobi(page.last_updated)} ({tr("Nairobi time", "saa za Nairobi")})
+          </p>
+        )}
       </footer>
       <ActionBar page={page} />
     </div>
@@ -132,6 +151,8 @@ export function PublicLayout() {
  * highlight; phones get a menu sheet with large links.
  */
 function PublicNav({ page }: { page: PublicPage }) {
+  const tr = useTr();
+  const lang = useLang();
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
@@ -186,7 +207,7 @@ function PublicNav({ page }: { page: PublicPage }) {
           <span className="truncate font-display text-lg leading-none md:text-xl">{name}</span>
         </Link>
 
-        <nav aria-label="Fundraiser pages" className="ml-auto hidden md:block">
+        <nav aria-label={tr("Fundraiser pages", "Kurasa za mchango")} className="ml-auto hidden md:block">
           <div ref={capsule} className="relative flex items-center rounded-full bg-white/[0.07] p-1 ring-1 ring-white/10">
             {indicator && (
               <span
@@ -208,19 +229,20 @@ function PublicNav({ page }: { page: PublicPage }) {
                   )
                 }
               >
-                {link.label}
+                {tr(link.label[0], link.label[1])}
               </NavLink>
             ))}
           </div>
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
+          <LangToggle />
           <button
             type="button"
-            onClick={() => void sharePage(page)}
+            onClick={() => void sharePage(page, lang)}
             className="press flex size-10 items-center justify-center rounded-full text-[#f6efe4]/85 ring-1 ring-white/15 hover:bg-white/10 hover:text-white"
-            aria-label="Share this page"
-            title="Share"
+            aria-label={tr("Share this page", "Shiriki ukurasa huu")}
+            title={tr("Share", "Shiriki")}
           >
             <Share2 className="size-[18px]" aria-hidden />
           </button>
@@ -231,7 +253,7 @@ function PublicNav({ page }: { page: PublicPage }) {
               className="press flex h-10 items-center gap-2 rounded-full bg-[#e8c27a] px-4 text-[15px] font-semibold text-[#1e1625] shadow-[0_6px_20px_-8px_rgb(232_194_122/0.8)] hover:bg-[#f0cf8e]"
             >
               <HandCoins className="size-4" aria-hidden />
-              Contribute
+              {tr("Contribute", "Changia")}
             </button>
           )}
         </div>
@@ -241,7 +263,7 @@ function PublicNav({ page }: { page: PublicPage }) {
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
           aria-controls="public-menu"
-          aria-label={open ? "Close menu" : "Open menu"}
+          aria-label={open ? tr("Close menu", "Funga menyu") : tr("Open menu", "Fungua menyu")}
           className="press ml-auto flex size-11 items-center justify-center rounded-full ring-1 ring-white/15 hover:bg-white/10 md:hidden"
         >
           {open ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
@@ -250,7 +272,7 @@ function PublicNav({ page }: { page: PublicPage }) {
 
       {open && (
         <div id="public-menu" className="sheet-in border-t border-white/10 px-4 pt-2 pb-5 md:hidden">
-          <nav aria-label="Fundraiser pages" className="flex flex-col">
+          <nav aria-label={tr("Fundraiser pages", "Kurasa za mchango")} className="flex flex-col">
             {LINKS.map((link) => (
               <NavLink
                 key={link.to}
@@ -263,7 +285,7 @@ function PublicNav({ page }: { page: PublicPage }) {
                   )
                 }
               >
-                {link.label}
+                {tr(link.label[0], link.label[1])}
                 <ChevronRight className="size-5 opacity-50" aria-hidden />
               </NavLink>
             ))}
@@ -275,19 +297,23 @@ function PublicNav({ page }: { page: PublicPage }) {
                 onClick={contribute}
                 className="press flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#e8c27a] font-semibold text-[#1e1625]"
               >
-                <HandCoins className="size-5" aria-hidden /> Contribute
+                <HandCoins className="size-5" aria-hidden /> {tr("Contribute", "Changia")}
               </button>
             )}
             <button
               type="button"
-              onClick={() => void sharePage(page)}
+              onClick={() => void sharePage(page, lang)}
               className={clsx(
                 "press flex min-h-12 items-center justify-center gap-2 rounded-xl font-semibold text-white ring-1 ring-white/20",
                 !f.giving && "col-span-2",
               )}
             >
-              <Share2 className="size-5" aria-hidden /> Share
+              <Share2 className="size-5" aria-hidden /> {tr("Share", "Shiriki")}
             </button>
+          </div>
+          <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/10 pt-4">
+            <span className="text-[15px] text-[#f6efe4]/75">{tr("Language", "Lugha")}</span>
+            <LangToggle full />
           </div>
         </div>
       )}
@@ -297,17 +323,19 @@ function PublicNav({ page }: { page: PublicPage }) {
 
 /** Phones: giving and sharing stay in reach once the M-Pesa card scrolls away. */
 function ActionBar({ page }: { page: PublicPage }) {
+  const tr = useTr();
+  const lang = useLang();
   const navigate = useNavigate();
   const contribute = () => navigate("/contribute");
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 flex gap-3 border-t border-stone-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
       {page.fundraiser.giving && (
         <BarButton primary onClick={contribute} icon={<HandCoins className="size-5" aria-hidden />}>
-          How to contribute
+          {tr("How to contribute", "Jinsi ya kuchangia")}
         </BarButton>
       )}
-      <BarButton grow={!page.fundraiser.giving} onClick={() => void sharePage(page)} icon={<Share2 className="size-5" aria-hidden />}>
-        Share
+      <BarButton grow={!page.fundraiser.giving} onClick={() => void sharePage(page, lang)} icon={<Share2 className="size-5" aria-hidden />}>
+        {tr("Share", "Shiriki")}
       </BarButton>
     </div>
   );
