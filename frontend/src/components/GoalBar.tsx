@@ -1,6 +1,6 @@
 // The target as two bars side by side, sized by their share of it: the part
-// paid by the family of the deceased, then the part asked of family, friends
-// and well-wishers. Gold is money received or paid; hatched gold is pledged
+// received from the family of the deceased, then the part asked of family,
+// friends and well-wishers. Gold is money received; hatched gold is pledged
 // but not yet in; the pale track is what is still needed.
 
 import type { CSSProperties, ReactNode } from "react";
@@ -46,7 +46,7 @@ export function GoalBar({ goal, family, className }: { goal: Goal; family: strin
   const { target, familyPledged, familyReceived, familyOutstanding, othersReceived, othersOutstanding, othersShare, stillNeeded } = goal;
   const twoParts = target !== null && familyPledged > 0 && othersShare !== null && othersShare > 0;
   const label = [
-    familyPledged > 0 && `Paid by ${family} ${kes(familyPledged)}`,
+    familyPledged > 0 && `Received from ${family} ${kes(familyPledged)}`,
     `from family, friends and well-wishers ${kes(othersReceived)}${othersShare !== null ? ` of ${kes(othersShare)}` : ""}`,
     othersOutstanding > 0 && `pledged by family, friends and well-wishers, not yet received ${kes(othersOutstanding)}`,
     stillNeeded !== null && `still needed ${kes(stillNeeded)}`,
@@ -73,7 +73,7 @@ export function GoalBar({ goal, family, className }: { goal: Goal; family: strin
                   <span className="hidden sm:inline">Family, friends &amp; well-wishers</span>
                 </span>
               </p>
-              {/* The family's share is paid by the family, so it is shown in full. */}
+              {/* The family's share is counted as received from the family, so it is shown in full. */}
               <Bar received={familyPledged} pledged={0} whole={familyPledged} wait={250} />
               <Bar received={othersReceived} pledged={othersOutstanding} whole={othersShare ?? 0} wait={650} />
             </>
@@ -86,7 +86,7 @@ export function GoalBar({ goal, family, className }: { goal: Goal; family: strin
 
       <dl className="mt-3 divide-y divide-stone-100 text-[16px]">
         {familyPledged > 0 && (
-          <Row swatch="received" label={`Paid by ${family}`} value={<CountUp value={familyPledged} format={kes} />} />
+          <Row swatch="received" label={`Received from ${family}`} value={<CountUp value={familyPledged} format={kes} />} />
         )}
         <Row
           swatch="received"

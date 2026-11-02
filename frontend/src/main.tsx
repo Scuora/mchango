@@ -10,6 +10,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Link, Route, Routes } from "react-router";
 import { PublicLayout } from "@/public/PublicLayout";
 import { ContributionsPage } from "@/public/ContributionsPage";
+import { UpdatePage } from "@/public/UpdatePage";
 import { CheckPage, ExpensesPage, HomePage, UpdatesPage } from "@/public/pages";
 import { TrendsPage } from "@/public/TrendsPage";
 
@@ -52,6 +53,7 @@ createRoot(document.getElementById("root")!).render(
         <Route element={<PublicLayout />}>
           <Route index element={<HomePage />} />
           <Route path="updates" element={<UpdatesPage />} />
+          <Route path="updates/:id" element={<UpdatePage />} />
           <Route path="contributions" element={<ContributionsPage />} />
           <Route path="expenses" element={<ExpensesPage />} />
           <Route path="trends" element={<TrendsPage />} />

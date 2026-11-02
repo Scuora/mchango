@@ -1,7 +1,8 @@
-import { ArrowRight, CircleHelp, Copy, Share2, TrendingUp } from "lucide-react";
+import { ArrowRight, CircleHelp, Copy, MapPin, Share2, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router";
 import { ApiError, api } from "@/lib/api";
+import { coordinatesIn, directionsLink } from "@/lib/maps";
 import { formatKes } from "@/lib/money";
 import { daysAgoNairobi, formatNairobi, formatNairobiLongDate, formatShortDate, todayNairobi } from "@/lib/time";
 import type { CheckResult, PublicAnnouncement, PublicPage } from "@/lib/types";
@@ -24,6 +25,7 @@ import {
   kes,
 } from "./parts";
 import { usePublicPage } from "./PublicLayout";
+import { Linked } from "./linked";
 import { Sparkline, dailySeries } from "./Sparkline";
 import { copyText, publicLink } from "./share";
 
@@ -101,9 +103,12 @@ export function HomePage() {
   );
 }
 
-function announcementText(page: PublicPage, a: PublicAnnouncement): string {
+export function announcementText(page: PublicPage, a: PublicAnnouncement): string {
   const name = page.fundraiser.memorial_name;
-  return [name ? `*In loving memory of ${name}*` : `*${page.fundraiser.name}*`, "", `*${a.title}*`, a.body, "", publicLink("/updates")]
+  const { place, map_url } = page.fundraiser.funeral;
+  const coords = coordinatesIn(map_url);
+  const directions = a.pinned && (coords || map_url) ? `Directions${place ? ` to ${place}` : ""}: ${coords ? directionsLink(coords) : map_url}` : "";
+  return [name ? `*In loving memory of ${name}*` : `*${page.fundraiser.name}*`, "", `*${a.title}*`, a.body, directions, "", publicLink(`/updates/${a.id}`)]
     .filter((line, i, all) => line !== "" || all[i - 1] !== "")
     .join("\n");
 }
@@ -125,8 +130,21 @@ export function UpdatesPage() {
               {a.pinned ? "Important · " : ""}
               {formatNairobiLongDate(a.published_at)}
             </p>
-            <h2 className="font-display text-[1.7rem] leading-tight font-semibold text-stone-900">{a.title}</h2>
-            {a.body && <p className="mt-3 leading-relaxed whitespace-pre-line text-stone-800">{a.body}</p>}
+            <h2 className="font-display text-[1.7rem] leading-tight font-semibold text-stone-900">
+              <Link to={`/updates/${a.id}`} className="text-stone-900 no-underline hover:underline">
+                {a.title}
+              </Link>
+            </h2>
+            {a.body && (
+              <p className="mt-3 leading-relaxed whitespace-pre-line text-stone-800">
+                <Linked text={a.body} />
+              </p>
+            )}
+            {a.pinned && (page.fundraiser.funeral.place || page.fundraiser.funeral.map_url) && (
+              <Link to={`/updates/${a.id}`} className="mt-3 inline-flex min-h-11 items-center gap-1.5 font-semibold">
+                <MapPin className="size-4" aria-hidden /> Place of burial and directions
+              </Link>
+            )}
             <CopyForWhatsApp text={announcementText(page, a)} />
           </PublicCard>
         ))}
@@ -135,7 +153,7 @@ export function UpdatesPage() {
   );
 }
 
-function CopyForWhatsApp({ text }: { text: string }) {
+export function CopyForWhatsApp({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="mt-4 flex flex-wrap gap-2">

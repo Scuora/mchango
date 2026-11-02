@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { ChevronRight, Flower2, HandCoins, Menu, Share2, X } from "lucide-react";
+import { ChevronRight, Flame, Flower2, HandCoins, Menu, Share2, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from "react-router";
 import { LoadState } from "@/components/LoadState";
@@ -27,6 +27,44 @@ const LINKS = [
   { to: "/trends", label: "Trends" },
   { to: "/check", label: "Check my contribution" },
 ];
+
+/**
+ * The pinned announcement (such as the burial date) across the top of every
+ * page, on every visit. It can be hidden, but only until the next visit.
+ */
+function Ribbon({ page }: { page: PublicPage }) {
+  const pinned = page.announcements.find((a) => a.pinned);
+  const [hidden, setHidden] = useState(false);
+  if (!pinned || hidden) return null;
+  const { place, map_url } = page.fundraiser.funeral;
+  const to = `/updates/${pinned.id}`;
+  return (
+    <div role="region" aria-label="Important announcement" className="ribbon-in relative overflow-hidden bg-plum-950 text-[#f6efe4]">
+      <div aria-hidden className="ribbon-sheen pointer-events-none absolute inset-0" />
+      <div className="relative mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5 md:px-6">
+        <Flame className="flicker size-5 shrink-0 text-ochre-300" aria-hidden />
+        <Link to={to} className="min-w-0 flex-1 font-display text-[17px] leading-snug text-[#f6efe4] no-underline hover:text-white hover:no-underline sm:text-[18px]">
+          {pinned.title}
+        </Link>
+        <Link
+          to={to}
+          className="press inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full bg-ochre-300 px-3.5 text-[14px] font-semibold text-plum-950 no-underline hover:bg-ochre-200 hover:no-underline"
+        >
+          {place || map_url ? "Directions" : "Details"}
+          <ChevronRight className="size-4" aria-hidden />
+        </Link>
+        <button
+          type="button"
+          aria-label="Hide until your next visit"
+          onClick={() => setHidden(true)}
+          className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full text-[#f6efe4]/70 hover:bg-white/10 hover:text-white"
+        >
+          <X className="size-4" aria-hidden />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /** The public site: one load of the public data shared by every page. */
 export function PublicLayout() {
@@ -71,6 +109,7 @@ export function PublicLayout() {
 
   return (
     <div className="min-h-dvh overflow-x-clip bg-stone-50 pb-24 text-[17px] text-stone-900 md:pb-0">
+      <Ribbon page={page} />
       {page.is_demo && (
         <p className="bg-ochre-100 px-4 py-1.5 text-center text-[14px] text-ochre-900">Demo: every name and record on this page is fictional.</p>
       )}

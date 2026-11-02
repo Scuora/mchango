@@ -273,9 +273,16 @@ export function LatestUpdate({ page }: { page: PublicPage }) {
       </p>
       <h2 className="font-display text-[1.6rem] leading-tight font-semibold text-stone-900">{latest.title}</h2>
       {latest.body && <p className="mt-2 line-clamp-5 leading-relaxed whitespace-pre-line text-stone-700">{latest.body}</p>}
-      <Link to="/updates" className="mt-3 inline-flex min-h-11 items-center text-[16px] font-semibold">
-        {page.announcements.length > 1 ? `All ${page.announcements.length} updates` : "Read on the updates page"}
-      </Link>
+      <div className="mt-3 flex flex-wrap gap-x-5">
+        <Link to={`/updates/${latest.id}`} className="inline-flex min-h-11 items-center text-[16px] font-semibold">
+          {latest.pinned && (page.fundraiser.funeral.place || page.fundraiser.funeral.map_url) ? "Place of burial and directions" : "Read the full update"}
+        </Link>
+        {page.announcements.length > 1 && (
+          <Link to="/updates" className="inline-flex min-h-11 items-center text-[16px] font-semibold">
+            All {page.announcements.length} updates
+          </Link>
+        )}
+      </div>
     </PublicCard>
   );
 }
@@ -315,12 +322,12 @@ export function GoalCard({ page }: { page: PublicPage }) {
         <p className="mt-3 text-[16px] leading-relaxed text-stone-700">
           {familyPledged > 0 && target !== null && othersShare !== null ? (
             <>
-              {capitalise(family)} has paid <strong className="font-semibold text-stone-900">{kes(familyPledged)}</strong>. Family, friends and
+              <strong className="font-semibold text-stone-900">{kes(familyPledged)}</strong> has been received from {family}. Family, friends and
               well-wishers are kindly asked to help with the remaining <strong className="font-semibold text-stone-900">{kes(othersShare)}</strong>.
             </>
           ) : familyPledged > 0 ? (
             <>
-              {capitalise(family)} has paid <strong className="font-semibold text-stone-900">{kes(familyPledged)}</strong> towards the funeral.
+              <strong className="font-semibold text-stone-900">{kes(familyPledged)}</strong> has been received from {family} towards the funeral.
             </>
           ) : (
             "Every contribution, large or small, helps the family give him a dignified send-off."

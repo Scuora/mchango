@@ -90,7 +90,7 @@ export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, tod
       lines.push("");
       if (goal.target !== null) lines.push(`*The goal: ${formatKesShort(goal.target)}*`);
       if (goal.familyPledged > 0) {
-        lines.push(`Paid by ${familyOf(fundraiser.memorial_name)}: ${formatKesShort(goal.familyPledged)}`);
+        lines.push(`Received from ${familyOf(fundraiser.memorial_name)}: ${formatKesShort(goal.familyPledged)}`);
         const share = goal.othersShare !== null ? ` of ${formatKesShort(goal.othersShare)}` : "";
         lines.push(`From family, friends and well-wishers: ${formatKesShort(goal.othersReceived)}${share}`);
       }

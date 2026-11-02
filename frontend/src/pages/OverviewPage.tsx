@@ -70,7 +70,7 @@ export function OverviewPage() {
         <Card>
           <CardHeader
             title={goal.target !== null ? `Goal: ${formatKes(goal.target)}` : "Pledges"}
-            description="The part paid by the family, then what family, friends and well-wishers are asked for. Link money received to its pledge so it is counted on the right side."
+            description="The part received from the family, then what family, friends and well-wishers are asked for. Link money received to its pledge so it is counted on the right side."
             actions={
               <ButtonLink to="/manage/pledges" variant="secondary" size="sm">
                 Pledges
