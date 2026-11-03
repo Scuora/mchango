@@ -1,3 +1,4 @@
+import { RefreshCw, TriangleAlert } from "lucide-react";
 import { Component, type ReactNode } from "react";
 import { isStaleBuildError } from "@/lib/lazyPages";
 
@@ -27,8 +28,12 @@ export class PageErrorBoundary extends Component<Props, { error: unknown }> {
     const { error } = this.state;
     if (error === null) return this.props.children;
     const stale = isStaleBuildError(error);
+    const Icon = stale ? RefreshCw : TriangleAlert;
     return (
       <div role="alert" className="mx-auto max-w-md px-4 py-16 text-center">
+        <span className="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-[#efe9f3] text-[#4b3a5a]" aria-hidden>
+          <Icon className="size-6" />
+        </span>
         <h2 className="font-display text-2xl font-semibold text-stone-900">{stale ? "This page has been updated" : "This page could not be shown"}</h2>
         <p className="mt-2 text-stone-600">
           {stale
@@ -38,8 +43,9 @@ export class PageErrorBoundary extends Component<Props, { error: unknown }> {
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="mt-5 inline-flex min-h-11 cursor-pointer items-center rounded-lg bg-[#2e2338] px-5 font-semibold text-white hover:bg-[#1e1625]"
+          className="mt-5 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg bg-[#2e2338] px-5 font-semibold text-white hover:bg-[#1e1625]"
         >
+          <RefreshCw className="size-4" aria-hidden />
           {stale ? "Load the latest version" : "Try again"}
         </button>
       </div>
