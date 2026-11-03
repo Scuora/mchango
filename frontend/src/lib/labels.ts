@@ -53,7 +53,7 @@ export const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
   matched: "Matched to statement",
   not_matched: "Not yet matched",
   missing_receipt: "Missing receipt",
-  removed: "Removed records",
+  removed: "Archived records",
 };
 
 export const ATTENTION_LABELS: Record<string, string> = {

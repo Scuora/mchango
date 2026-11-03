@@ -21,7 +21,7 @@ use mchango::transactions::totals::{
     PledgeStatus, Totals, fundraiser_records, funds_by_account, pledge_progress, pledge_totals,
 };
 use mchango::transactions::{self, CorrectionRequest, CreateRequest, Kind, MovementInput, PledgedBy, Presentation};
-use mchango::{announcements, challenges, db, money::Amount, publication, seed, settings};
+use mchango::{announcements, challenges, db, history, money::Amount, publication, seed, settings};
 
 fn temp_dir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("mchango-test-{}", storage::random_hex(6)));
@@ -477,12 +477,26 @@ async fn challenges_keep_their_own_tally() {
         Err(AppError::Invalid { .. })
     ));
 
-    // A removed record leaves its challenge; a challenge with records is closed, not deleted.
+    // An archived record stops counting but keeps its link, so restoring it puts it back;
+    // a challenge with records is closed, not deleted.
     transactions::correct(&mut tx, gift, CorrectionRequest { reason: "Entered twice".into(), replacement: None })
         .await
         .unwrap();
-    assert_eq!(transactions::item(&mut tx, gift).await.unwrap().challenge_id, None);
+    assert_eq!(transactions::item(&mut tx, gift).await.unwrap().challenge_id, Some(cousins));
     assert_eq!(challenges::summary(&mut tx, cousins).await.unwrap().totals.raised_minor, 2_000_00);
+    assert!(transactions::restore(&mut tx, gift, "x").await.is_err(), "restoring needs a reason");
+    transactions::restore(&mut tx, gift, "It was not a duplicate").await.unwrap();
+    assert_eq!(challenges::summary(&mut tx, cousins).await.unwrap().totals.raised_minor, 3_000_00);
+    transactions::correct(
+        &mut tx,
+        gift,
+        CorrectionRequest { reason: "Entered twice after all".into(), replacement: None },
+    )
+    .await
+    .unwrap();
+    let history = transactions::detail(&mut tx, gift).await.unwrap().history;
+    let actions: Vec<_> = history.iter().map(|h| h.action.as_str()).collect();
+    assert_eq!(actions[..3], ["removed", "restored", "removed"], "every step is in the history, newest first");
     assert!(matches!(challenges::delete(&mut tx, cousins).await, Err(AppError::Conflict(_))));
 
     // The public page shows published challenges and tags their contributions.
@@ -629,5 +643,26 @@ async fn a_payment_can_be_shared_among_people() {
     let fix = CorrectionRequest { reason: "Amount was 1,200".into(), replacement: Some(replacement) };
     transactions::correct(&mut tx, id, fix).await.unwrap();
     assert!(transactions::shares(&mut tx, id).await.unwrap().is_empty(), "shares no longer add up, so they go");
+
+    // Archiving a payment takes its charge line with it; restoring brings both back.
+    let mut tent = record(Kind::Expense, 500_00, None, None);
+    tent.presentation.description = "Tent hire".into();
+    tent.charge_minor = Some(Amount::try_from(13_00).unwrap());
+    let created = transactions::create(&mut tx, tent, "test").await.unwrap();
+    let charge = created.charge_id.unwrap();
+    let archive = CorrectionRequest { reason: "Paid from the wrong fund".into(), replacement: None };
+    transactions::correct(&mut tx, created.id, archive).await.unwrap();
+    assert!(transactions::current_version(&mut tx, charge).await.unwrap().removed);
+    transactions::restore(&mut tx, created.id, "It was the fundraiser's tent after all").await.unwrap();
+    assert!(!transactions::current_version(&mut tx, created.id).await.unwrap().removed);
+    assert!(!transactions::current_version(&mut tx, charge).await.unwrap().removed);
+
+    // Activity lists every change, newest first, with the reason.
+    let query = history::ActivityQuery { entity: Some("transaction".into()), ..Default::default() };
+    let activity = history::activity(&mut tx, query).await.unwrap();
+    assert_eq!(activity.entries[0].action, "restored");
+    let expected =
+        format!("Restored together with transaction #{}: It was the fundraiser's tent after all", created.id);
+    assert_eq!(activity.entries[0].reason.as_deref(), Some(expected.as_str()));
     tx.rollback().await.unwrap();
 }

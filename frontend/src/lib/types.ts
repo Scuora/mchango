@@ -170,6 +170,10 @@ export interface ListItem {
   challenge_name: string | null;
   /** For a payment from several people: who it is from, each with their part. */
   shares: Share[];
+  /** Who recorded it (null for the system or imported data), and who changed it last and when. */
+  created_by: string | null;
+  last_changed_by: string | null;
+  last_changed_at: string | null;
   receipt_count: number;
   reconciliation: ReconciliationStatus;
   attention: Attention[];
@@ -229,6 +233,28 @@ export interface ChangeEntry {
   reason: string | null;
   /** Username, or "system" for background processing. */
   actor: string | null;
+  /** What changed, when kept: a correction's `changes`, or a presentation edit's `before` and `after`. */
+  details: ChangeDetails | null;
+}
+
+export interface ChangeDetails {
+  changes?: { field: string; before: string; after: string }[];
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** One change anywhere in the fundraiser, for the Activity page. */
+export interface ActivityEntry extends ChangeEntry {
+  entity: string;
+  entity_id: number | null;
+}
+
+export interface ActivityPage {
+  entries: ActivityEntry[];
+  total: number;
+  /** Everyone who has changed something. */
+  actors: string[];
 }
 
 export interface SessionUser {

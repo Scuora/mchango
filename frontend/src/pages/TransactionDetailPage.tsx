@@ -1,4 +1,4 @@
-import { ArrowLeft, Eye, EyeOff, FilePlus2, FileText, HandCoins, History, PencilLine, Save, Trash2, Users } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, Eye, EyeOff, FilePlus2, FileText, HandCoins, PencilLine, Save, Users } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
 import { LoadState, SaveError } from "@/components/LoadState";
@@ -7,7 +7,8 @@ import { PledgeGroupTag, PledgeProgressBar, PledgeStatusBadge } from "@/componen
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Checkbox, Field, Textarea } from "@/components/ui/form";
 import { Dialog } from "@/components/ui/dialog";
-import { Badge, Card, CardBody, CardHeader, Detail, EmptyState, Notice } from "@/components/ui/misc";
+import { Badge, Card, CardBody, CardHeader, Detail, Notice } from "@/components/ui/misc";
+import { ChangeList, actorName } from "@/features/audit";
 import { ChallengePicker, canJoinChallenge } from "@/features/challenges";
 import { SharesEditor, buildShares, draftsFrom, type ShareDraft } from "@/features/shares";
 import { MovementFields, apiDraftErrors, buildMovement, draftFromItem, type DraftErrors, type MovementDraft } from "@/features/movementForm";
@@ -25,6 +26,7 @@ export function TransactionDetailPage() {
   const settings = useResource<Fundraiser>("/api/manage/settings");
   const [correcting, setCorrecting] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   if (!detail.data) return <LoadState loading={detail.loading} error={detail.error} onRetry={detail.reload} />;
   const d = detail.data;
@@ -48,7 +50,7 @@ export function TransactionDetailPage() {
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <KindBadge kind={t.kind} />
             <ReconciliationBadge status={t.reconciliation} />
-            {t.removed && <Badge tone="danger">Removed</Badge>}
+            {t.removed && <Badge tone="neutral">Archived</Badge>}
             {t.kind === "personal" && <Badge>Not counted in fundraiser totals</Badge>}
             {t.kind === "pledge" && t.pledged_by && <PledgeGroupTag by={t.pledged_by} />}
             {t.kind === "pledge" && !t.removed && <PledgeStatusBadge status={pledgeStatus} />}
@@ -58,6 +60,15 @@ export function TransactionDetailPage() {
               </Link>
             )}
           </div>
+          <p className="mt-2 text-sm text-stone-600">
+            Recorded by <span className="font-medium text-stone-800">{actorName(t.created_by)}</span> on {formatNairobi(t.recorded_at)}
+            {t.last_changed_at && d.history.length > 1 && (
+              <>
+                {" "}
+                · last changed by <span className="font-medium text-stone-800">{actorName(t.last_changed_by)}</span> on {formatNairobi(t.last_changed_at)}
+              </>
+            )}
+          </p>
         </div>
         <Amount minor={t.amount_minor} direction={t.direction} kind={t.kind} className="text-2xl" />
       </div>
@@ -82,8 +93,11 @@ export function TransactionDetailPage() {
       )}
 
       {t.removed && (
-        <Notice tone="danger" title="This record was removed">
-          It no longer counts in any total. The reason is in the correction history below.
+        <Notice tone="warning" title="This record is archived">
+          <p>It does not count in any total or appear publicly. Everything about it is kept; the reason is in the history below.</p>
+          <Button variant="secondary" size="sm" className="mt-3" icon={<ArchiveRestore className="size-4" aria-hidden />} onClick={() => setRestoring(true)}>
+            Restore it
+          </Button>
         </Notice>
       )}
 
@@ -99,8 +113,8 @@ export function TransactionDetailPage() {
                     <Button variant="secondary" size="sm" icon={<PencilLine className="size-4" aria-hidden />} onClick={() => setCorrecting(true)}>
                       Correct this record
                     </Button>
-                    <Button variant="ghost" size="sm" icon={<Trash2 className="size-4" aria-hidden />} onClick={() => setRemoving(true)}>
-                      Remove
+                    <Button variant="ghost" size="sm" icon={<Archive className="size-4" aria-hidden />} onClick={() => setRemoving(true)}>
+                      Archive
                     </Button>
                   </>
                 )
@@ -195,7 +209,7 @@ export function TransactionDetailPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">Version {v.version}</span>
                       {v.is_current && <Badge tone="info">Current</Badge>}
-                      {v.removed && <Badge tone="danger">Removed</Badge>}
+                      {v.removed && <Badge tone="neutral">Archived</Badge>}
                     </div>
                     <p className="mt-1 text-stone-700">
                       {KIND_LABELS[v.kind]} · {formatKes(v.amount_minor)} · {formatNairobi(v.occurred_at)}
@@ -210,24 +224,9 @@ export function TransactionDetailPage() {
           </Card>
 
           <Card>
-            <CardHeader title="Change history" />
+            <CardHeader title="Change history" description="Who did what, and what changed." />
             <CardBody>
-              {d.history.length === 0 ? (
-                <EmptyState icon={<History className="size-6" />} title="No changes yet" />
-              ) : (
-                <ol className="space-y-2 text-sm">
-                  {d.history.map((h) => (
-                    <li key={h.id}>
-                      <p className="text-stone-800">{h.summary}</p>
-                      {h.reason && <p className="text-stone-600">Reason: {h.reason}</p>}
-                      <p className="text-xs text-stone-500">
-                        {formatNairobi(h.at)}
-                        {h.actor ? ` · by ${h.actor}` : ""}
-                      </p>
-                    </li>
-                  ))}
-                </ol>
-              )}
+              <ChangeList entries={d.history} />
             </CardBody>
           </Card>
         </div>
@@ -237,6 +236,7 @@ export function TransactionDetailPage() {
         <CorrectDialog open={correcting} onClose={() => setCorrecting(false)} detail={d} accounts={accounts.data} onSaved={detail.setData} />
       )}
       <RemoveDialog open={removing} onClose={() => setRemoving(false)} detail={d} onSaved={detail.setData} />
+      <RestoreDialog open={restoring} onClose={() => setRestoring(false)} detail={d} onSaved={detail.setData} />
     </div>
   );
 }
@@ -658,21 +658,62 @@ function RemoveDialog({ open, onClose, detail, onSaved }: { open: boolean; onClo
   }
 
   return (
-    <Dialog open={open} onClose={onClose} title="Remove this record">
+    <Dialog open={open} onClose={onClose} title="Archive this record">
       <form onSubmit={remove} className="space-y-4">
         <p className="text-[15px]">
-          Use this for duplicates or entries made by mistake. The record stays in the history, marked removed, and stops counting.
+          For duplicates or entries made by mistake. It stops counting in the totals and leaves the public page, but nothing is deleted: it stays under
+          &ldquo;Archived records&rdquo; with its history, and can be restored.
         </p>
         {feeLines.length > 0 && (
-          <Notice tone="warning">Its charge line{feeLines.length > 1 ? "s are" : " is"} removed with it.</Notice>
+          <Notice tone="warning">Its charge line{feeLines.length > 1 ? "s are" : " is"} archived with it.</Notice>
         )}
-        <Field label="Reason" htmlFor="remove-reason" error={fieldError(error, "reason")}>
+        <Field label="Why archive it?" htmlFor="remove-reason" error={fieldError(error, "reason")}>
           <Textarea id="remove-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Entered twice" />
         </Field>
         {error !== null && !fieldError(error, "reason") ? <SaveError error={error} /> : null}
         <div className="flex gap-3">
           <Button type="submit" variant="danger" busy={busy} disabled={reason.trim().length < 3}>
-            Remove record
+            Archive record
+          </Button>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+function RestoreDialog({ open, onClose, detail, onSaved }: { open: boolean; onClose: () => void; detail: DetailData; onSaved: (d: DetailData) => void }) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  async function restore(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(await api.post<DetailData>(`/api/manage/transactions/${detail.transaction.id}/restore`, { reason }));
+      onClose();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} title="Restore this record">
+      <form onSubmit={restore} className="space-y-4">
+        <p className="text-[15px]">It counts again with the values it had, together with any charge line archived with it. The archive and the restore stay in the history.</p>
+        <Field label="Why restore it?" htmlFor="restore-reason" error={fieldError(error, "reason")}>
+          <Textarea id="restore-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. It was not a duplicate" />
+        </Field>
+        {error !== null && !fieldError(error, "reason") ? <SaveError error={error} /> : null}
+        <div className="flex gap-3">
+          <Button type="submit" busy={busy} disabled={reason.trim().length < 3} icon={<ArchiveRestore className="size-4" aria-hidden />}>
+            Restore record
           </Button>
           <Button variant="secondary" onClick={onClose}>
             Cancel

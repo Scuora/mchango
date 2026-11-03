@@ -57,6 +57,8 @@ pub fn routes(config: &Config) -> Router<AppState> {
         .route("/api/manage/transactions/{id}/corrections", post(correct_transaction))
         .route("/api/manage/transactions/{id}/challenge", put(set_transaction_challenge))
         .route("/api/manage/transactions/{id}/shares", put(set_transaction_shares))
+        .route("/api/manage/transactions/{id}/restore", post(restore_transaction))
+        .route("/api/manage/activity", get(activity))
         .route("/api/manage/transactions/{id}/receipts", post(upload_receipt).layer(upload_limit))
         .route("/api/manage/documents/{id}/file", get(document_file))
         .route("/api/manage/documents/{id}/publish", post(publish_document))
@@ -341,6 +343,31 @@ async fn set_transaction_challenge(
     tx.commit().await?;
     let mut conn = state.pool.acquire().await?;
     Ok(Json(transactions::detail(&mut conn, id).await?))
+}
+
+#[derive(Deserialize)]
+struct RestoreRequest {
+    reason: String,
+}
+
+async fn restore_transaction(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(request): Json<RestoreRequest>,
+) -> AppResult<Json<Detail>> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    transactions::restore(&mut tx, id, &request.reason).await?;
+    tx.commit().await?;
+    let mut conn = state.pool.acquire().await?;
+    Ok(Json(transactions::detail(&mut conn, id).await?))
+}
+
+async fn activity(
+    State(state): State<AppState>,
+    Query(query): Query<history::ActivityQuery>,
+) -> AppResult<Json<history::ActivityPage>> {
+    let mut conn = state.pool.acquire().await?;
+    Ok(Json(history::activity(&mut conn, query).await?))
 }
 
 #[derive(Deserialize)]

@@ -85,7 +85,7 @@ export function TransactionRow({ item }: { item: ListItem }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className={clsx("font-medium text-stone-900", item.removed && "line-through decoration-stone-400")}>{itemLabel(item)}</span>
-            {item.removed && <Badge tone="danger">Removed</Badge>}
+            {item.removed && <Badge tone="neutral">Archived</Badge>}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-stone-600">
             <span>{formatNairobi(item.occurred_at)}</span>
@@ -93,6 +93,7 @@ export function TransactionRow({ item }: { item: ListItem }) {
             {item.kind === "pledge" && item.pledged_by && <PledgeGroupTag by={item.pledged_by} />}
             {item.kind === "personal" && <span className="text-xs text-stone-500">not counted</span>}
             {item.challenge_name && <ChallengeTag name={item.challenge_name} />}
+            <span className="text-xs text-stone-500">by {item.created_by ?? "system"}</span>
             <ReconciliationBadge status={item.reconciliation} />
             {item.attention.map((a) => (
               <Badge key={a} tone="warning">

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::{QueryBuilder, Sqlite, SqliteConnection};
+use std::collections::BTreeMap;
 
 use super::{
     Direction, Kind, Movement, MovementInput, PledgedBy, Presentation, Share, ShareInput, clean_optional, parse_shares,
@@ -479,7 +480,7 @@ async fn apply_correction(
 ) -> AppResult<i64> {
     let current = current_version(conn, id).await?;
     if current.removed {
-        return Err(AppError::Conflict("This record was already removed.".into()));
+        return Err(AppError::Conflict("This record is archived. Restore it before changing it.".into()));
     }
     let before = current.movement();
     let (after, removed) = match replacement {
@@ -501,10 +502,18 @@ async fn apply_correction(
     insert_version(conn, id, version, &after, removed, Some(reason)).await?;
     touch(conn, id).await?;
 
+    let names: BTreeMap<i64, String> =
+        sqlx::query_as("SELECT id, name FROM accounts").fetch_all(&mut *conn).await?.into_iter().collect();
+    let changes = changed_fields(&before, &after, &names);
     let summary = if removed {
-        format!("Removed (was {} of {})", before.kind.label().to_lowercase(), format_kes(before.amount_minor))
+        format!("Archived (was {} of {})", before.kind.label().to_lowercase(), format_kes(before.amount_minor))
+    } else if changes.is_empty() {
+        "Corrected".to_string()
     } else {
-        describe_changes(&before, &after)
+        format!(
+            "Corrected: {}",
+            changes.iter().map(|(field, from, to)| format!("{field} {from} → {to}")).collect::<Vec<_>>().join("; ")
+        )
     };
     history::record(
         conn,
@@ -513,12 +522,19 @@ async fn apply_correction(
         if removed { "removed" } else { "corrected" },
         &summary,
         Some(reason),
-        Some(json!({ "from_version": current.version, "to_version": version })),
+        Some(json!({
+            "from_version": current.version,
+            "to_version": version,
+            "changes": changes.iter().map(|(field, from, to)| json!({ "field": field, "before": from, "after": to })).collect::<Vec<_>>(),
+        })),
     )
     .await?;
 
-    // Shares must still add up to a live contribution; otherwise they no longer describe it.
-    drop_stale_shares(conn, id, if removed { None } else { Some(&after) }).await?;
+    // Shares must still add up to the contribution; otherwise they no longer describe it.
+    // An archived record keeps them, so restoring it brings them back.
+    if !removed {
+        drop_stale_shares(conn, id, &after).await?;
+    }
     // Money moved into a challenge's own account joins that challenge.
     if !removed
         && after.kind == Kind::Contribution
@@ -527,8 +543,9 @@ async fn apply_correction(
     {
         crate::challenges::set_for_transaction(conn, id, Some(owner)).await?;
     }
-    // Only money received and pledges belong to a challenge.
-    if removed || !crate::challenges::can_belong(after.kind) {
+    // Only money received and pledges belong to a challenge. An archived record keeps its
+    // link (it no longer counts), so restoring it puts it back in the challenge.
+    if !removed && !crate::challenges::can_belong(after.kind) {
         let linked: Option<i64> = sqlx::query_scalar("SELECT challenge_id FROM transactions WHERE id = ?")
             .bind(id)
             .fetch_one(&mut *conn)
@@ -576,37 +593,114 @@ async fn apply_correction(
     Ok(version)
 }
 
-fn describe_changes(before: &Movement, after: &Movement) -> String {
-    let mut parts = Vec::new();
+/// What a correction changed, as (field, before, after) in words people read.
+fn changed_fields(
+    before: &Movement,
+    after: &Movement,
+    accounts: &BTreeMap<i64, String>,
+) -> Vec<(&'static str, String, String)> {
+    let account = |id: Option<i64>| match id {
+        Some(id) => accounts.get(&id).cloned().unwrap_or_else(|| format!("account #{id}")),
+        None => "none".to_string(),
+    };
+    let time = |at: &str| {
+        clock::parse_instant(at)
+            .map(|t| {
+                let local = t.to_offset(clock::nairobi());
+                format!("{} {:02}:{:02}", clock::format_date(local.date()), local.hour(), local.minute())
+            })
+            .unwrap_or_else(|| at.to_string())
+    };
+    let direction = |d: Option<Direction>| match d {
+        Some(Direction::In) => "in".to_string(),
+        Some(Direction::Out) => "out".to_string(),
+        None => "none".to_string(),
+    };
+    let text = |v: &Option<String>| v.clone().unwrap_or_else(|| "none".to_string());
+    let link = |v: Option<i64>| v.map(|id| format!("#{id}")).unwrap_or_else(|| "none".to_string());
+    let mut changes = Vec::new();
     if before.amount_minor != after.amount_minor {
-        parts.push(format!("amount {} → {}", format_kes(before.amount_minor), format_kes(after.amount_minor)));
+        changes.push(("amount", format_kes(before.amount_minor), format_kes(after.amount_minor)));
     }
     if before.kind != after.kind {
-        parts.push(format!("type {} → {}", before.kind.label(), after.kind.label()));
+        changes.push(("type", before.kind.label().to_string(), after.kind.label().to_string()));
     }
     if before.direction != after.direction {
-        parts.push("direction changed".into());
+        changes.push(("direction", direction(before.direction), direction(after.direction)));
     }
     if before.occurred_at != after.occurred_at {
-        parts.push("transaction time changed".into());
+        changes.push(("time", time(&before.occurred_at), time(&after.occurred_at)));
     }
-    if before.account_id != after.account_id || before.to_account_id != after.to_account_id {
-        parts.push("account changed".into());
+    if before.account_id != after.account_id {
+        changes.push(("account", account(before.account_id), account(after.account_id)));
+    }
+    if before.to_account_id != after.to_account_id {
+        changes.push(("moved to", account(before.to_account_id), account(after.to_account_id)));
     }
     if before.reference != after.reference {
-        parts.push(format!(
-            "reference {} → {}",
-            before.reference.as_deref().unwrap_or("none"),
-            after.reference.as_deref().unwrap_or("none")
-        ));
+        changes.push(("reference", text(&before.reference), text(&after.reference)));
     }
     if before.related_transaction_id != after.related_transaction_id {
-        parts.push("link changed".into());
+        changes.push(("link", link(before.related_transaction_id), link(after.related_transaction_id)));
     }
     if before.counterparty != after.counterparty {
-        parts.push("counterparty changed".into());
+        changes.push(("counterparty", text(&before.counterparty), text(&after.counterparty)));
     }
-    if parts.is_empty() { "Corrected".into() } else { format!("Corrected: {}", parts.join("; ")) }
+    changes
+}
+
+/// Brings an archived record back: its values count again, and the charge lines
+/// archived with it come back too. Kept as a new version, with the reason.
+pub async fn restore(conn: &mut SqliteConnection, id: i64, reason: &str) -> AppResult<()> {
+    let reason = reason.trim();
+    if reason.chars().count() < 3 {
+        return Err(AppError::field("reason", "Explain why this record is being restored."));
+    }
+    if reason.chars().count() > 500 {
+        return Err(AppError::field("reason", "Keep the reason under 500 characters."));
+    }
+    let current = current_version(conn, id).await?;
+    if !current.removed {
+        return Err(AppError::Conflict("This record is not archived.".into()));
+    }
+    // The archived version keeps the values the record had; they count again.
+    let movement = current.movement();
+    check_movement_links(conn, &movement, Some(id)).await?;
+    sqlx::query("UPDATE transaction_versions SET is_current = 0 WHERE id = ?")
+        .bind(current.id)
+        .execute(&mut *conn)
+        .await?;
+    insert_version(conn, id, current.version + 1, &movement, false, Some(reason)).await?;
+    touch(conn, id).await?;
+    history::record(
+        conn,
+        Entity::Transaction,
+        Some(id),
+        "restored",
+        &format!(
+            "Restored from the archive ({} of {})",
+            movement.kind.label().to_lowercase(),
+            format_kes(movement.amount_minor)
+        ),
+        Some(reason),
+        Some(json!({ "from_version": current.version, "to_version": current.version + 1 })),
+    )
+    .await?;
+    reconciliation::recheck_links(conn, id).await?;
+    if let Some(reference) = &movement.reference {
+        reconciliation::rematch_reference(conn, reference).await?;
+    }
+    let fee_lines: Vec<i64> = sqlx::query_scalar(
+        "SELECT transaction_id FROM transaction_versions
+         WHERE is_current = 1 AND removed = 1 AND is_fee = 1 AND related_transaction_id = ?",
+    )
+    .bind(id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for fee_id in fee_lines {
+        Box::pin(restore(conn, fee_id, &format!("Restored together with transaction #{id}: {reason}"))).await?;
+    }
+    Ok(())
 }
 
 /// Adds the statement reference to a record that had none, as a correction.
@@ -723,15 +817,15 @@ pub async fn set_shares(conn: &mut SqliteConnection, id: i64, input: Vec<ShareIn
     Ok(())
 }
 
-/// Removes shares that no longer describe the record: it was removed, is no
-/// longer money received, or its amount changed.
-async fn drop_stale_shares(conn: &mut SqliteConnection, id: i64, after: Option<&Movement>) -> AppResult<()> {
+/// Removes shares that no longer describe the record: it is no longer money
+/// received, or its amount changed.
+async fn drop_stale_shares(conn: &mut SqliteConnection, id: i64, after: &Movement) -> AppResult<()> {
     let existing = shares(conn, id).await?;
     if existing.is_empty() {
         return Ok(());
     }
     let total: i64 = existing.iter().map(|s| s.amount_minor).sum();
-    let still_fits = after.is_some_and(|m| m.kind == Kind::Contribution && m.amount_minor == total);
+    let still_fits = after.kind == Kind::Contribution && after.amount_minor == total;
     if still_fits {
         return Ok(());
     }
@@ -810,8 +904,13 @@ pub async fn update_presentation(conn: &mut SqliteConnection, id: i64, update: P
         &changes.join(". "),
         None,
         Some(json!({
-            "before": { "public_name": name, "description": description },
-            "after": { "public_name": update.public_name, "description": update.description },
+            "before": { "public_name": name, "description": description, "notes": notes, "pledged_by": pledged_by },
+            "after": {
+                "public_name": update.public_name,
+                "description": update.description,
+                "notes": update.notes,
+                "pledged_by": update.pledged_by,
+            },
         })),
     )
     .await?;
@@ -864,6 +963,11 @@ pub struct ListItem {
     pub shares: Vec<Share>,
     #[serde(skip)]
     pub shares_json: String,
+    /// Who recorded it (`None` for the system or imported data).
+    pub created_by: Option<String>,
+    /// Who changed it last, and when (UTC).
+    pub last_changed_by: Option<String>,
+    pub last_changed_at: Option<String>,
     pub receipt_count: i64,
     #[serde(skip)]
     pub matched: bool,
@@ -915,6 +1019,12 @@ const ITEMS_CTE: &str = "WITH items AS (
            (SELECT json_group_array(json_object('public_name', s.public_name, 'amount_minor', s.amount_minor))
               FROM (SELECT public_name, amount_minor FROM contribution_shares
                      WHERE transaction_id = t.id ORDER BY position) s) AS shares_json,
+           (SELECT actor FROM change_log WHERE entity = 'transaction' AND entity_id = t.id ORDER BY id LIMIT 1)
+               AS created_by,
+           (SELECT actor FROM change_log WHERE entity = 'transaction' AND entity_id = t.id ORDER BY id DESC LIMIT 1)
+               AS last_changed_by,
+           (SELECT at FROM change_log WHERE entity = 'transaction' AND entity_id = t.id ORDER BY id DESC LIMIT 1)
+               AS last_changed_at,
            (SELECT COUNT(*) FROM documents d WHERE d.transaction_id = t.id AND d.kind = 'receipt') AS receipt_count,
            EXISTS (SELECT 1 FROM statement_rows r JOIN statement_imports i ON i.id = r.import_id
                    WHERE r.transaction_id = t.id AND i.status = 'ready') AS matched,
