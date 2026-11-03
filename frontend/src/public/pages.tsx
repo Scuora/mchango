@@ -73,7 +73,7 @@ function ChallengesLink({ page }: { page: PublicPage }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] font-semibold tracking-[0.14em] text-ochre-800 uppercase">{tr("Challenge", "Changamoto")}</span>
-        <span className="block font-display text-[1.35rem] leading-tight font-semibold">{title}</span>
+        <span className="challenge-name block text-[1.15rem] leading-snug">{title}</span>
         <span className="mt-0.5 block text-[15px] text-stone-600">
           {tr(`${kes(raised)} raised through challenges so far. Join in!`, `${kes(raised)} zimechangwa kupitia changamoto hadi sasa. Jiunge!`)}
         </span>

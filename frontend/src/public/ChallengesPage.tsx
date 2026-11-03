@@ -69,11 +69,11 @@ export function ChallengesPage() {
                 {c.status === "active" ? tr("Open", "Inaendelea") : tr("Closed", "Imefungwa")}
                 {dates && <span>· {dates}</span>}
               </p>
-              <h2 className="font-display text-[1.7rem] leading-tight font-semibold text-stone-900">{name}</h2>
+              <h2 className="challenge-name text-[1.3rem] leading-snug text-stone-900 sm:text-[1.45rem]">{name}</h2>
               {description && <p className="mt-2 leading-relaxed whitespace-pre-line text-stone-800">{description}</p>}
 
               <div className="mt-4 rounded-xl bg-stone-50 p-4">
-                <p className="font-display text-[2rem] leading-none font-semibold text-stone-900 tabular-nums">{kes(c.raised_minor)}</p>
+                <p className="font-display text-[2rem] leading-none font-semibold text-stone-900 lining-nums tabular-nums">{kes(c.raised_minor)}</p>
                 <p className="mt-1 text-[15px] text-stone-600">
                   {tr(
                     `raised from ${c.contributions_count} contribution${c.contributions_count === 1 ? "" : "s"}`,

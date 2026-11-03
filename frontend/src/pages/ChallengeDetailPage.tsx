@@ -68,7 +68,7 @@ export function ChallengeDetailPage() {
               <ChallengeBadges challenge={challenge} />
               {challengeDates(challenge) && <span className="text-sm text-stone-500">{challengeDates(challenge)}</span>}
             </div>
-            <h1 className="page-title">{challenge.name}</h1>
+            <h1 className="challenge-name text-[1.65rem] leading-tight text-stone-900">{challenge.name}</h1>
             {challenge.name_sw && (
               <p lang="sw" className="-mt-2 text-stone-600">
                 {challenge.name_sw}

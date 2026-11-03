@@ -88,7 +88,7 @@ export function ChallengesPage() {
                   {challengeDates(c) && <span className="text-sm text-stone-500">{challengeDates(c)}</span>}
                 </div>
                 <Link to={`/manage/challenges/${c.id}`} className="group flex items-start justify-between gap-2 text-stone-900 no-underline hover:no-underline">
-                  <h2 className="font-display text-2xl font-semibold group-hover:text-plum-800">{c.name}</h2>
+                  <h2 className="challenge-name text-[1.3rem] leading-snug group-hover:text-plum-800">{c.name}</h2>
                   <ChevronRight className="mt-1.5 size-5 shrink-0 text-stone-400 group-hover:text-plum-700" aria-hidden />
                 </Link>
                 {c.description && <p className="line-clamp-3 leading-relaxed whitespace-pre-line text-stone-700">{c.description}</p>}

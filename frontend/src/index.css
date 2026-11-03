@@ -121,6 +121,13 @@
   @apply font-display text-[1.9rem] leading-tight font-semibold text-stone-900;
 }
 
+/* Challenge names are typed by people, often in capitals with numbers and emoji:
+   set in the sans, whose figures and capitals read cleanly, not the display serif. */
+@utility challenge-name {
+  @apply font-sans font-bold tracking-[-0.01em] text-balance;
+  font-variant-numeric: lining-nums;
+}
+
 /* The memorial portrait: a circle lit by a burning candle. The warm glow, the
    gold rim and the light falling across the photo flicker like a flame, and
    the circle's outline wavers with it. */
