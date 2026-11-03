@@ -20,6 +20,13 @@ const TITLES: Record<ReportKind, string> = {
 
 type Entry = StatementReport["entries"][number];
 
+/** The account (a kitty) a one-account statement covers. */
+export function accountText(r: StatementReport): string | null {
+  if (!r.account) return null;
+  const challenge = r.account.challenge_name?.trim();
+  return challenge ? `Account: ${r.account.name} (${challenge})` : `Account: ${r.account.name}`;
+}
+
 export function periodText(r: StatementReport): string {
   return r.period_from ? `${formatNairobiDate(r.period_from)} to ${formatNairobiDate(r.period_to)}` : `Everything to ${formatNairobiDate(r.period_to)}`;
 }
@@ -42,7 +49,10 @@ export function buildStatementText(r: StatementReport, options: TextOptions): st
   const memorial = r.fundraiser.memorial_name || r.fundraiser.name;
   out.push(r.fundraiser.memorial_name ? `*In loving memory of ${memorial}*` : `*${memorial}*`);
   if (r.fundraiser.memorial_dates) out.push(`_${r.fundraiser.memorial_dates}_`);
-  out.push("", `*Statement: ${TITLES[options.kind]}*`, `_${periodText(r)}_`);
+  out.push("", `*Statement: ${TITLES[options.kind]}*`);
+  const account = accountText(r);
+  if (account) out.push(`_${account}_`);
+  out.push(`_${periodText(r)}_`);
 
   const received = r.entries.filter((e) => e.kind === "contribution");
   // The expenses statement lists funeral expenses and their charges; the full account lists all money out.
@@ -54,14 +64,21 @@ export function buildStatementText(r: StatementReport, options: TextOptions): st
     out.push(...(received.length ? lines(received, options, false) : ["None in this period."]));
     out.push(`*Total received: ${formatKesShort(sum(received))} (${received.length})*`);
   }
+  // On one account's statement: money handed over or moved in from the fundraiser's other accounts.
+  const movedIn = r.entries.filter((e) => e.kind === "transfer" && e.direction === "in");
+  if (options.kind === "full" && movedIn.length) {
+    out.push("", "*Moved in from other accounts*");
+    out.push(...lines(movedIn, options, false));
+    out.push(`*Total moved in: ${formatKesShort(sum(movedIn))} (${movedIn.length})*`);
+  }
   if (options.kind !== "received") {
     out.push("", options.kind === "spent" ? "*Money spent*" : "*Money out*");
     out.push(...(spent.length ? lines(spent, options, true) : ["Nothing spent in this period."]));
     out.push(`*Total ${options.kind === "spent" ? "spent" : "out"}: ${formatKesShort(sum(spent))} (${spent.length})*`);
   }
   if (options.kind === "full") {
-    const moneyIn = t.received_minor + t.refunds_received_minor + t.reversals_in_minor;
-    const moneyOut = t.expenses_minor + t.charges_minor + t.refunds_paid_minor + t.reversals_out_minor;
+    const moneyIn = t.received_minor + t.refunds_received_minor + t.reversals_in_minor + t.transfers_in_minor;
+    const moneyOut = t.expenses_minor + t.charges_minor + t.refunds_paid_minor + t.reversals_out_minor + t.transfers_out_minor;
     out.push("", "*Summary*");
     out.push(`Brought forward: ${formatKesShort(r.brought_forward_minor)}`);
     out.push(`Money in: ${formatKesShort(moneyIn)}`);

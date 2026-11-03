@@ -1,14 +1,16 @@
-import { Check, Copy, Download, ExternalLink, FileText, Share2 } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, FileSpreadsheet, FileText, Share2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router";
 import { SaveError } from "@/components/LoadState";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Field, RadioGroup } from "@/components/ui/form";
 import { Card, CardBody, CardHeader, Notice } from "@/components/ui/misc";
-import { DateField } from "@/components/ui/pickers";
-import { api } from "@/lib/api";
+import { Choice, DateField } from "@/components/ui/pickers";
+import { api, useResource } from "@/lib/api";
 import { formatKes } from "@/lib/money";
 import { todayNairobi } from "@/lib/time";
-import type { StatementReport } from "@/lib/types";
+import type { Account, ChallengeSummary, StatementReport } from "@/lib/types";
+import { buildStatementCsv } from "@/features/statementCsv";
 import type { ReportKind } from "@/features/statementPdf";
 import { buildStatementText } from "@/features/statementText";
 import { copyText } from "@/public/share";
@@ -19,7 +21,11 @@ interface Created {
   report: StatementReport;
   /** The same statement as WhatsApp-ready text, for people who cannot open a PDF. */
   text: string;
+  /** The same statement as a spreadsheet. */
+  csv: { name: string; url: string };
 }
+
+const ALL = "all";
 
 async function photoDataUrl(): Promise<string | null> {
   const response = await fetch("/api/public/memorial-photo", { credentials: "same-origin" });
@@ -33,8 +39,16 @@ async function photoDataUrl(): Promise<string | null> {
   });
 }
 
-/** Statements of account as PDFs, for sending to stakeholders. */
+/**
+ * Statements of account as PDFs, text and spreadsheets, for sending to
+ * stakeholders: for the whole fundraiser or for one account (a kitty, such as
+ * a challenge's own M-Pesa line). `?account=3` starts with that account.
+ */
 export function ReportsPage() {
+  const [search] = useSearchParams();
+  const accounts = useResource<Account[]>("/api/manage/accounts");
+  const challenges = useResource<ChallengeSummary[]>("/api/manage/challenges");
+  const [account, setAccount] = useState(search.get("account") ?? ALL);
   const [kind, setKind] = useState<ReportKind>("full");
   const [period, setPeriod] = useState<"all" | "range">("all");
   const [from, setFrom] = useState("");
@@ -52,8 +66,20 @@ export function ReportsPage() {
   }
 
   useEffect(() => () => {
-    if (created) URL.revokeObjectURL(created.url);
+    if (created) {
+      URL.revokeObjectURL(created.url);
+      URL.revokeObjectURL(created.csv.url);
+    }
   }, [created]);
+
+  const kittyOf = (id: number) => (challenges.data ?? []).find((c) => c.account_id === id)?.name;
+  const accountOptions = [
+    { value: ALL, label: "All accounts (the whole fundraiser)" },
+    ...(accounts.data ?? []).map((a) => {
+      const kitty = kittyOf(a.id);
+      return { value: String(a.id), label: kitty ? `${a.name} · ${kitty}` : a.name };
+    }),
+  ];
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -63,6 +89,7 @@ export function ReportsPage() {
       const params = new URLSearchParams();
       if (period === "range" && from) params.set("from", from);
       if (period === "range" && to) params.set("to", to);
+      if (account !== ALL) params.set("account_id", account);
       const report = await api.get<StatementReport>(`/api/manage/reports/statement?${params}`);
       const [{ buildStatementPdf, statementFileName }, photo] = await Promise.all([
         import("@/features/statementPdf"),
@@ -71,7 +98,9 @@ export function ReportsPage() {
       const blob = buildStatementPdf(report, { kind, names, includeCodes, photo });
       const file = new File([blob], statementFileName(report, kind), { type: "application/pdf" });
       const text = buildStatementText(report, { kind, names, includeCodes });
-      setCreated({ file, url: URL.createObjectURL(file), report, text });
+      const sheet = new Blob([buildStatementCsv(report, { kind, names, includeCodes })], { type: "text/csv;charset=utf-8" });
+      const csv = { name: statementFileName(report, kind, "csv"), url: URL.createObjectURL(sheet) };
+      setCreated({ file, url: URL.createObjectURL(file), report, text, csv });
       setCopied(false);
     } catch (e) {
       setError(e);
@@ -95,12 +124,22 @@ export function ReportsPage() {
     <div className="mx-auto max-w-3xl space-y-4">
       <div>
         <h1 className="page-title">Reports</h1>
-        <p className="mt-1 text-stone-600">Statements of account as a PDF and as WhatsApp-ready text, to send to the family, the church or any other group.</p>
+        <p className="mt-1 text-stone-600">
+          Statements of account as a PDF, as WhatsApp-ready text and as a spreadsheet, for the whole fundraiser or one account, to send to the family, the church or
+          any other group.
+        </p>
       </div>
       <form onSubmit={create} noValidate>
         <Card>
           <CardHeader title="Create a statement" />
           <CardBody className="space-y-5">
+            <Field
+              label="Account"
+              htmlFor="rep-account"
+              hint="One account gives that kitty's own statement: what came in, what was spent or handed over, and what it still holds."
+            >
+              <Choice id="rep-account" value={account} options={accountOptions} onChange={(v) => setAccount(v || ALL)} />
+            </Field>
             <RadioGroup<ReportKind>
               name="kind"
               legend="What to include"
@@ -154,7 +193,7 @@ export function ReportsPage() {
             <p className="text-sm text-stone-600">Phone numbers and personal transactions are never included.</p>
             <SaveError error={error} />
             <Button type="submit" busy={busy} icon={<FileText className="size-4" aria-hidden />}>
-              Create PDF
+              Create statement
             </Button>
           </CardBody>
         </Card>
@@ -164,7 +203,7 @@ export function ReportsPage() {
         <Card>
           <CardHeader
             title="Your statement is ready"
-            description={`${created.file.name} · funds remaining ${formatKes(created.report.closing_minor)}`}
+            description={`${created.file.name} · ${created.report.account ? `left in ${created.report.account.name}` : "funds remaining"} ${formatKes(created.report.closing_minor)}`}
           />
           <CardBody className="flex flex-wrap gap-3">
             <a
@@ -189,6 +228,13 @@ export function ReportsPage() {
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 bg-white px-4 font-medium text-stone-900 no-underline hover:bg-stone-50 hover:no-underline"
             >
               <ExternalLink className="size-4" aria-hidden /> Open
+            </a>
+            <a
+              href={created.csv.url}
+              download={created.csv.name}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 bg-white px-4 font-medium text-stone-900 no-underline hover:bg-stone-50 hover:no-underline"
+            >
+              <FileSpreadsheet className="size-4" aria-hidden /> Download spreadsheet
             </a>
           </CardBody>
           <CardBody className="border-t border-stone-100">

@@ -9,8 +9,9 @@
 import { GState, jsPDF } from "jspdf";
 import { autoTable, type CellHookData, type RowInput } from "jspdf-autotable";
 import { formatKes } from "@/lib/money";
-import { formatNairobiDate } from "@/lib/time";
+import { formatNairobiDate, formatNairobiTime } from "@/lib/time";
 import type { StatementReport } from "@/lib/types";
+import { accountText } from "./statementText";
 
 export type ReportKind = "full" | "received" | "spent";
 
@@ -259,7 +260,19 @@ function header(doc: jsPDF, r: StatementReport, options: StatementOptions): numb
   doc.setTextColor(...MUTED);
   doc.setFontSize(9.5);
   doc.text(plain(`${TITLES[options.kind]}  \u00b7  ${periodText(r)}`), cx, titleY + 11.5, { align: "center" });
-  return titleY + 19;
+  const account = accountText(r);
+  if (!account) return titleY + 19;
+  // The account (a kitty) the statement covers, on its own line.
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...PLUM_TEXT);
+  const lines = doc.splitTextToSize(tidy(account), 170) as string[];
+  lines.forEach((line, i) => doc.text(line, cx, titleY + 17 + i * 4.6, { align: "center" }));
+  return titleY + 20 + lines.length * 4.6;
+}
+
+/** Plain text with the gaps left by dropped characters (such as emoji) closed up. */
+function tidy(text: string): string {
+  return plain(text).replace(/\s+/g, " ").replace(/\(\s/g, "(").replace(/\s\)/g, ")").trim();
 }
 
 /** The band on continuation pages: a slim plum strip with a small portrait. */
@@ -314,8 +327,8 @@ function summary(doc: jsPDF, r: StatementReport, options: StatementOptions, top:
   const t = r.totals;
   const received = r.entries.filter((e) => e.kind === "contribution");
   const expenses = r.entries.filter((e) => e.kind === "expense");
-  const moneyIn = t.received_minor + t.refunds_received_minor + t.reversals_in_minor;
-  const moneyOut = t.expenses_minor + t.charges_minor + t.refunds_paid_minor + t.reversals_out_minor;
+  const moneyIn = t.received_minor + t.refunds_received_minor + t.reversals_in_minor + t.transfers_in_minor;
+  const moneyOut = t.expenses_minor + t.charges_minor + t.refunds_paid_minor + t.reversals_out_minor + t.transfers_out_minor;
   const figures: { label: string; value: string; strong?: boolean }[] =
     options.kind === "received"
       ? [
@@ -376,6 +389,8 @@ function summary(doc: jsPDF, r: StatementReport, options: StatementOptions, top:
         ? "Entries marked \"Matched\" have been checked against an M-Pesa statement; the rest are still to be checked."
         : "Not yet checked against an M-Pesa statement.",
   );
+  const moved = movedText(r);
+  if (options.kind === "full" && moved) notes.push(moved);
   if (options.kind !== "spent" && r.pledged_outstanding_minor > 0) notes.push(`Pledged, not yet received: KES ${money(r.pledged_outstanding_minor)}.`);
   if (options.kind !== "received" && r.unpaid_bills_minor > 0) notes.push(`Bills agreed but not yet paid: KES ${money(r.unpaid_bills_minor)}.`);
   if (r.fundraiser.giving_name) notes.push(`When giving, check that M-Pesa shows: ${r.fundraiser.giving_name}.`);
@@ -390,6 +405,18 @@ function summary(doc: jsPDF, r: StatementReport, options: StatementOptions, top:
     y += 4.2;
   }
   return y + 3;
+}
+
+/** Money moved between the fundraiser's own accounts, on a one-account statement. */
+function movedText(r: StatementReport): string | null {
+  const t = r.totals;
+  const parts = [
+    t.transfers_in_minor ? `KES ${money(t.transfers_in_minor)} moved in from other accounts` : null,
+    t.transfers_out_minor
+      ? `KES ${money(t.transfers_out_minor)} ${r.account?.challenge_name ? "handed over" : "moved out"} to other accounts`
+      : null,
+  ].filter(Boolean);
+  return parts.length ? `${parts.join("; ")}. This changes no fundraiser total.` : null;
 }
 
 function nameFor(e: StatementReport["entries"][number], options: StatementOptions): string {
@@ -410,7 +437,8 @@ interface Table {
 function tableRows(r: StatementReport, options: StatementOptions): Table {
   const code = (c: string | null) => (options.includeCodes ? [c ?? "\u2013"] : []);
   const codeHead = options.includeCodes ? ["M-Pesa code"] : [];
-  const when = (at: string) => formatNairobiDate(at);
+  // The date, and below it the exact time the money moved (Nairobi).
+  const when = (at: string) => `${formatNairobiDate(at)}\n${formatNairobiTime(at)}`;
 
   if (options.kind === "full") {
     let balance = r.brought_forward_minor;
@@ -425,7 +453,7 @@ function tableRows(r: StatementReport, options: StatementOptions): Table {
       body.push([String(i + 1), when(e.at), plain(nameFor(e, options)), ...code(e.reference), into ? money(e.amount_minor) : "", into ? "" : money(e.amount_minor), money(balance)]);
     });
     const foot: RowInput[] = [["", "", `Totals (${r.entries.length} entries)`, ...code(null).map(() => ""), money(moneyIn), money(moneyOut), money(balance)]];
-    return { head: ["No.", "Date", "Details", ...codeHead, "In", "Out", "Balance"], body, foot, numericFrom: 3 + codeHead.length, statusColumn: null };
+    return { head: ["No.", "Date & time", "Details", ...codeHead, "In", "Out", "Balance"], body, foot, numericFrom: 3 + codeHead.length, statusColumn: null };
   }
   // Expenses means funeral expenses and their charges, so the total matches "Total spent".
   const wanted = r.entries.filter((e) => (options.kind === "received" ? e.kind === "contribution" : e.kind === "expense" || e.kind === "charge"));
@@ -441,7 +469,7 @@ function tableRows(r: StatementReport, options: StatementOptions): Table {
   const foot: RowInput[] = [["", "", `Total (${wanted.length})`, ...code(null).map(() => ""), "", money(total)]];
   const middle = options.kind === "spent" ? "Receipt" : "M-Pesa check";
   return {
-    head: ["No.", "Date", options.kind === "spent" ? "What it was for" : "Name", ...codeHead, middle, "Amount (KES)"],
+    head: ["No.", "Date & time", options.kind === "spent" ? "What it was for" : "Name", ...codeHead, middle, "Amount (KES)"],
     body,
     foot,
     numericFrom: 4 + codeHead.length,
@@ -476,7 +504,7 @@ export function buildStatementPdf(r: StatementReport, options: StatementOptions)
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   doc.setProperties({
     title: plain(`Statement of account - ${r.fundraiser.memorial_name || r.fundraiser.name}`),
-    subject: TITLES[options.kind],
+    subject: r.account ? `${TITLES[options.kind]} - ${tidy(r.account.name)}` : TITLES[options.kind],
     creator: "Mchango",
   });
   const startY = summary(doc, r, options, header(doc, r, options));
@@ -570,7 +598,9 @@ export function buildStatementPdf(r: StatementReport, options: StatementOptions)
   return doc.output("blob");
 }
 
-export function statementFileName(r: StatementReport, kind: ReportKind): string {
-  const who = (r.fundraiser.memorial_name || r.fundraiser.name).replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-");
-  return `Statement-${kind}-${who}-${r.period_to}.pdf`;
+export function statementFileName(r: StatementReport, kind: ReportKind, extension = "pdf"): string {
+  const slug = (text: string) => text.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-");
+  const who = slug(r.fundraiser.memorial_name || r.fundraiser.name);
+  const account = r.account ? `-${slug(r.account.name)}` : "";
+  return `Statement-${kind}${account}-${who}-${r.period_to}.${extension}`;
 }

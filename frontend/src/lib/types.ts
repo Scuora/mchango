@@ -750,6 +750,8 @@ export interface StatementReport {
     organisers: Organiser[];
     has_photo: boolean;
   };
+  /** The account the statement covers; null for the whole fundraiser. */
+  account: { id: number; name: string; kind: AccountKind; challenge_name: string | null } | null;
   period_from: string | null;
   period_to: string;
   generated_at: string;
@@ -766,6 +768,9 @@ export interface StatementReport {
     refunds_received_minor: number;
     reversals_in_minor: number;
     reversals_out_minor: number;
+    /** Moved in from, or out to, the fundraiser's other accounts (one-account statements only). */
+    transfers_in_minor: number;
+    transfers_out_minor: number;
   };
   entries: {
     at: string;

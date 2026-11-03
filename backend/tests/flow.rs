@@ -21,7 +21,7 @@ use mchango::transactions::totals::{
     PledgeStatus, Totals, fundraiser_records, funds_by_account, pledge_progress, pledge_totals,
 };
 use mchango::transactions::{self, CorrectionRequest, CreateRequest, Kind, MovementInput, PledgedBy, Presentation};
-use mchango::{announcements, challenges, db, history, money::Amount, publication, seed, settings};
+use mchango::{announcements, challenges, db, history, money::Amount, publication, reports, seed, settings};
 
 fn temp_dir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("mchango-test-{}", storage::random_hex(6)));
@@ -565,6 +565,22 @@ async fn challenges_keep_their_own_tally() {
     let shown = page.challenges.iter().find(|c| c.id == walk).unwrap();
     assert_eq!(shown.giving.as_ref().map(|g| g.number.as_str()), Some("0722 000 000"));
     assert_eq!(page.totals.contributions_minor, before.contributions_minor + 2_000_00 + 4_000_00);
+
+    // A statement for the kitty's account: what came in, what was handed over, what it still holds.
+    let statement = |account_id: Option<i64>| reports::StatementQuery { from: None, to: None, account_id };
+    let kitty = reports::statement(&mut tx, statement(Some(organiser)), "test".into(), None).await.unwrap();
+    assert_eq!(kitty.account.as_ref().and_then(|a| a.challenge_name.as_deref()), Some("Sponsored walk"));
+    assert_eq!(kitty.fundraiser.giving_number, "0722 000 000", "givers are pointed to the challenge's own number");
+    assert_eq!((kitty.brought_forward_minor, kitty.closing_minor), (0, 1_000_00));
+    assert_eq!((kitty.totals.received_minor, kitty.totals.transfers_out_minor), (4_000_00, 3_000_00));
+    let labels: Vec<_> = kitty.entries.iter().map(|e| e.label.as_str()).collect();
+    assert_eq!(labels, ["Cousin Zawadi", "Moved to M-Pesa"]);
+    let whole = reports::statement(&mut tx, statement(None), "test".into(), None).await.unwrap();
+    assert!(whole.entries.iter().all(|e| e.kind != Kind::Transfer), "moving money changes no total");
+    assert_eq!(whole.totals.transfers_in_minor + whole.totals.transfers_out_minor, 0);
+    let main = reports::statement(&mut tx, statement(Some(1)), "test".into(), None).await.unwrap();
+    assert_eq!(main.totals.transfers_in_minor, 3_000_00);
+    assert!(main.entries.iter().all(|e| e.label != "Cousin Zawadi" || e.amount_minor != 4_000_00));
     tx.rollback().await.unwrap();
 }
 

@@ -60,7 +60,7 @@ Codes: `invalid` (422), `not_found` (404), `conflict` (409), `unauthenticated` /
 | PUT/DELETE | `/api/manage/settings/photo` | Memorial photo (multipart `file`: JPEG, PNG or WebP) |
 | PUT | `/api/manage/settings/public-details` | How to give (M-Pesa), funeral details, organisers, whether per-person amounts are shown |
 | GET/POST, PUT/DELETE | `/api/manage/announcements`, `/announcements/{id}` | Announcements for the public Updates page |
-| GET | `/api/manage/reports/statement?from&to` | Figures for a statement of account (the PDF is laid out in the browser) |
+| GET | `/api/manage/reports/statement?from&to&account_id` | Figures for a statement of account, for the whole fundraiser or one account (the PDF and spreadsheet are laid out in the browser) |
 | GET | `/api/manage/public-preview` | The public view (allowlisted), for previews and WhatsApp updates |
 | GET/POST, PUT | `/api/manage/accounts`, `/accounts/{id}` | Money accounts |
 | POST | `/api/manage/capture/parse` | Read an M-Pesa message (proposes values, saves nothing) |

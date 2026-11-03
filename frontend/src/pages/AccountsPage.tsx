@@ -1,4 +1,4 @@
-import { ArrowRightLeft, List, Trophy, Wallet } from "lucide-react";
+import { ArrowRightLeft, FileText, List, Trophy, Wallet } from "lucide-react";
 import { Link } from "react-router";
 import { LoadState } from "@/components/LoadState";
 import { ButtonLink } from "@/components/ui/button";
@@ -88,6 +88,9 @@ function AccountLine({ account: a, hint, challenge }: { account: AccountFunds; h
         <span className="mr-2 font-semibold whitespace-nowrap tabular-nums">{formatKes(a.amount_minor)}</span>
         <ButtonLink to={`/manage/transactions?account_id=${a.account_id}`} size="sm" variant="secondary" icon={<List className="size-4" aria-hidden />}>
           Records
+        </ButtonLink>
+        <ButtonLink to={`/manage/reports?account=${a.account_id}`} size="sm" variant="secondary" icon={<FileText className="size-4" aria-hidden />}>
+          Statement
         </ButtonLink>
         {a.challenge_id !== null && (
           <ButtonLink to={`/manage/add?handover=${a.challenge_id}`} size="sm" variant="secondary" icon={<ArrowRightLeft className="size-4" aria-hidden />}>
