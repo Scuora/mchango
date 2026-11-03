@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FUNDRAISER_TEMPLATE, STARTER_TEMPLATE, buildChallengeUpdate, fillTemplate } from "./challengeShare";
+import { ENGLISH_TEMPLATE, STARTER_TEMPLATE, buildChallengeUpdate, fillTemplate } from "./challengeShare";
 import type { PublicPage } from "./types";
 
 const challenge = {
@@ -82,7 +82,9 @@ describe("challenge update", () => {
       // Newest first, as the public page lists them.
       contributions: [entry("Rose Otieno", 1_000_00, 8), entry("Peter Katana", 10_000_00, 7), entry("Japhet Kalume", 300_00, 6), entry("Edward Chai", 1_000_00, 5)],
     } as unknown as PublicPage;
-    const text = fillTemplate(FUNDRAISER_TEMPLATE, { ...base, entries: [], fundraiser: page });
+    // The whole fundraiser's figures, when a message asks for them by name.
+    const whole = `In loving memory of {memorial_name}\n{memorial_dates}\n{tribute}\n\nAs of {today}\n\n{all_list}\n\nReceived: KES {total_received} ({total_count} contributions)\nFuneral expenses paid: KES {expenses}\nFunds remaining: KES {funds_remaining}\n\nThe goal: KES {goal}\nReceived from {family}: KES {family_received}\nFrom family, friends and well-wishers: KES {others_received} of KES {others_share}\nPledged by family, friends and well-wishers, not yet received: KES {others_pledged}\nStill needed: KES {still_needed}\n\nFull record of contributions and expenses: {site}\n`;
+    const text = fillTemplate(whole, { ...base, entries: [], fundraiser: page });
     expect(text).toContain("In loving memory of Dr. Joseph Karisa Gonzi\n22 October 1952 – 1 November 2026\nKalale Pehoni Daktari");
     expect(text).toContain("As of Tue, 3 Nov 2026");
     expect(text).toContain("1. Edward Chai – KES 1,000\n2. Japhet Kalume – KES 300\n3. Peter Katana – KES 10,000\n4. Rose Otieno – KES 1,000");
@@ -91,5 +93,20 @@ describe("challenge update", () => {
     expect(text).toContain("From family, friends and well-wishers: KES 12,300 of KES 530,000");
     expect(text).toContain("not yet received: KES 100,000\nStill needed: KES 517,700");
     expect(text).toContain("Full record of contributions and expenses: https://rip-daktari.netlify.app\n");
+  });
+
+  it("reports the challenge's own contributions in the English update", () => {
+    const entries = [
+      { label: "Philister Kahindi", amount_minor: 100_00 },
+      { label: "Joseph Mwaduna", amount_minor: 200_00 },
+      { label: "Lorraine Katana", amount_minor: 200_00 },
+    ];
+    const day1 = { ...challenge, name: "❤️ DAY 1 CHALLENGE ❤️", totals: { ...challenge.totals, raised_minor: 500_00, contributions_count: 3 } };
+    const page = { fundraiser: { name: "Funeral", memorial_name: "Dr. Joseph Karisa Gonzi", memorial_dates: "22 October 1952 – 1 November 2026", memorial_tribute: "Kalale Pehoni Daktari", target_minor: 1_100_000_00, pledges: null }, totals: { contributions_minor: 15_000_00 }, contributions: [] } as unknown as PublicPage;
+    const text = fillTemplate(ENGLISH_TEMPLATE, { ...base, challenge: day1, entries, fundraiser: page });
+    expect(text).toContain("In loving memory of Dr. Joseph Karisa Gonzi\n22 October 1952 – 1 November 2026\nKalale Pehoni Daktari\n\n❤️ DAY 1 CHALLENGE ❤️");
+    expect(text).toContain("Contributions received\n1. Philister Kahindi – KES 100\n2. Joseph Mwaduna – KES 200\n3. Lorraine Katana – KES 200\n");
+    expect(text).toContain("Received: KES 500 (3 contributions)\n\nThe goal: KES 50,000\nStill needed: KES 49,500");
+    expect(text).not.toContain("15,000");
   });
 });

@@ -89,7 +89,8 @@ export const TEMPLATE_GROUPS: { label: string; fields: [string, string][] }[] = 
     fields: [
       ["name", "the challenge's name"],
       ["description", "how it works"],
-      ["list", "the contributions, numbered: “1. Samuel – KSh 500”"],
+      ["list", "this challenge's contributions: “1. Samuel – KSh 500”"],
+      ["list_kes", "the same, in KES: “1. Samuel – KES 500”"],
       ["count", "how many contributions"],
       ["raised", "amount raised, e.g. 1,000"],
       ["target", "the challenge's target"],
@@ -103,7 +104,7 @@ export const TEMPLATE_GROUPS: { label: string; fields: [string, string][] }[] = 
     ],
   },
   {
-    label: "The whole fundraiser",
+    label: "The whole fundraiser (all contributions, not just this challenge)",
     fields: [
       ["memorial_name", "e.g. Dr. Joseph Karisa Gonzi"],
       ["memorial_dates", "e.g. 22 October 1952 – 1 November 2026"],
@@ -144,6 +145,7 @@ export function fillTemplate(template: string, input: Omit<ChallengeShareInput, 
     name: c.name,
     description: c.description,
     list: input.entries.map((e, i) => `${i + 1}. ${e.label}${e.amount_minor === null ? "" : ` – KSh ${bare(e.amount_minor)}`}`).join("\n"),
+    list_kes: input.entries.map((e, i) => `${i + 1}. ${e.label}${e.amount_minor === null ? "" : ` – KES ${bare(e.amount_minor)}`}`).join("\n"),
     count: String(t.contributions_count),
     raised: bare(t.raised_minor),
     target: c.target_minor ? bare(c.target_minor) : "",
@@ -201,27 +203,23 @@ function fundraiserValues(page: PublicPage | null): Record<string, string> {
   };
 }
 
-/** The family's general update, as a message any challenge can share. */
-export const FUNDRAISER_TEMPLATE = `In loving memory of {memorial_name}
+/** The family's update in English, reporting on the challenge's own contributions. */
+export const ENGLISH_TEMPLATE = `In loving memory of {memorial_name}
 {memorial_dates}
 {tribute}
 
-Funeral contributions update
+{name}
+Contributions update
 As of {today}
 
 Contributions received
-{all_list}
+{list_kes}
 
 Totals so far
-Received: KES {total_received} ({total_count} contributions)
-Funeral expenses paid: KES {expenses}
-Funds remaining: KES {funds_remaining}
+Received: KES {raised} ({count} contributions)
 
-The goal: KES {goal}
-Received from {family}: KES {family_received}
-From family, friends and well-wishers: KES {others_received} of KES {others_share}
-Pledged by family, friends and well-wishers, not yet received: KES {others_pledged}
-Still needed: KES {still_needed}
+The goal: KES {target}
+Still needed: KES {remaining}
 
 Full record of contributions and expenses: {site}
 
@@ -340,5 +338,5 @@ export function buildChallengeUpdate(input: ChallengeShareInput): string {
 /** Starting points for a challenge's own messages. */
 export const STARTERS: { title: string; body: string }[] = [
   { title: "Challenge message", body: STARTER_TEMPLATE },
-  { title: "Fundraiser update", body: FUNDRAISER_TEMPLATE },
+  { title: "Update in English", body: ENGLISH_TEMPLATE },
 ];
