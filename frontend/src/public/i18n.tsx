@@ -101,8 +101,8 @@ export function langPath(path: string, lang: Lang): string {
   return lang === "sw" ? `${path}${path.includes("?") ? "&" : "?"}lang=sw` : path;
 }
 
-/** English | Kiswahili, as a small switch: short codes, or full names with `full`. `dark` for the plum navbar. */
-export function LangToggle({ className, dark = true, full = false }: { className?: string; dark?: boolean; full?: boolean }) {
+/** English | Kiswahili, as a small switch: short codes, or full names with `full`; `compact` for the phone's top bar. `dark` for the plum navbar. */
+export function LangToggle({ className, dark = true, full = false, compact = false }: { className?: string; dark?: boolean; full?: boolean; compact?: boolean }) {
   const { lang, setLang } = useContext(LangContext);
   return (
     <div
@@ -124,7 +124,8 @@ export function LangToggle({ className, dark = true, full = false }: { className
           title={name}
           onClick={() => setLang(value)}
           className={clsx(
-            "min-h-8 cursor-pointer rounded-full px-3 tracking-wide transition-colors",
+            "cursor-pointer rounded-full tracking-wide transition-colors",
+            compact ? "min-h-8 px-2.5 text-[12px]" : "min-h-8 px-3",
             lang === value
               ? dark
                 ? "bg-[#e8c27a] text-[#1e1625]"

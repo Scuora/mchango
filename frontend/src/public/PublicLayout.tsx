@@ -258,16 +258,19 @@ function PublicNav({ page }: { page: PublicPage }) {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          aria-controls="public-menu"
-          aria-label={open ? tr("Close menu", "Funga menyu") : tr("Open menu", "Fungua menyu")}
-          className="press ml-auto flex size-11 items-center justify-center rounded-full ring-1 ring-white/15 hover:bg-white/10 md:hidden"
-        >
-          {open ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
-        </button>
+        <div className="ml-auto flex shrink-0 items-center gap-2 md:hidden">
+          <LangToggle compact />
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-controls="public-menu"
+            aria-label={open ? tr("Close menu", "Funga menyu") : tr("Open menu", "Fungua menyu")}
+            className="press flex size-11 items-center justify-center rounded-full ring-1 ring-white/15 hover:bg-white/10"
+          >
+            {open ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
+          </button>
+        </div>
       </div>
 
       {open && (
