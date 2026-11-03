@@ -13,6 +13,7 @@ const loaders = {
   AddTransactionPage: () => import("@/pages/AddTransactionPage"),
   TransactionsPage: () => import("@/pages/TransactionsPage"),
   PledgesPage: () => import("@/pages/PledgesPage"),
+  AccountsPage: () => import("@/pages/AccountsPage"),
   ChallengesPage: () => import("@/pages/ChallengesPage"),
   ChallengeDetailPage: () => import("@/pages/ChallengeDetailPage"),
   TransactionDetailPage: () => import("@/pages/TransactionDetailPage"),

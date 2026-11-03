@@ -1,7 +1,7 @@
 // Shared pieces for challenges: the editor, status badges, progress and the
 // "copy update" button used on the list and on each challenge's page.
 
-import { Check, Copy, Plus, Save, Trophy } from "lucide-react";
+import { Check, Copy, MessageCircle, Plus, Save, Trophy } from "lucide-react";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { SaveError } from "@/components/LoadState";
 import { PledgeProgressBar } from "@/components/pledges";
@@ -13,7 +13,7 @@ import { api, fieldError, useResource } from "@/lib/api";
 import { STARTER_TEMPLATE, TEMPLATE_FIELDS, buildChallengeUpdate, fillTemplate, type ChallengeEntry, type ShareLang } from "@/lib/challengeShare";
 import { formatKesShort, parseKes } from "@/lib/money";
 import { formatNairobiDate } from "@/lib/time";
-import type { Account, AccountKind, ChallengeInput, ChallengeSummary, Fundraiser, GivingMethod, Kind, ListItem, PublicPreview } from "@/lib/types";
+import type { Account, AccountKind, ChallengeInput, ChallengeSummary, Detail, Fundraiser, GivingMethod, Kind, ListItem, ListResponse, PublicPreview } from "@/lib/types";
 import { copyText } from "@/public/share";
 
 /** Only money received and pledges come in through a challenge. */
@@ -292,6 +292,48 @@ function OwnAccount({ challengeId, value, onChange, error }: { challengeId: numb
         </Button>
       )}
     </div>
+  );
+}
+
+/**
+ * After a contribution is saved: if it came in through a challenge, that
+ * challenge's message with the new contribution included, ready to copy.
+ * Uses the family's own message when the challenge has one.
+ */
+export function UpdatedChallengeMessage({ transactionId }: { transactionId: number }) {
+  const detail = useResource<Detail>(`/api/manage/transactions/${transactionId}`);
+  const challengeId = detail.data?.transaction.challenge_id ?? null;
+  const summary = useResource<ChallengeSummary>(challengeId ? `/api/manage/challenges/${challengeId}` : null);
+  const records = useResource<ListResponse>(challengeId ? `/api/manage/transactions?challenge_id=${challengeId}&limit=500` : null);
+  const share = useShareContext();
+  const [copied, setCopied] = useState(false);
+  if (!challengeId || !summary.data || !records.data) return null;
+  const c = summary.data;
+  const entries = publicEntries(records.data.items, share.settings);
+  const text = shareText(c, share, c.message_template ? { lang: "template", entries } : { lang: "en", entries, includeList: true });
+  return (
+    <Card>
+      <CardHeader title={`Updated message for “${c.name}”`} description="With this contribution included. Copy it and post it to the group." />
+      <CardBody className="space-y-3">
+        <Textarea aria-label="Updated challenge message" readOnly rows={12} className="font-mono text-sm" value={text} />
+        <div className="flex flex-wrap gap-2">
+          <Button
+            icon={copied ? <Check className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
+            onClick={() => void copyText(text).then((ok) => ok && (setCopied(true), window.setTimeout(() => setCopied(false), 2500)))}
+          >
+            {copied ? "Copied" : "Copy message"}
+          </Button>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(text)}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-4 font-medium text-stone-900 no-underline hover:bg-stone-50 hover:no-underline"
+          >
+            <MessageCircle className="size-4" aria-hidden /> Open WhatsApp
+          </a>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 

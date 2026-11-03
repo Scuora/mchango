@@ -5,7 +5,7 @@ import { LoadState, SaveError } from "@/components/LoadState";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Checkbox, Field, Input, Textarea } from "@/components/ui/form";
 import { Badge, Card, CardBody, CardHeader, Notice } from "@/components/ui/misc";
-import { ChallengePicker, canJoinChallenge } from "@/features/challenges";
+import { ChallengePicker, UpdatedChallengeMessage, canJoinChallenge } from "@/features/challenges";
 import { SharesEditor, buildShares, type ShareDraft } from "@/features/shares";
 import {
   MovementFields,
@@ -250,6 +250,7 @@ export function AddTransactionPage() {
             Add another
           </Button>
         </div>
+        <UpdatedChallengeMessage transactionId={step.created.id} />
       </div>
     );
   }
