@@ -787,4 +787,14 @@ export interface StatementReport {
   unpaid_bills_minor: number;
   reconciled_through: string | null;
   public_url: string | null;
+  /**
+   * Progress to the target as at the end of the period: the fundraiser's goal or,
+   * on a challenge's own account, the challenge's. The family's share counts as
+   * given, as on the public page.
+   */
+  goal: { target_minor: number; family_share_minor: number; received_minor: number; pledged_outstanding_minor: number } | null;
+  /** Where the money was at the end of the period (whole-fundraiser statements). */
+  balances: { name: string; amount_minor: number; challenge_name: string | null }[];
+  /** Published challenges and what they had brought in (whole-fundraiser statements). */
+  challenges: { name: string; target_minor: number | null; raised_minor: number; pledged_outstanding_minor: number }[];
 }

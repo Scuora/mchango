@@ -15,7 +15,9 @@ use crate::clock;
 use crate::error::{AppError, AppResult};
 use crate::reconciliation;
 use crate::settings::{self, AccountKind, GivingMethod, Organiser};
-use crate::transactions::totals::{Totals, fundraiser_records};
+use crate::transactions::totals::{
+    Totals, challenge_totals, fundraiser_records, funds_by_account, pledge_progress, pledge_totals,
+};
 use crate::transactions::{Direction, Kind};
 
 #[derive(Debug, Deserialize)]
@@ -48,6 +50,44 @@ pub struct StatementReport {
     pub unpaid_bills_minor: i64,
     pub reconciled_through: Option<String>,
     pub public_url: Option<String>,
+    /// Progress to the target as at the end of the period: the fundraiser's goal,
+    /// or, on a challenge's own account, the challenge's. None without a target.
+    pub goal: Option<ReportGoal>,
+    /// Where the money was at the end of the period (whole-fundraiser statements).
+    pub balances: Vec<ReportBalance>,
+    /// Published challenges and what they had brought in by the end of the period
+    /// (whole-fundraiser statements).
+    pub challenges: Vec<ReportChallenge>,
+}
+
+/// The target as the public page presents it: the family's own share counts as
+/// given; everyone else's money counts once received, and their pledges are
+/// expected but not yet in.
+#[derive(Debug, Serialize)]
+pub struct ReportGoal {
+    pub target_minor: i64,
+    /// The family's own share of the target. Zero for a challenge.
+    pub family_share_minor: i64,
+    /// Received from family, friends and well-wishers (for a challenge, everything received through it).
+    pub received_minor: i64,
+    /// Pledged by family, friends and well-wishers, not yet received (never the family's share).
+    pub pledged_outstanding_minor: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReportBalance {
+    pub name: String,
+    pub amount_minor: i64,
+    /// The challenge whose money the account keeps: owed to the main fund until handed over.
+    pub challenge_name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReportChallenge {
+    pub name: String,
+    pub target_minor: Option<i64>,
+    pub raised_minor: i64,
+    pub pledged_outstanding_minor: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -306,13 +346,66 @@ pub async fn statement(
             - totals.reversals_out_minor
             - totals.transfers_out_minor;
 
+    // Everything as it stood at the end of the period.
+    let records: Vec<_> =
+        fundraiser_records(conn).await?.into_iter().filter(|r| r.occurred_at.as_str() < end.as_str()).collect();
+    let by_challenge = challenge_totals(&records);
+    let all_challenges = challenges::list(conn).await?;
+    let mut goal = None;
+    let mut balances = Vec::new();
+    let mut challenge_rows = Vec::new();
     // Pledges and bills belong to the whole fundraiser, not to an account; a
-    // challenge's account shows what was pledged to that challenge.
-    let (pledged_outstanding_minor, unpaid_bills_minor) = if only.is_none() {
-        let all = Totals::from_records(&fundraiser_records(conn).await?, f.opening_funds_minor);
-        (all.pledged_outstanding_minor, all.unpaid_bills_minor)
-    } else {
-        (owner.as_ref().map_or(0, |c| c.totals.pledged_outstanding_minor), 0)
+    // challenge's account shows what was pledged to that challenge. The family's
+    // own share is never listed as a pledge (as on the public page).
+    let (pledged_outstanding_minor, unpaid_bills_minor) = match &owner {
+        None if only.is_none() => {
+            let all = Totals::from_records(&records, f.opening_funds_minor);
+            let pledges = pledge_totals(&pledge_progress(&records));
+            goal = f.target_minor.filter(|t| *t > 0).map(|target_minor| ReportGoal {
+                target_minor,
+                family_share_minor: pledges.family.pledged_minor,
+                received_minor: (all.contributions_minor - pledges.family.received_minor).max(0),
+                pledged_outstanding_minor: pledges.friends.outstanding_minor,
+            });
+            let opening = f.opening_funds_account_id.map(|a| (a, f.opening_funds_minor));
+            let places = funds_by_account(&records, opening);
+            balances = accounts
+                .iter()
+                .map(|a| ReportBalance {
+                    name: a.name.clone(),
+                    amount_minor: places.get(&a.id).copied().unwrap_or(0),
+                    challenge_name: all_challenges.iter().find(|c| c.account_id == Some(a.id)).map(|c| c.name.clone()),
+                })
+                .filter(|b| b.amount_minor != 0)
+                .collect();
+            challenge_rows = all_challenges
+                .iter()
+                .filter(|c| c.published)
+                .map(|c| {
+                    let t = by_challenge.get(&c.id);
+                    ReportChallenge {
+                        name: c.name.clone(),
+                        target_minor: c.target_minor,
+                        raised_minor: t.map_or(0, |t| t.raised_minor),
+                        pledged_outstanding_minor: t.map_or(0, |t| t.pledged_outstanding_minor),
+                    }
+                })
+                .collect();
+            (pledges.friends.outstanding_minor, all.unpaid_bills_minor)
+        }
+        None => (0, 0),
+        Some(c) => {
+            let t = by_challenge.get(&c.challenge.id);
+            let raised = t.map_or(0, |t| t.raised_minor);
+            let pledged = t.map_or(0, |t| t.pledged_outstanding_minor);
+            goal = c.challenge.target_minor.filter(|t| *t > 0).map(|target_minor| ReportGoal {
+                target_minor,
+                family_share_minor: 0,
+                received_minor: raised,
+                pledged_outstanding_minor: pledged,
+            });
+            (pledged, 0)
+        }
     };
     // Givers to a challenge with its own number are pointed there.
     let giving = owner.as_ref().map(|c| &c.challenge).filter(|c| c.giving_method.is_some());
@@ -349,6 +442,9 @@ pub async fn statement(
         unpaid_bills_minor,
         reconciled_through,
         public_url,
+        goal,
+        balances,
+        challenges: challenge_rows,
     })
 }
 

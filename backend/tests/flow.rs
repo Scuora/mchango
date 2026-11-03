@@ -578,6 +578,14 @@ async fn challenges_keep_their_own_tally() {
     let whole = reports::statement(&mut tx, statement(None), "test".into(), None).await.unwrap();
     assert!(whole.entries.iter().all(|e| e.kind != Kind::Transfer), "moving money changes no total");
     assert_eq!(whole.totals.transfers_in_minor + whole.totals.transfers_out_minor, 0);
+    let held = whole.balances.iter().find(|b| b.challenge_name.as_deref() == Some("Sponsored walk")).unwrap();
+    assert_eq!(held.amount_minor, 1_000_00, "the kitty's money, owed to the main fund");
+    assert!(whole.challenges.iter().all(|c| c.name != "Cousins' 1,000 challenge"), "hidden challenges stay off");
+    let pledges = pledge_totals(&pledge_progress(&fundraiser_records(&mut tx).await.unwrap()));
+    assert_eq!(
+        whole.pledged_outstanding_minor, pledges.friends.outstanding_minor,
+        "the family's share is not a pledge"
+    );
     let main = reports::statement(&mut tx, statement(Some(1)), "test".into(), None).await.unwrap();
     assert_eq!(main.totals.transfers_in_minor, 3_000_00);
     assert!(main.entries.iter().all(|e| e.label != "Cousin Zawadi" || e.amount_minor != 4_000_00));

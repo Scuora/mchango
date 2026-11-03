@@ -11,6 +11,7 @@ import { autoTable, type CellHookData, type RowInput } from "jspdf-autotable";
 import { formatKes } from "@/lib/money";
 import { formatNairobiDate, formatNairobiTime } from "@/lib/time";
 import type { StatementReport } from "@/lib/types";
+import { drawCharts, plain, sectionTitle, tidy, type Flow } from "./statementCharts";
 import { accountText } from "./statementText";
 
 export type ReportKind = "full" | "received" | "spent";
@@ -43,22 +44,15 @@ const PAGE_W = 210;
 const PAGE_H = 297;
 const MARGIN = 14;
 const TOTAL_PAGES = "{total_pages}";
+/** Below the slim header on continuation pages, and above the footer. */
+const CONTENT_TOP = 26;
+const CONTENT_BOTTOM = PAGE_H - 32;
 
 const TITLES: Record<ReportKind, string> = {
   full: "Full account (money in and out)",
   received: "Contributions received",
   spent: "Expenses (money spent)",
 };
-
-/** The standard PDF fonts cover Latin-1; swap the few characters they lack. */
-function plain(text: string): string {
-  return text
-    .replace(/[–—]/g, "-")
-    .replace(/[‘’]/g, "'")
-    .replace(/[“”]/g, '"')
-    .replace(/…/g, "...")
-    .replace(/[^\x20-\x7e\xa0-\xff\n]/g, "");
-}
 
 const money = (minor: number) => formatKes(minor).replace("KES ", "");
 
@@ -270,10 +264,6 @@ function header(doc: jsPDF, r: StatementReport, options: StatementOptions): numb
   return titleY + 20 + lines.length * 4.6;
 }
 
-/** Plain text with the gaps left by dropped characters (such as emoji) closed up. */
-function tidy(text: string): string {
-  return plain(text).replace(/\s+/g, " ").replace(/\(\s/g, "(").replace(/\s\)/g, ")").trim();
-}
 
 /** The band on continuation pages: a slim plum strip with a small portrait. */
 function slimHeader(doc: jsPDF, r: StatementReport, photo: string | null) {
@@ -481,7 +471,7 @@ function closing(doc: jsPDF, startY: number) {
   let y = startY + 12;
   if (y > PAGE_H - 60) {
     doc.addPage();
-    y = 30;
+    y = CONTENT_TOP + 4;
   }
   doc.setFont("times", "italic");
   doc.setFontSize(13);
@@ -507,7 +497,19 @@ export function buildStatementPdf(r: StatementReport, options: StatementOptions)
     subject: r.account ? `${TITLES[options.kind]} - ${tidy(r.account.name)}` : TITLES[options.kind],
     creator: "Mchango",
   });
-  const startY = summary(doc, r, options, header(doc, r, options));
+  const flow: Flow = {
+    y: summary(doc, r, options, header(doc, r, options)) + 4,
+    need(height) {
+      if (this.y + height > CONTENT_BOTTOM) {
+        doc.addPage();
+        this.y = CONTENT_TOP;
+      }
+      return this.y;
+    },
+  };
+  drawCharts(doc, r, options.kind, flow, MARGIN, PAGE_W - MARGIN * 2);
+  // The entries, under their own title; on a new page if little room is left.
+  const startY = sectionTitle(doc, MARGIN, flow.need(60), PAGE_W - MARGIN * 2, "All entries") + 1;
   const { head, body, foot, numericFrom, statusColumn } = tableRows(r, options);
 
   autoTable(doc, {
@@ -518,7 +520,7 @@ export function buildStatementPdf(r: StatementReport, options: StatementOptions)
     theme: "plain",
     showHead: "everyPage",
     showFoot: "lastPage",
-    margin: { top: 22, bottom: 32, left: MARGIN, right: MARGIN },
+    margin: { top: 22, bottom: PAGE_H - CONTENT_BOTTOM, left: MARGIN, right: MARGIN },
     styles: {
       font: "helvetica",
       fontSize: 8.6,
@@ -580,19 +582,15 @@ export function buildStatementPdf(r: StatementReport, options: StatementOptions)
         doc.line(x, y, x + width, y);
       }
     },
-    didDrawPage: (data) => {
-      if (data.pageNumber > 1) slimHeader(doc, r, options.photo);
-      footer(doc, r, data.pageNumber);
-    },
   });
   const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? startY;
   closing(doc, finalY);
-  // A closing block on a new page also needs its header and footer.
+  // Every page's header and footer, once the pages are all there.
   const pages = doc.getNumberOfPages();
-  if (pages > 1 && finalY + 12 > PAGE_H - 60) {
-    doc.setPage(pages);
-    slimHeader(doc, r, options.photo);
-    footer(doc, r, pages);
+  for (let page = 1; page <= pages; page++) {
+    doc.setPage(page);
+    if (page > 1) slimHeader(doc, r, options.photo);
+    footer(doc, r, page);
   }
   doc.putTotalPages(TOTAL_PAGES);
   return doc.output("blob");
