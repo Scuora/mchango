@@ -278,10 +278,16 @@ pub async fn statement(
             continue;
         }
         let a = row.amount_minor;
+        // A payment from several people is listed person by person, each with their part.
+        let shared = if row.kind == Kind::Contribution {
+            crate::transactions::parse_shares(&row.shares_json)
+        } else {
+            Vec::new()
+        };
         match (row.kind, row.direction) {
             (Kind::Contribution, _) => {
                 totals.received_minor += a;
-                totals.received_count += 1;
+                totals.received_count += shared.len().max(1) as i64;
             }
             (Kind::Expense, _) => {
                 totals.expenses_minor += a;
@@ -300,18 +306,7 @@ pub async fn statement(
         let described =
             |fallback: &str| if row.description.is_empty() { fallback.to_string() } else { row.description.clone() };
         let label = match (row.kind, row.direction) {
-            (Kind::Contribution, _) => {
-                let shared = crate::transactions::parse_shares(&row.shares_json);
-                if shared.is_empty() {
-                    row.public_name.clone().unwrap_or_else(|| f.anonymous_label.clone())
-                } else {
-                    shared
-                        .iter()
-                        .map(|s| s.public_name.clone().unwrap_or_else(|| f.anonymous_label.clone()))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                }
-            }
+            (Kind::Contribution, _) => row.public_name.clone().unwrap_or_else(|| f.anonymous_label.clone()),
             (Kind::Expense, _) => described("Purpose to be confirmed"),
             (Kind::Charge, _) => described("M-Pesa charge"),
             (Kind::Refund, Some(Direction::In)) => described("Refund received"),
@@ -326,17 +321,24 @@ pub async fn statement(
             }
             _ => described("Reversal"),
         };
-        entries.push(ReportEntry {
-            at: row.occurred_at,
+        let entry = |label: String, amount_minor: i64| ReportEntry {
+            at: row.occurred_at.clone(),
             kind: row.kind,
             direction: if into { Direction::In } else { Direction::Out },
-            amount_minor: a,
+            amount_minor,
             label,
             mpesa_name: row.counterparty.as_deref().and_then(name_only),
-            reference: row.reference,
+            reference: row.reference.clone(),
             matched: row.matched,
             has_receipt: row.has_receipt,
-        });
+        };
+        if shared.is_empty() {
+            entries.push(entry(label, a));
+        } else {
+            for s in &shared {
+                entries.push(entry(s.public_name.clone().unwrap_or_else(|| f.anonymous_label.clone()), s.amount_minor));
+            }
+        }
     }
     let period_net =
         totals.received_minor + totals.refunds_received_minor + totals.reversals_in_minor + totals.transfers_in_minor

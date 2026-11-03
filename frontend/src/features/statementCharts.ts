@@ -4,6 +4,11 @@
 // needed, plum is money spent and green is money handed over to another account.
 
 import { GState, type jsPDF } from "jspdf";
+import cormorantMedium from "@/assets/pdf-fonts/CormorantGaramond-Medium.ttf?url";
+import cormorantMediumItalic from "@/assets/pdf-fonts/CormorantGaramond-MediumItalic.ttf?url";
+import cormorantSemiBold from "@/assets/pdf-fonts/CormorantGaramond-SemiBold.ttf?url";
+import sansRegular from "@/assets/pdf-fonts/SourceSans3-Regular.ttf?url";
+import sansSemiBold from "@/assets/pdf-fonts/SourceSans3-SemiBold.ttf?url";
 import { familyOf } from "@/lib/goal";
 import { formatKesShort } from "@/lib/money";
 import { formatShortDate, formatShortDateTime, toNairobiInputValue } from "@/lib/time";
@@ -26,8 +31,69 @@ const GOLD: RGB = [201, 162, 77];
 /** The 2px gap between touching marks, in mm. */
 const GAP = 0.55;
 
-/** The standard PDF fonts cover Latin-1; swap the few characters they lack. */
+// ---------------------------------------------------------------------------
+// Fonts: the site's own, Source Sans 3 and Cormorant Garamond (src/assets/pdf-fonts,
+// SIL Open Font License), embedded in the PDF. Without them the PDF falls back to
+// the standard Helvetica and Times.
+
+const FONT_FILES: Record<string, Record<string, string>> = {
+  SourceSans: { normal: sansRegular, bold: sansSemiBold },
+  Cormorant: { normal: cormorantMedium, bold: cormorantSemiBold, italic: cormorantMediumItalic },
+};
+
+/** Font files by URL, base64-encoded for jsPDF. */
+export type PdfFonts = Record<string, string>;
+
+function base64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let text = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(text);
+}
+
+/** Fetches the fonts (the browser caches them); null if any is missing. */
+export async function loadPdfFonts(): Promise<PdfFonts | null> {
+  try {
+    const files = Object.values(FONT_FILES).flatMap((styles) => Object.values(styles));
+    const loaded = await Promise.all(
+      files.map(async (file) => {
+        const response = await fetch(file);
+        const data = response.ok ? await response.arrayBuffer() : new ArrayBuffer(0);
+        // A TrueType file starts 00 01 00 00; anything else (a page, an error) is not a font.
+        if (new DataView(data).byteLength < 4 || new DataView(data).getUint32(0) !== 0x00010000) throw new Error(file);
+        return [file, base64(data)] as const;
+      }),
+    );
+    return Object.fromEntries(loaded);
+  } catch {
+    return null;
+  }
+}
+
+/** The faces in use: set by `useFonts` for each PDF. */
+export const face = { sans: "helvetica", serif: "times", unicode: false };
+
+export function useFonts(doc: jsPDF, fonts: PdfFonts | null) {
+  if (!fonts) {
+    Object.assign(face, { sans: "helvetica", serif: "times", unicode: false });
+    return;
+  }
+  for (const [family, styles] of Object.entries(FONT_FILES)) {
+    for (const [style, file] of Object.entries(styles)) {
+      const name = `${family}-${style}.ttf`;
+      doc.addFileToVFS(name, fonts[file]);
+      doc.addFont(name, family, style);
+    }
+  }
+  Object.assign(face, { sans: "SourceSans", serif: "Cormorant", unicode: true });
+}
+
+/**
+ * Text the fonts can draw. The embedded fonts have proper dashes, quotes and
+ * ellipses; the standard ones cover Latin-1 only. Neither has emoji.
+ */
 export function plain(text: string): string {
+  if (face.unicode) return text.replace(/[^\x20-\x7e\xa0-\xff\n\u2010-\u2027]/g, "");
   return text
     .replace(/[–—]/g, "-")
     .replace(/[‘’]/g, "'")
@@ -52,7 +118,7 @@ function fit(doc: jsPDF, text: string, width: number): string {
 }
 
 function font(doc: jsPDF, size: number, style: "normal" | "bold" = "normal", color: RGB = INK) {
-  doc.setFont("helvetica", style);
+  doc.setFont(face.sans, style);
   doc.setFontSize(size);
   doc.setTextColor(...color);
 }
@@ -111,18 +177,18 @@ function meter(doc: jsPDF, x: number, y: number, w: number, h: number, received:
 
 /** A section title with a gold rule, and an optional line under it. Returns where the content starts. */
 export function sectionTitle(doc: jsPDF, x: number, y: number, w: number, title: string, note?: string): number {
-  doc.setFont("times", "normal");
-  doc.setFontSize(14);
+  doc.setFont(face.serif, "bold");
+  doc.setFontSize(17);
   doc.setTextColor(...PLUM_TEXT);
-  doc.text(plain(title), x, y + 5);
+  doc.text(plain(title), x, y + 5.4);
   const end = x + doc.getTextWidth(plain(title)) + 4;
   doc.setDrawColor(...GOLD);
   doc.setLineWidth(0.3);
   doc.line(end, y + 3.6, x + w, y + 3.6);
   if (!note) return y + 10;
-  font(doc, 8, "normal", MUTED);
-  doc.text(plain(note), x, y + 10);
-  return y + 14;
+  font(doc, 8.5, "normal", MUTED);
+  doc.text(plain(note), x, y + 11.2);
+  return y + 15;
 }
 
 // ---------------------------------------------------------------------------

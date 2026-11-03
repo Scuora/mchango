@@ -91,11 +91,11 @@ export function ReportsPage() {
       if (period === "range" && to) params.set("to", to);
       if (account !== ALL) params.set("account_id", account);
       const report = await api.get<StatementReport>(`/api/manage/reports/statement?${params}`);
-      const [{ buildStatementPdf, statementFileName }, photo] = await Promise.all([
+      const [{ buildStatementPdf, statementFileName, loadPdfFonts }, photo] = await Promise.all([
         import("@/features/statementPdf"),
         report.fundraiser.has_photo ? photoDataUrl() : Promise.resolve(null),
       ]);
-      const blob = buildStatementPdf(report, { kind, names, includeCodes, photo });
+      const blob = buildStatementPdf(report, { kind, names, includeCodes, photo, fonts: await loadPdfFonts() });
       const file = new File([blob], statementFileName(report, kind), { type: "application/pdf" });
       const text = buildStatementText(report, { kind, names, includeCodes });
       const sheet = new Blob([buildStatementCsv(report, { kind, names, includeCodes })], { type: "text/csv;charset=utf-8" });

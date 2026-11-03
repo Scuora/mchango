@@ -622,6 +622,15 @@ async fn a_payment_can_be_shared_among_people() {
     shared.shares = Some(shares(&five));
     let id = transactions::create(&mut tx, shared, "test").await.unwrap().id;
     assert_eq!(transactions::item(&mut tx, id).await.unwrap().shares.len(), 5);
+    // Statements (PDF, WhatsApp text, spreadsheet) list each person on their own line.
+    let query = reports::StatementQuery { from: None, to: None, account_id: None };
+    let statement = reports::statement(&mut tx, query, "test".into(), None).await.unwrap();
+    let lines: Vec<_> = statement.entries.iter().filter(|e| e.reference.as_deref() == Some("TK1SHARED1")).collect();
+    assert_eq!(
+        lines.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(),
+        ["Amina", "Baraka", "Chebet", "Daudi", "Eunice"]
+    );
+    assert!(lines.iter().all(|e| e.amount_minor == 200_00));
 
     // Counted once in money, once per person in the count; listed per person in public.
     let t = Totals::from_records(&fundraiser_records(&mut tx).await.unwrap(), 12_000_00);

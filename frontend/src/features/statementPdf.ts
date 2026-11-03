@@ -11,8 +11,10 @@ import { autoTable, type CellHookData, type RowInput } from "jspdf-autotable";
 import { formatKes } from "@/lib/money";
 import { formatNairobiDate, formatNairobiTime } from "@/lib/time";
 import type { StatementReport } from "@/lib/types";
-import { drawCharts, plain, sectionTitle, tidy, type Flow } from "./statementCharts";
+import { drawCharts, face, plain, sectionTitle, tidy, useFonts, type Flow, type PdfFonts } from "./statementCharts";
 import { accountText } from "./statementText";
+
+export { loadPdfFonts } from "./statementCharts";
 
 export type ReportKind = "full" | "received" | "spent";
 
@@ -23,6 +25,8 @@ export interface StatementOptions {
   includeCodes: boolean;
   /** The memorial photo as a JPEG data URL, if there is one. */
   photo: string | null;
+  /** The site's fonts (see loadPdfFonts); null falls back to Helvetica and Times. */
+  fonts: PdfFonts | null;
 }
 
 type RGB = [number, number, number];
@@ -179,14 +183,14 @@ function header(doc: jsPDF, r: StatementReport, options: StatementOptions): numb
 
   const name = f.memorial_name || f.name;
   if (f.memorial_name) {
-    doc.setFont("helvetica", "bold");
+    doc.setFont(face.sans, "bold");
     doc.setFontSize(6.8);
     doc.setTextColor(...GOLD_LIGHT);
     spacedCentre(doc, "IN LOVING MEMORY OF", y, 0.9);
     y += 8.5;
   }
-  doc.setFont("times", "bold");
-  doc.setFontSize(22);
+  doc.setFont(face.serif, "bold");
+  doc.setFontSize(26);
   doc.setTextColor(...IVORY);
   for (const line of doc.splitTextToSize(plain(name), 150) as string[]) {
     doc.text(line, cx, y, { align: "center", charSpace: 0 });
@@ -194,14 +198,14 @@ function header(doc: jsPDF, r: StatementReport, options: StatementOptions): numb
   }
   y -= 2;
   if (f.memorial_dates) {
-    doc.setFont("times", "normal");
-    doc.setFontSize(11);
+    doc.setFont(face.serif, "normal");
+    doc.setFontSize(12.5);
     doc.text(plain(f.memorial_dates), cx, y, { align: "center" });
     y += 5.6;
   }
   if (f.memorial_tribute) {
-    doc.setFont("times", "italic");
-    doc.setFontSize(11);
+    doc.setFont(face.serif, "italic");
+    doc.setFontSize(12.5);
     doc.setTextColor(...GOLD_LIGHT);
     doc.text(plain(f.memorial_tribute), cx, y, { align: "center" });
   }
@@ -218,14 +222,14 @@ function header(doc: jsPDF, r: StatementReport, options: StatementOptions): numb
     const tallest = Math.max(...blocks.map(([, lines]) => lines.length));
     blocks.forEach(([label, lines], i) => {
       const mid = MARGIN + width * i + width / 2;
-      doc.setFont("helvetica", "bold");
+      doc.setFont(face.sans, "bold");
       doc.setFontSize(6.5);
       doc.setTextColor(...GOLD_DARK);
       const labelWidth = doc.getTextWidth(label) + 0.6 * (label.length - 1);
       doc.text(label, mid - labelWidth / 2, top, { charSpace: 0.6 });
       doc.setCharSpace(0);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
+      doc.setFont(face.sans, "normal");
+      doc.setFontSize(9.2);
       doc.setTextColor(...INK);
       lines.forEach((line, j) => doc.text(plain(line), mid, top + 4.8 + j * 4.2, { align: "center" }));
       if (i > 0) {
@@ -239,8 +243,8 @@ function header(doc: jsPDF, r: StatementReport, options: StatementOptions): numb
 
   // Title, a gold rule with a diamond, and one centred line of details.
   const titleY = top + 11;
-  doc.setFont("times", "normal");
-  doc.setFontSize(22);
+  doc.setFont(face.serif, "normal");
+  doc.setFontSize(27);
   doc.setTextColor(...PLUM_TEXT);
   doc.text("Statement of Account", cx, titleY, { align: "center" });
   doc.setDrawColor(...GOLD);
@@ -249,7 +253,7 @@ function header(doc: jsPDF, r: StatementReport, options: StatementOptions): numb
   doc.line(cx + 3.5, titleY + 4.5, cx + 36, titleY + 4.5);
   doc.setFillColor(...GOLD);
   diamond(doc, cx, titleY + 4.5, 1.2);
-  doc.setFont("helvetica", "normal");
+  doc.setFont(face.sans, "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(...MUTED);
   doc.setFontSize(9.5);
@@ -257,7 +261,7 @@ function header(doc: jsPDF, r: StatementReport, options: StatementOptions): numb
   const account = accountText(r);
   if (!account) return titleY + 19;
   // The account (a kitty) the statement covers, on its own line.
-  doc.setFont("helvetica", "bold");
+  doc.setFont(face.sans, "bold");
   doc.setTextColor(...PLUM_TEXT);
   const lines = doc.splitTextToSize(tidy(account), 170) as string[];
   lines.forEach((line, i) => doc.text(line, cx, titleY + 17 + i * 4.6, { align: "center" }));
@@ -273,11 +277,11 @@ function slimHeader(doc: jsPDF, r: StatementReport, photo: string | null) {
   doc.setLineWidth(0.5);
   doc.line(0, 15.8, PAGE_W, 15.8);
   if (photo) portrait(doc, photo, MARGIN + 4.5, 7.5, 4.6, 0.5);
-  doc.setFont("times", "normal");
-  doc.setFontSize(11.5);
+  doc.setFont(face.serif, "normal");
+  doc.setFontSize(13.5);
   doc.setTextColor(...IVORY);
   doc.text(plain(r.fundraiser.memorial_name || r.fundraiser.name), PAGE_W / 2, 9.4, { align: "center" });
-  doc.setFont("helvetica", "bold");
+  doc.setFont(face.sans, "bold");
   doc.setFontSize(6.3);
   doc.setTextColor(...GOLD_LIGHT);
   spacedRight(doc, "STATEMENT OF ACCOUNT", PAGE_W - MARGIN, 9, 0.5);
@@ -288,16 +292,16 @@ function footer(doc: jsPDF, r: StatementReport, page: number) {
   doc.setDrawColor(...GOLD);
   doc.setLineWidth(0.5);
   doc.line(MARGIN, top, PAGE_W - MARGIN, top);
-  doc.setFont("times", "italic");
-  doc.setFontSize(11);
+  doc.setFont(face.serif, "italic");
+  doc.setFontSize(12.5);
   doc.setTextColor(...PLUM_TEXT);
   doc.text("Thank you for standing with the family.", MARGIN, top + 6);
   if (r.fundraiser.memorial_tribute) {
-    doc.setFontSize(9.5);
+    doc.setFontSize(11);
     doc.setTextColor(...GOLD_DARK);
     doc.text(plain(r.fundraiser.memorial_tribute), MARGIN, top + 10.5);
   }
-  doc.setFont("helvetica", "normal");
+  doc.setFont(face.sans, "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...MUTED);
   doc.text(`Page ${page} of ${TOTAL_PAGES}`, PAGE_W - MARGIN, top + 6, { align: "right" });
@@ -359,12 +363,12 @@ function summary(doc: jsPDF, r: StatementReport, options: StatementOptions, top:
       doc.setDrawColor(...LINE);
       doc.line(x, top + 4, x, top + height - 4);
     }
-    doc.setFont("helvetica", "bold");
+    doc.setFont(face.sans, "bold");
     doc.setFontSize(6.4);
     doc.setTextColor(...GOLD_DARK);
     doc.text(f.label.toUpperCase(), x + 5, top + 7.5, { charSpace: 0.35 });
     doc.setCharSpace(0);
-    doc.setFontSize(f.strong ? 12.5 : 11.5);
+    doc.setFontSize(f.strong ? 13.5 : 12.5);
     doc.setTextColor(...(f.strong ? PLUM : INK));
     doc.text(plain(f.value), x + 5, top + 15.2);
   });
@@ -384,7 +388,7 @@ function summary(doc: jsPDF, r: StatementReport, options: StatementOptions, top:
   if (options.kind !== "spent" && r.pledged_outstanding_minor > 0) notes.push(`Pledged, not yet received: KES ${money(r.pledged_outstanding_minor)}.`);
   if (options.kind !== "received" && r.unpaid_bills_minor > 0) notes.push(`Bills agreed but not yet paid: KES ${money(r.unpaid_bills_minor)}.`);
   if (r.fundraiser.giving_name) notes.push(`When giving, check that M-Pesa shows: ${r.fundraiser.giving_name}.`);
-  doc.setFont("helvetica", "normal");
+  doc.setFont(face.sans, "normal");
   doc.setFontSize(7.8);
   doc.setTextColor(...MUTED);
   let y = top + height + 5.5;
@@ -432,7 +436,7 @@ function tableRows(r: StatementReport, options: StatementOptions): Table {
 
   if (options.kind === "full") {
     let balance = r.brought_forward_minor;
-    const body: RowInput[] = [["", "", { content: "Balance brought forward", styles: { fontStyle: "italic", textColor: MUTED } }, ...code(null).map(() => ""), "", "", money(balance)]];
+    const body: RowInput[] = [["", "", { content: "Balance brought forward", styles: { textColor: MUTED } }, ...code(null).map(() => ""), "", "", money(balance)]];
     let moneyIn = 0;
     let moneyOut = 0;
     r.entries.forEach((e, i) => {
@@ -473,11 +477,11 @@ function closing(doc: jsPDF, startY: number) {
     doc.addPage();
     y = CONTENT_TOP + 4;
   }
-  doc.setFont("times", "italic");
-  doc.setFontSize(13);
+  doc.setFont(face.serif, "italic");
+  doc.setFontSize(15);
   doc.setTextColor(...PLUM_TEXT);
   doc.text("With gratitude to everyone who has given, prayed and stood with us.", MARGIN, y);
-  doc.setFont("helvetica", "normal");
+  doc.setFont(face.sans, "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(...MUTED);
   doc.text(
@@ -492,6 +496,7 @@ function closing(doc: jsPDF, startY: number) {
 
 export function buildStatementPdf(r: StatementReport, options: StatementOptions): Blob {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
+  useFonts(doc, options.fonts);
   doc.setProperties({
     title: plain(`Statement of account - ${r.fundraiser.memorial_name || r.fundraiser.name}`),
     subject: r.account ? `${TITLES[options.kind]} - ${tidy(r.account.name)}` : TITLES[options.kind],
@@ -522,8 +527,8 @@ export function buildStatementPdf(r: StatementReport, options: StatementOptions)
     showFoot: "lastPage",
     margin: { top: 22, bottom: PAGE_H - CONTENT_BOTTOM, left: MARGIN, right: MARGIN },
     styles: {
-      font: "helvetica",
-      fontSize: 8.6,
+      font: face.sans,
+      fontSize: 9.2,
       textColor: INK,
       cellPadding: { top: 2.7, bottom: 2.7, left: 3, right: 3 },
       overflow: "linebreak",
