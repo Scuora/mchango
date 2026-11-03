@@ -29,7 +29,7 @@ const NAV: NavItem[] = [
   { to: "/manage/challenges", label: "Challenges", short: "Challenges", icon: Trophy },
   { to: "/manage/statements", label: "Statements", short: "Statements", icon: FileText },
   { to: "/manage/announcements", label: "Announcements", short: "Updates", icon: Megaphone },
-  { to: "/manage/reports", label: "Reports (PDF)", short: "Reports", icon: FileDown },
+  { to: "/manage/reports", label: "Reports", short: "Reports", icon: FileDown },
   { to: "/manage/share", label: "Share on WhatsApp", short: "Share", icon: Share2 },
   { to: "/manage/activity", label: "Activity", short: "Activity", icon: History },
   { to: "/manage/settings", label: "Settings", short: "Settings", icon: Settings },
