@@ -95,6 +95,8 @@ struct Row {
     description: String,
     matched: bool,
     has_receipt: bool,
+    /// Who a shared payment is from (JSON); one line per payment, naming them all.
+    shares_json: String,
 }
 
 /// Keeps a person's or business's name and drops numbers and masked digits.
@@ -151,7 +153,10 @@ pub async fn statement(
                 t.public_name, t.description,
                 EXISTS (SELECT 1 FROM statement_rows r JOIN statement_imports i ON i.id = r.import_id
                         WHERE r.transaction_id = t.id AND i.status = 'ready') AS matched,
-                EXISTS (SELECT 1 FROM documents d WHERE d.transaction_id = t.id AND d.kind = 'receipt') AS has_receipt
+                EXISTS (SELECT 1 FROM documents d WHERE d.transaction_id = t.id AND d.kind = 'receipt') AS has_receipt,
+                (SELECT json_group_array(json_object('public_name', s.public_name, 'amount_minor', s.amount_minor))
+                   FROM (SELECT public_name, amount_minor FROM contribution_shares
+                          WHERE transaction_id = t.id ORDER BY position) s) AS shares_json
          FROM transactions t
          JOIN transaction_versions v ON v.transaction_id = t.id AND v.is_current = 1
          WHERE v.removed = 0 AND v.kind NOT IN ('personal', 'transfer', 'pledge', 'commitment')
@@ -191,7 +196,18 @@ pub async fn statement(
         let described =
             |fallback: &str| if row.description.is_empty() { fallback.to_string() } else { row.description.clone() };
         let label = match (row.kind, row.direction) {
-            (Kind::Contribution, _) => row.public_name.clone().unwrap_or_else(|| f.anonymous_label.clone()),
+            (Kind::Contribution, _) => {
+                let shared = crate::transactions::parse_shares(&row.shares_json);
+                if shared.is_empty() {
+                    row.public_name.clone().unwrap_or_else(|| f.anonymous_label.clone())
+                } else {
+                    shared
+                        .iter()
+                        .map(|s| s.public_name.clone().unwrap_or_else(|| f.anonymous_label.clone()))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                }
+            }
             (Kind::Expense, _) => described("Purpose to be confirmed"),
             (Kind::Charge, _) => described("M-Pesa charge"),
             (Kind::Refund, Some(Direction::In)) => described("Refund received"),

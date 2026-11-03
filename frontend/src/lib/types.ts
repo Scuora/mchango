@@ -168,6 +168,8 @@ export interface ListItem {
   /** The challenge it came in through, if any. */
   challenge_id: number | null;
   challenge_name: string | null;
+  /** For a payment from several people: who it is from, each with their part. */
+  shares: Share[];
   receipt_count: number;
   reconciliation: ReconciliationStatus;
   attention: Attention[];
@@ -275,6 +277,15 @@ export interface CreateRequest {
   confirm_possible_duplicate: boolean;
   /** The challenge it came in through. Money for a pledge made in a challenge joins it unless set. */
   challenge_id?: number | null;
+  /** For a payment from several people: who it is from. The parts must add up to the amount. */
+  shares?: Share[] | null;
+}
+
+/** One person's part of a payment shared by several people. */
+export interface Share {
+  /** Null shows the anonymous label. */
+  public_name: string | null;
+  amount_minor: number;
 }
 
 export interface Created {

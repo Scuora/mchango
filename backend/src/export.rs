@@ -14,7 +14,7 @@ pub async fn transactions_csv(conn: &mut SqliteConnection) -> AppResult<String> 
     let mut out = String::from(
         "id,version,transaction_time_nairobi,recorded_at_utc,type,direction,amount_kes,account,to_account,\
          reference,is_charge_line,counts_for_fundraiser,public_name,description,private_notes,counterparty,\
-         statement_status,removed,challenge\n",
+         statement_status,removed,challenge,shared_among\n",
     );
     for t in items {
         let local = clock::parse_instant(&t.occurred_at)
@@ -48,6 +48,14 @@ pub async fn transactions_csv(conn: &mut SqliteConnection) -> AppResult<String> 
             format!("{:?}", t.reconciliation).to_lowercase(),
             t.removed.to_string(),
             t.challenge_name.clone().unwrap_or_default(),
+            t.shares
+                .iter()
+                .map(|s| {
+                    let amount = format_kes(s.amount_minor).trim_start_matches("KES ").replace(',', "");
+                    format!("{} {amount}", s.public_name.as_deref().unwrap_or("anonymous"))
+                })
+                .collect::<Vec<_>>()
+                .join("; "),
         ];
         let line: Vec<String> = fields.iter().map(|f| csv_field(f)).collect();
         out.push_str(&line.join(","));

@@ -3,7 +3,9 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::{QueryBuilder, Sqlite, SqliteConnection};
 
-use super::{Direction, Kind, Movement, MovementInput, PledgedBy, Presentation};
+use super::{
+    Direction, Kind, Movement, MovementInput, PledgedBy, Presentation, Share, ShareInput, clean_optional, parse_shares,
+};
 use crate::clock;
 use crate::error::{AppError, AppResult};
 use crate::history::{self, ChangeEntry, Entity};
@@ -85,6 +87,10 @@ pub struct CreateRequest {
     /// pledge made in a challenge joins that challenge unless told otherwise.
     #[serde(default)]
     pub challenge_id: Option<i64>,
+    /// For a payment from several people: who it is from, each with their part.
+    /// The parts must add up to the amount.
+    #[serde(default)]
+    pub shares: Option<Vec<ShareInput>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -183,6 +189,10 @@ pub async fn create(conn: &mut SqliteConnection, request: CreateRequest, origin:
         },
         (None, None) => None,
     };
+    // Checked before anything is saved, so a mistake leaves nothing behind.
+    if let Some(shares) = &request.shares {
+        check_shares(movement.kind, movement.amount_minor, shares.clone())?;
+    }
     if challenge_id.is_some() && !crate::challenges::can_belong(movement.kind) {
         return Err(AppError::field(
             "challenge_id",
@@ -209,6 +219,9 @@ pub async fn create(conn: &mut SqliteConnection, request: CreateRequest, origin:
 
     if challenge_id.is_some() {
         crate::challenges::set_for_transaction(conn, id, challenge_id).await?;
+    }
+    if let Some(shares) = request.shares.filter(|s| !s.is_empty()) {
+        set_shares(conn, id, shares).await?;
     }
 
     if let Some(text) = &message {
@@ -504,6 +517,8 @@ async fn apply_correction(
     )
     .await?;
 
+    // Shares must still add up to a live contribution; otherwise they no longer describe it.
+    drop_stale_shares(conn, id, if removed { None } else { Some(&after) }).await?;
     // Money moved into a challenge's own account joins that challenge.
     if !removed
         && after.kind == Kind::Contribution
@@ -616,6 +631,128 @@ async fn touch(conn: &mut SqliteConnection, id: i64) -> AppResult<()> {
 }
 
 // ---------------------------------------------------------------------------
+// Shared payments
+
+/// Who a shared payment is from, in the order given.
+pub async fn shares(conn: &mut SqliteConnection, id: i64) -> AppResult<Vec<Share>> {
+    Ok(sqlx::query_as::<_, (Option<String>, i64)>(
+        "SELECT public_name, amount_minor FROM contribution_shares WHERE transaction_id = ? ORDER BY position",
+    )
+    .bind(id)
+    .fetch_all(conn)
+    .await?
+    .into_iter()
+    .map(|(public_name, amount_minor)| Share { public_name, amount_minor })
+    .collect())
+}
+
+fn describe_shares(shares: &[Share]) -> String {
+    shares
+        .iter()
+        .map(|s| format!("{} {}", s.public_name.as_deref().unwrap_or("anonymous"), format_kes(s.amount_minor)))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Checks shares against the payment they share: money received, two to 100
+/// names, and parts that add up to the amount. No shares is always fine.
+fn check_shares(kind: Kind, amount_minor: i64, input: Vec<ShareInput>) -> AppResult<Vec<Share>> {
+    if input.is_empty() {
+        return Ok(Vec::new());
+    }
+    if kind != Kind::Contribution {
+        return Err(AppError::field("shares", "Only money received can be shared among several people."));
+    }
+    if input.len() < 2 {
+        return Err(AppError::field("shares", "Share it among at least two names, or leave it as one person's."));
+    }
+    if input.len() > 100 {
+        return Err(AppError::field("shares", "Share it among at most 100 names."));
+    }
+    let mut shares = Vec::with_capacity(input.len());
+    for share in input {
+        let public_name = clean_optional(share.public_name, 80, "shares")?;
+        shares.push(Share { public_name, amount_minor: share.amount_minor.minor() });
+    }
+    let total: i64 = shares.iter().map(|s| s.amount_minor).sum();
+    if total != amount_minor {
+        return Err(AppError::field(
+            "shares",
+            format!(
+                "The shares add up to {}, but the payment is {}. Make them add up to the payment.",
+                format_kes(total),
+                format_kes(amount_minor)
+            ),
+        ));
+    }
+    Ok(shares)
+}
+
+/// Shares a contribution among several people, or (with no shares) makes it one
+/// person's again. The parts must add up to the payment; no money moves.
+pub async fn set_shares(conn: &mut SqliteConnection, id: i64, input: Vec<ShareInput>) -> AppResult<()> {
+    let current = current_version(conn, id).await?;
+    let before = shares(conn, id).await?;
+    if current.removed && !input.is_empty() {
+        return Err(AppError::invalid("This record was removed, so it cannot be shared."));
+    }
+    let after = check_shares(current.kind, current.amount_minor, input)?;
+    if before == after {
+        return Ok(());
+    }
+
+    sqlx::query("DELETE FROM contribution_shares WHERE transaction_id = ?").bind(id).execute(&mut *conn).await?;
+    for (position, share) in after.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO contribution_shares (transaction_id, position, public_name, amount_minor) VALUES (?, ?, ?, ?)",
+        )
+        .bind(id)
+        .bind(position as i64)
+        .bind(&share.public_name)
+        .bind(share.amount_minor)
+        .execute(&mut *conn)
+        .await?;
+    }
+    touch(conn, id).await?;
+    let summary = if after.is_empty() {
+        "No longer shared: from one person again".to_string()
+    } else {
+        format!("Shared among {}: {}", after.len(), describe_shares(&after))
+    };
+    history::record(conn, Entity::Transaction, Some(id), "shares", &summary, None, None).await?;
+    Ok(())
+}
+
+/// Removes shares that no longer describe the record: it was removed, is no
+/// longer money received, or its amount changed.
+async fn drop_stale_shares(conn: &mut SqliteConnection, id: i64, after: Option<&Movement>) -> AppResult<()> {
+    let existing = shares(conn, id).await?;
+    if existing.is_empty() {
+        return Ok(());
+    }
+    let total: i64 = existing.iter().map(|s| s.amount_minor).sum();
+    let still_fits = after.is_some_and(|m| m.kind == Kind::Contribution && m.amount_minor == total);
+    if still_fits {
+        return Ok(());
+    }
+    sqlx::query("DELETE FROM contribution_shares WHERE transaction_id = ?").bind(id).execute(&mut *conn).await?;
+    history::record(
+        conn,
+        Entity::Transaction,
+        Some(id),
+        "shares",
+        &format!(
+            "Shares removed because the record changed (were: {}). Share it again if needed.",
+            describe_shares(&existing)
+        ),
+        None,
+        None,
+    )
+    .await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Presentation
 
 pub async fn update_presentation(conn: &mut SqliteConnection, id: i64, update: Presentation) -> AppResult<()> {
@@ -722,6 +859,11 @@ pub struct ListItem {
     pub pledged_by: Option<PledgedBy>,
     pub challenge_id: Option<i64>,
     pub challenge_name: Option<String>,
+    /// For a payment from several people: who it is from, each with their part.
+    #[sqlx(skip)]
+    pub shares: Vec<Share>,
+    #[serde(skip)]
+    pub shares_json: String,
     pub receipt_count: i64,
     #[serde(skip)]
     pub matched: bool,
@@ -737,6 +879,7 @@ pub struct ListItem {
 
 impl ListItem {
     fn finish(mut self) -> Self {
+        self.shares = parse_shares(&self.shares_json);
         self.reconciliation = if !self.reconcilable {
             ReconciliationStatus::NotApplicable
         } else if self.matched {
@@ -769,6 +912,9 @@ const ITEMS_CTE: &str = "WITH items AS (
            v.reference, v.is_fee, v.removed, v.counterparty, v.related_transaction_id,
            t.public_name, t.description, t.notes, t.pledged_by,
            t.challenge_id, c.name AS challenge_name,
+           (SELECT json_group_array(json_object('public_name', s.public_name, 'amount_minor', s.amount_minor))
+              FROM (SELECT public_name, amount_minor FROM contribution_shares
+                     WHERE transaction_id = t.id ORDER BY position) s) AS shares_json,
            (SELECT COUNT(*) FROM documents d WHERE d.transaction_id = t.id AND d.kind = 'receipt') AS receipt_count,
            EXISTS (SELECT 1 FROM statement_rows r JOIN statement_imports i ON i.id = r.import_id
                    WHERE r.transaction_id = t.id AND i.status = 'ready') AS matched,
@@ -858,7 +1004,9 @@ fn push_filters(qb: &mut QueryBuilder<Sqlite>, query: &ListQuery) -> AppResult<(
         let escaped = q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
         let pattern = format!("%{escaped}%");
         qb.push(" AND (");
-        for (i, column) in ["public_name", "description", "notes", "reference", "counterparty"].iter().enumerate() {
+        for (i, column) in
+            ["public_name", "description", "notes", "reference", "counterparty", "shares_json"].iter().enumerate()
+        {
             if i > 0 {
                 qb.push(" OR ");
             }

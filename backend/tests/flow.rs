@@ -116,6 +116,7 @@ async fn demo_flow() {
                 client_key: None,
                 confirm_possible_duplicate: true,
                 challenge_id: None,
+                shares: None,
             },
             "test",
         )
@@ -150,6 +151,7 @@ async fn demo_flow() {
             client_key: key.map(Into::into),
             confirm_possible_duplicate: confirm,
             challenge_id: None,
+            shares: None,
         };
         let mut tx = db::begin_write(&pool).await.unwrap();
         let flagged = transactions::create(&mut tx, manual(false, None), "test").await;
@@ -418,6 +420,7 @@ fn record(kind: Kind, amount: i64, related: Option<i64>, challenge_id: Option<i6
         client_key: None,
         confirm_possible_duplicate: true,
         challenge_id,
+        shares: None,
     }
 }
 
@@ -536,5 +539,83 @@ async fn challenges_keep_their_own_tally() {
     let shown = page.challenges.iter().find(|c| c.id == walk).unwrap();
     assert_eq!(shown.giving.as_ref().map(|g| g.number.as_str()), Some("0722 000 000"));
     assert_eq!(page.totals.contributions_minor, before.contributions_minor + 2_000_00 + 4_000_00);
+    tx.rollback().await.unwrap();
+}
+
+/// One payment from several people: shared equally or with an amount each, the
+/// money counts once and the public list shows each person.
+#[tokio::test]
+async fn a_payment_can_be_shared_among_people() {
+    let dir = temp_dir();
+    let pool = db::connect(&dir.join("test.sqlite")).await.unwrap();
+    let storage = Storage::open(&dir.join("uploads")).unwrap();
+    seed::run(&pool, &storage, &dir).await.unwrap();
+    let before = totals(&pool).await;
+    let mut tx = db::begin_write(&pool).await.unwrap();
+    let shares = |parts: &[(&str, i64)]| -> Vec<transactions::ShareInput> {
+        let list: Vec<_> = parts
+            .iter()
+            .map(|(name, amount)| serde_json::json!({ "public_name": name, "amount_minor": amount }))
+            .collect();
+        serde_json::from_value(serde_json::Value::Array(list)).unwrap()
+    };
+    let five = [("Amina", 200_00), ("Baraka", 200_00), ("Chebet", 200_00), ("Daudi", 200_00), ("Eunice", 200_00)];
+
+    // Shares must add up to the payment.
+    let mut short = record(Kind::Contribution, 1_000_00, None, None);
+    short.movement.reference = Some("TK1SHARED1".into());
+    short.shares = Some(shares(&five[..4]));
+    assert!(matches!(transactions::create(&mut tx, short, "test").await, Err(AppError::Invalid { .. })));
+
+    let mut shared = record(Kind::Contribution, 1_000_00, None, None);
+    shared.movement.reference = Some("TK1SHARED1".into());
+    shared.shares = Some(shares(&five));
+    let id = transactions::create(&mut tx, shared, "test").await.unwrap().id;
+    assert_eq!(transactions::item(&mut tx, id).await.unwrap().shares.len(), 5);
+
+    // Counted once in money, once per person in the count; listed per person in public.
+    let t = Totals::from_records(&fundraiser_records(&mut tx).await.unwrap(), 12_000_00);
+    assert_eq!(t.contributions_minor, before.contributions_minor + 1_000_00);
+    assert_eq!(t.contributions_count, before.contributions_count + 5);
+    let page = publication::build(&mut tx).await.unwrap();
+    let names: Vec<_> = page
+        .contributions
+        .iter()
+        .filter(|e| e.reference_hint.as_deref() == Some("…RED1"))
+        .map(|e| e.label.as_str())
+        .collect();
+    assert_eq!(names, ["Amina", "Baraka", "Chebet", "Daudi", "Eunice"]);
+    let sum: i64 = page.contributions.iter().filter_map(|e| e.amount_minor).sum();
+    assert_eq!(sum, page.totals.contributions_minor, "the list still adds up to the total");
+    let checked = publication::check_contribution(&mut tx, "TK1SHARED1").await.unwrap();
+    assert_eq!(checked.contribution.unwrap().listed_as, "Amina, Baraka, Chebet, Daudi, Eunice");
+
+    // Amounts against each name; an expense cannot be shared; a corrected amount drops the shares.
+    transactions::set_shares(&mut tx, id, shares(&[("Amina", 700_00), ("Baraka", 300_00)])).await.unwrap();
+    assert_eq!(transactions::shares(&mut tx, id).await.unwrap()[0].amount_minor, 700_00);
+    let expense: i64 = sqlx::query_scalar(
+        "SELECT transaction_id FROM transaction_versions WHERE is_current = 1 AND kind = 'expense' LIMIT 1",
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    assert!(transactions::set_shares(&mut tx, expense, shares(&[("A", 1_00), ("B", 1_00)])).await.is_err());
+    let mut corrected = transactions::current_version(&mut tx, id).await.unwrap().movement();
+    corrected.amount_minor = 1_200_00;
+    let replacement = MovementInput {
+        kind: corrected.kind,
+        direction: corrected.direction,
+        amount_minor: Amount::try_from(corrected.amount_minor).unwrap(),
+        occurred_at: corrected.occurred_at,
+        account_id: corrected.account_id,
+        to_account_id: None,
+        reference: corrected.reference,
+        is_fee: false,
+        related_transaction_id: None,
+        counterparty: None,
+    };
+    let fix = CorrectionRequest { reason: "Amount was 1,200".into(), replacement: Some(replacement) };
+    transactions::correct(&mut tx, id, fix).await.unwrap();
+    assert!(transactions::shares(&mut tx, id).await.unwrap().is_empty(), "shares no longer add up, so they go");
     tx.rollback().await.unwrap();
 }

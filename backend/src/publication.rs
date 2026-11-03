@@ -262,7 +262,29 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
     let pick = |kinds: &[Kind]| -> Vec<PublicEntry> {
         newest_first(records.iter().filter(|r| kinds.contains(&r.kind)).map(entry).collect())
     };
-    let contributions = pick(&[Kind::Contribution]);
+    // A payment from several people is listed once per person, with their part.
+    let contributions = newest_first(
+        records
+            .iter()
+            .filter(|r| r.kind == Kind::Contribution)
+            .flat_map(|r| {
+                let whole = entry(r);
+                if r.shares.is_empty() {
+                    return vec![whole];
+                }
+                // Reversed here, so each payment's people read in order once the list is turned newest first.
+                r.shares
+                    .iter()
+                    .rev()
+                    .map(|s| PublicEntry {
+                        label: s.public_name.clone().unwrap_or_else(|| anonymous.clone()),
+                        amount_minor: fundraiser.show_contribution_amounts.then_some(s.amount_minor),
+                        ..whole.clone()
+                    })
+                    .collect()
+            })
+            .collect(),
+    );
     let spending = pick(&[Kind::Expense]);
     let charges = pick(&[Kind::Charge]);
     let refunds_and_reversals = pick(&[Kind::Refund, Kind::Reversal]);
@@ -493,28 +515,37 @@ pub async fn check_contribution(conn: &mut SqliteConnection, input: &str) -> App
     let code = extract_code(input).ok_or_else(|| {
         AppError::field("code", "Enter the M-Pesa code from your confirmation message, for example TK3AB12CD4.")
     })?;
-    let found: Option<(String, i64, Option<String>, bool)> = sqlx::query_as(
+    let found: Option<(String, i64, Option<String>, bool, i64)> = sqlx::query_as(
         "SELECT v.occurred_at, v.amount_minor, t.public_name,
                 EXISTS (SELECT 1 FROM statement_rows r JOIN statement_imports i ON i.id = r.import_id
-                        WHERE r.transaction_id = t.id AND i.status = 'ready')
+                        WHERE r.transaction_id = t.id AND i.status = 'ready'),
+                t.id
          FROM transaction_versions v JOIN transactions t ON t.id = v.transaction_id
          WHERE v.is_current = 1 AND v.removed = 0 AND v.kind = 'contribution' AND v.reference = ?
          LIMIT 1",
     )
     .bind(&code)
-    .fetch_optional(conn)
+    .fetch_optional(&mut *conn)
     .await?;
     Ok(match found {
         None => CheckResult { found: false, contribution: None },
-        Some((at, amount_minor, public_name, matched)) => CheckResult {
-            found: true,
-            contribution: Some(CheckedContribution {
-                at,
-                amount_minor,
-                listed_as: public_name.unwrap_or(fundraiser.anonymous_label),
-                matched_to_statement: matched,
-            }),
-        },
+        Some((at, amount_minor, public_name, matched, id)) => {
+            // A shared payment is listed under each person who shared it.
+            let shared = crate::transactions::shares(conn, id).await?;
+            let listed_as = if shared.is_empty() {
+                public_name.unwrap_or(fundraiser.anonymous_label)
+            } else {
+                shared
+                    .iter()
+                    .map(|s| s.public_name.clone().unwrap_or_else(|| fundraiser.anonymous_label.clone()))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            CheckResult {
+                found: true,
+                contribution: Some(CheckedContribution { at, amount_minor, listed_as, matched_to_statement: matched }),
+            }
+        }
     })
 }
 

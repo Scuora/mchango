@@ -252,7 +252,29 @@ impl Presentation {
     }
 }
 
-fn clean_optional(value: Option<String>, max: usize, field: &'static str) -> AppResult<Option<String>> {
+/// One person's part of a payment shared by several people.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Share {
+    /// `None` shows the fundraiser's anonymous label.
+    #[serde(default)]
+    pub public_name: Option<String>,
+    pub amount_minor: i64,
+}
+
+/// A share as sent by the client.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ShareInput {
+    #[serde(default)]
+    pub public_name: Option<String>,
+    pub amount_minor: Amount,
+}
+
+/// Shares as stored with a record (a JSON array); empty when the payment is not shared.
+pub fn parse_shares(json: &str) -> Vec<Share> {
+    serde_json::from_str(json).unwrap_or_default()
+}
+
+pub(crate) fn clean_optional(value: Option<String>, max: usize, field: &'static str) -> AppResult<Option<String>> {
     let Some(value) = value else { return Ok(None) };
     let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
     if value.is_empty() {

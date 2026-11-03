@@ -52,6 +52,10 @@ export function ReconciliationBadge({ status }: { status: ReconciliationStatus }
 
 /** The most useful short name for a record in a management list. */
 export function itemLabel(item: ListItem): string {
+  if (item.kind === "contribution" && item.shares?.length) {
+    const names = item.shares.map((s) => s.public_name ?? "Anonymous");
+    return names.length <= 2 ? names.join(" & ") : `${names[0]}, ${names[1]} +${names.length - 2}`;
+  }
   if (item.kind === "contribution" || item.kind === "pledge") {
     return item.public_name ?? item.counterparty ?? "Anonymous";
   }

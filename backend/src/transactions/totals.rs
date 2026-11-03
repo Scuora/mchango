@@ -8,7 +8,7 @@ use serde::Serialize;
 use sqlx::SqliteConnection;
 use std::collections::BTreeMap;
 
-use super::{Direction, Kind, PledgedBy};
+use super::{Direction, Kind, PledgedBy, Share, parse_shares};
 use crate::error::AppResult;
 
 /// A current fundraiser record (everything except personal activity).
@@ -29,6 +29,17 @@ pub struct FundraiserRecord {
     /// The challenge it came in through. Its money still counts once, in the main totals.
     pub challenge_id: Option<i64>,
     pub matched: bool,
+    /// For a payment from several people: who it is from. Empty when from one.
+    #[sqlx(skip)]
+    pub shares: Vec<Share>,
+    pub shares_json: String,
+}
+
+impl FundraiserRecord {
+    /// How many people a contribution is from: each share, or one.
+    pub fn people(&self) -> i64 {
+        (self.shares.len() as i64).max(1)
+    }
 }
 
 pub async fn fundraiser_records(conn: &mut SqliteConnection) -> AppResult<Vec<FundraiserRecord>> {
@@ -36,7 +47,10 @@ pub async fn fundraiser_records(conn: &mut SqliteConnection) -> AppResult<Vec<Fu
         "SELECT t.id, v.kind, v.direction, v.amount_minor, v.occurred_at, v.account_id, v.to_account_id,
                 v.reference, v.related_transaction_id, t.public_name, t.description, t.pledged_by, t.challenge_id,
                 EXISTS (SELECT 1 FROM statement_rows r JOIN statement_imports i ON i.id = r.import_id
-                        WHERE r.transaction_id = t.id AND i.status = 'ready') AS matched
+                        WHERE r.transaction_id = t.id AND i.status = 'ready') AS matched,
+                (SELECT json_group_array(json_object('public_name', s.public_name, 'amount_minor', s.amount_minor))
+                   FROM (SELECT public_name, amount_minor FROM contribution_shares
+                          WHERE transaction_id = t.id ORDER BY position) s) AS shares_json
          FROM transactions t
          JOIN transaction_versions v ON v.transaction_id = t.id AND v.is_current = 1
          WHERE v.removed = 0 AND v.kind <> 'personal'
@@ -44,7 +58,13 @@ pub async fn fundraiser_records(conn: &mut SqliteConnection) -> AppResult<Vec<Fu
     )
     .fetch_all(conn)
     .await?;
-    Ok(rows)
+    Ok(rows
+        .into_iter()
+        .map(|mut r: FundraiserRecord| {
+            r.shares = parse_shares(&r.shares_json);
+            r
+        })
+        .collect())
 }
 
 #[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
@@ -79,7 +99,7 @@ impl Totals {
             match (r.kind, r.direction) {
                 (Kind::Contribution, _) => {
                     t.contributions_minor += amount;
-                    t.contributions_count += 1;
+                    t.contributions_count += r.people();
                 }
                 (Kind::Expense, _) => {
                     t.expenses_minor += amount;
@@ -240,7 +260,7 @@ pub fn challenge_totals(records: &[FundraiserRecord]) -> BTreeMap<i64, Challenge
         match r.kind {
             Kind::Contribution => {
                 t.raised_minor += r.amount_minor;
-                t.contributions_count += 1;
+                t.contributions_count += r.people();
                 if t.last_received_at.as_deref().is_none_or(|last| r.occurred_at.as_str() > last) {
                     t.last_received_at = Some(r.occurred_at.clone());
                 }
@@ -319,6 +339,8 @@ mod tests {
             pledged_by: None,
             challenge_id: None,
             matched: false,
+            shares: Vec::new(),
+            shares_json: String::new(),
         }
     }
 

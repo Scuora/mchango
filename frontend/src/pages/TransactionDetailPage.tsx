@@ -1,4 +1,4 @@
-import { ArrowLeft, Eye, EyeOff, FilePlus2, FileText, HandCoins, History, PencilLine, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, FilePlus2, FileText, HandCoins, History, PencilLine, Save, Trash2, Users } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
 import { LoadState, SaveError } from "@/components/LoadState";
@@ -9,6 +9,7 @@ import { Checkbox, Field, Textarea } from "@/components/ui/form";
 import { Dialog } from "@/components/ui/dialog";
 import { Badge, Card, CardBody, CardHeader, Detail, EmptyState, Notice } from "@/components/ui/misc";
 import { ChallengePicker, canJoinChallenge } from "@/features/challenges";
+import { SharesEditor, buildShares, draftsFrom, type ShareDraft } from "@/features/shares";
 import { MovementFields, apiDraftErrors, buildMovement, draftFromItem, type DraftErrors, type MovementDraft } from "@/features/movementForm";
 import { PresentationFields, presentationDraftFrom, toPresentation, type PresentationDraft } from "@/features/presentationFields";
 import { api, fieldError, useResource } from "@/lib/api";
@@ -124,6 +125,7 @@ export function TransactionDetailPage() {
             <PresentationCard detail={d} anonymousLabel={settings.data?.anonymous_label} onSaved={detail.setData} />
           )}
           {t.kind === "personal" && <PresentationCard detail={d} onSaved={detail.setData} notesOnly />}
+          {!t.removed && t.kind === "contribution" && <SharesCard detail={d} anonymousLabel={settings.data?.anonymous_label} onSaved={detail.setData} />}
           {!t.removed && canJoinChallenge(t.kind) && <ChallengeCard detail={d} onSaved={detail.setData} />}
 
           {(t.kind === "expense" || receipts.length > 0) && <ReceiptsCard detail={d} receipts={receipts} onChanged={detail.reload} onSaved={detail.setData} />}
@@ -236,6 +238,84 @@ export function TransactionDetailPage() {
       )}
       <RemoveDialog open={removing} onClose={() => setRemoving(false)} detail={d} onSaved={detail.setData} />
     </div>
+  );
+}
+
+/** Who a payment is from: one person, or several, each with their part. No money moves when it changes. */
+function SharesCard({ detail, anonymousLabel, onSaved }: { detail: DetailData; anonymousLabel?: string; onSaved: (d: DetailData) => void }) {
+  const t = detail.transaction;
+  const [editing, setEditing] = useState(false);
+  const [rows, setRows] = useState<ShareDraft[]>(() => draftsFrom(t.shares));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  async function save(shares: { public_name: string | null; amount_minor: number }[]) {
+    setBusy(true);
+    setError(undefined);
+    try {
+      onSaved(await api.put<DetailData>(`/api/manage/transactions/${t.id}/shares`, { shares }));
+      setEditing(false);
+    } catch (e) {
+      setError(fieldError(e, "shares") ?? (e instanceof Error ? e.message : "The shares could not be saved."));
+    } finally {
+      setBusy(false);
+    }
+  }
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const built = buildShares(rows, t.amount_minor);
+    if ("error" in built) setError(built.error);
+    else void save(built.shares);
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Who it's from"
+        description="One payment can be from several people. Each is listed on their own publicly; the money counts once."
+        actions={
+          !editing && (
+            <Button variant="secondary" size="sm" icon={<Users className="size-4" aria-hidden />} onClick={() => (setRows(draftsFrom(t.shares)), setEditing(true))}>
+              {t.shares.length ? "Change the shares" : "Share among several people"}
+            </Button>
+          )
+        }
+      />
+      <CardBody>
+        {editing ? (
+          <form onSubmit={submit} className="space-y-3">
+            <SharesEditor total={t.amount_minor} value={rows} onChange={setRows} anonymousLabel={anonymousLabel} error={error} idPrefix="tx-sh" />
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" size="sm" busy={busy} icon={<Save className="size-4" aria-hidden />}>
+                Save shares
+              </Button>
+              {t.shares.length > 0 && (
+                <Button type="button" variant="ghost" size="sm" busy={busy} onClick={() => void save([])}>
+                  Make it one person&rsquo;s again
+                </Button>
+              )}
+              <Button type="button" variant="ghost" size="sm" onClick={() => (setEditing(false), setError(undefined))}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : t.shares.length ? (
+          <ol className="divide-y divide-stone-100 text-[15px]">
+            {t.shares.map((s, i) => (
+              <li key={i} className="flex justify-between gap-3 py-1.5">
+                <span className="text-stone-800">
+                  <span className="mr-2 text-stone-400 tabular-nums">{i + 1}.</span>
+                  {s.public_name ?? anonymousLabel ?? "Anonymous contributor"}
+                </span>
+                <span className="font-semibold tabular-nums">{formatKes(s.amount_minor)}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="text-sm text-stone-600">From one person, listed under the public name above.</p>
+        )}
+      </CardBody>
+    </Card>
   );
 }
 

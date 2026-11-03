@@ -120,13 +120,16 @@ export function useShareContext() {
 
 /** Money received through the challenge, as it may be shown publicly: public names (or the anonymous label), oldest first. */
 export function publicEntries(items: ListItem[], settings: Fundraiser | null | undefined): ChallengeEntry[] {
+  const anonymous = settings?.anonymous_label ?? "Anonymous contributor";
+  const amount = (minor: number) => (settings?.show_contribution_amounts === false ? null : minor);
   return items
     .filter((i) => i.kind === "contribution" && !i.removed)
     .sort((a, b) => a.occurred_at.localeCompare(b.occurred_at) || a.id - b.id)
-    .map((i) => ({
-      label: i.public_name ?? settings?.anonymous_label ?? "Anonymous contributor",
-      amount_minor: settings?.show_contribution_amounts === false ? null : i.amount_minor,
-    }));
+    .flatMap((i) =>
+      i.shares?.length
+        ? i.shares.map((s) => ({ label: s.public_name ?? anonymous, amount_minor: amount(s.amount_minor) }))
+        : [{ label: i.public_name ?? anonymous, amount_minor: amount(i.amount_minor) }],
+    );
 }
 
 /** The message to share: the family's own template when it has one ("template"), or the standard update. */

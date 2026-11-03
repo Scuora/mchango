@@ -56,6 +56,7 @@ pub fn routes(config: &Config) -> Router<AppState> {
         .route("/api/manage/transactions/{id}/presentation", put(update_presentation))
         .route("/api/manage/transactions/{id}/corrections", post(correct_transaction))
         .route("/api/manage/transactions/{id}/challenge", put(set_transaction_challenge))
+        .route("/api/manage/transactions/{id}/shares", put(set_transaction_shares))
         .route("/api/manage/transactions/{id}/receipts", post(upload_receipt).layer(upload_limit))
         .route("/api/manage/documents/{id}/file", get(document_file))
         .route("/api/manage/documents/{id}/publish", post(publish_document))
@@ -337,6 +338,24 @@ async fn set_transaction_challenge(
 ) -> AppResult<Json<Detail>> {
     let mut tx = db::begin_write(&state.pool).await?;
     challenges::set_for_transaction(&mut tx, id, request.challenge_id).await?;
+    tx.commit().await?;
+    let mut conn = state.pool.acquire().await?;
+    Ok(Json(transactions::detail(&mut conn, id).await?))
+}
+
+#[derive(Deserialize)]
+struct SetShares {
+    /// Empty makes the payment one person's again.
+    shares: Vec<transactions::ShareInput>,
+}
+
+async fn set_transaction_shares(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(request): Json<SetShares>,
+) -> AppResult<Json<Detail>> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    transactions::set_shares(&mut tx, id, request.shares).await?;
     tx.commit().await?;
     let mut conn = state.pool.acquire().await?;
     Ok(Json(transactions::detail(&mut conn, id).await?))

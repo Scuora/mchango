@@ -3,9 +3,10 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LoadState, SaveError } from "@/components/LoadState";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { Field, Input, Textarea } from "@/components/ui/form";
+import { Checkbox, Field, Input, Textarea } from "@/components/ui/form";
 import { Badge, Card, CardBody, CardHeader, Notice } from "@/components/ui/misc";
 import { ChallengePicker, canJoinChallenge } from "@/features/challenges";
+import { SharesEditor, buildShares, type ShareDraft } from "@/features/shares";
 import {
   MovementFields,
   apiDraftErrors,
@@ -42,6 +43,10 @@ export function AddTransactionPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<unknown>(null);
   const [formKey, setFormKey] = useState(newFormKey);
+  // A payment from several people: who it is from, each with their part.
+  const [shared, setShared] = useState(false);
+  const [shareRows, setShareRows] = useState<ShareDraft[]>([]);
+  const [sharesError, setSharesError] = useState<string | undefined>();
   // From the Pledges page: `?kind=pledge&by=family` starts a new pledge; `?pledge=12` records money for pledge 12.
   const [params] = useSearchParams();
   const pledgeFor = params.get("pledge");
@@ -95,6 +100,9 @@ export function AddTransactionPage() {
     setSaveError(null);
     setReadError(null);
     setChallenge(challengeFor ?? "");
+    setShared(false);
+    setShareRows([]);
+    setSharesError(undefined);
   }
 
   async function readMessage(event: FormEvent) {
@@ -187,6 +195,17 @@ export function AddTransactionPage() {
       return;
     }
     if (chargeProblem) return;
+    let shares = null;
+    if (shared && draft.kind === "contribution") {
+      const parsedTotal = parseKes(draft.amount);
+      const builtShares = buildShares(shareRows, parsedTotal.ok ? parsedTotal.minor : null);
+      if ("error" in builtShares) {
+        setSharesError(builtShares.error);
+        return;
+      }
+      shares = builtShares.shares;
+    }
+    setSharesError(undefined);
     setErrors({});
     const body: CreateRequest = {
       movement: built.movement,
@@ -196,6 +215,7 @@ export function AddTransactionPage() {
       client_key: formKey,
       confirm_possible_duplicate: confirmPossibleDuplicate,
       challenge_id: canJoinChallenge(draft.kind) && challenge ? Number(challenge) : null,
+      shares,
     };
     setSaving(true);
     try {
@@ -205,6 +225,7 @@ export function AddTransactionPage() {
       setSaveError(e);
       setErrors(apiDraftErrors(e));
       setChargeError(fieldError(e, "charge_minor"));
+      setSharesError(fieldError(e, "shares"));
     } finally {
       setSaving(false);
     }
@@ -350,6 +371,29 @@ export function AddTransactionPage() {
               error={saveError}
               idPrefix="add-p"
             />
+            {draft.kind === "contribution" && (
+              <div className="mt-4 space-y-3 rounded-xl border border-stone-200 p-4">
+                <Checkbox
+                  checked={shared}
+                  onChange={(e) => setShared(e.target.checked)}
+                  label="From several people"
+                  hint="One payment for several names, e.g. KES 1,000 for five people. Each person is listed on their own; the money counts once."
+                />
+                {shared && (
+                  <SharesEditor
+                    total={(() => {
+                      const parsed = parseKes(draft.amount);
+                      return parsed.ok ? parsed.minor : null;
+                    })()}
+                    value={shareRows}
+                    onChange={setShareRows}
+                    anonymousLabel={settings.data?.anonymous_label}
+                    error={sharesError}
+                    idPrefix="add-sh"
+                  />
+                )}
+              </div>
+            )}
             {canJoinChallenge(draft.kind) && (
               <Field
                 label="Came in through a challenge"
