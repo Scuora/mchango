@@ -1,6 +1,6 @@
 import { LockKeyhole } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { safeNext } from "@/features/auth";
 import { useDismissBoot } from "@/lib/boot";
 import { ApiError, api, errorMessage } from "@/lib/api";
@@ -84,7 +84,7 @@ export function LoginPage() {
           </Button>
         </form>
         <p className="mt-4 text-center text-sm">
-          <a href="/">View the public page</a>
+          <Link to="/">View the public page</Link>
         </p>
       </div>
     </main>

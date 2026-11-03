@@ -5,8 +5,10 @@ import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { RequireAuth, useAuth } from "@/features/auth";
 import { useResource } from "@/lib/api";
 import { useDismissBoot } from "@/lib/boot";
+import { prefetchManagement } from "@/lib/lazyPages";
 import type { Fundraiser } from "@/lib/types";
 import { LoadState } from "./LoadState";
+import { PageErrorBoundary } from "./PageErrorBoundary";
 import { ButtonLink } from "./ui/button";
 import { Notice, Spinner } from "./ui/misc";
 
@@ -71,6 +73,8 @@ function Shell() {
   const [moreOpen, setMoreOpen] = useState(false);
   const { pathname } = useLocation();
   useEffect(() => setMoreOpen(false), [pathname]);
+  // Signed in: fetch every page now, so moving between them never waits on the network.
+  useEffect(prefetchManagement, []);
   const fundraiser = settings.data;
   const name = fundraiser?.memorial_name || fundraiser?.name || "Fundraiser";
   const photo = fundraiser?.memorial_photo_updated_at
@@ -158,7 +162,9 @@ function Shell() {
             )}
             <Suspense fallback={<Spinner />}>
               <div key={pathname} className="page-enter">
-                <Outlet />
+                <PageErrorBoundary>
+                  <Outlet />
+                </PageErrorBoundary>
               </div>
             </Suspense>
           </div>

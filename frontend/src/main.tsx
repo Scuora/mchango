@@ -5,9 +5,11 @@ import "@fontsource-variable/source-sans-3";
 import "./index.css";
 import { useDismissBoot } from "@/lib/boot";
 
-import { StrictMode, Suspense, lazy } from "react";
+import { StrictMode, Suspense, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Link, Route, Routes } from "react-router";
+import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router";
+import { PageErrorBoundary } from "@/components/PageErrorBoundary";
+import { lazyPage } from "@/lib/lazyPages";
 import { PublicLayout } from "@/public/PublicLayout";
 import { ContributionsPage } from "@/public/ContributionsPage";
 import { ContributePage } from "@/public/ContributePage";
@@ -16,22 +18,26 @@ import { CheckPage, ExpensesPage, HomePage, UpdatesPage } from "@/public/pages";
 import { TrendsPage } from "@/public/TrendsPage";
 
 // Management is loaded separately, so visitors to the public page never
-// download it (or PrimeReact).
-const page = <K extends string>(load: () => Promise<Record<K, React.ComponentType>>, name: K) =>
-  lazy(() => load().then((module) => ({ default: module[name] })));
-const ManageLayout = page(() => import("@/components/ManageLayout"), "ManageLayout");
-const LoginPage = page(() => import("@/pages/LoginPage"), "LoginPage");
-const OverviewPage = page(() => import("@/pages/OverviewPage"), "OverviewPage");
-const AddTransactionPage = page(() => import("@/pages/AddTransactionPage"), "AddTransactionPage");
-const TransactionsPage = page(() => import("@/pages/TransactionsPage"), "TransactionsPage");
-const PledgesPage = page(() => import("@/pages/PledgesPage"), "PledgesPage");
-const TransactionDetailPage = page(() => import("@/pages/TransactionDetailPage"), "TransactionDetailPage");
-const StatementsPage = page(() => import("@/pages/StatementsPage"), "StatementsPage");
-const StatementDetailPage = page(() => import("@/pages/StatementDetailPage"), "StatementDetailPage");
-const SettingsPage = page(() => import("@/pages/SettingsPage"), "SettingsPage");
-const SharePage = page(() => import("@/pages/SharePage"), "SharePage");
-const AnnouncementsPage = page(() => import("@/pages/AnnouncementsPage"), "AnnouncementsPage");
-const ReportsPage = page(() => import("@/pages/ReportsPage"), "ReportsPage");
+// download it (or PrimeReact). See lib/lazyPages.
+const ManageLayout = lazyPage("ManageLayout");
+const LoginPage = lazyPage("LoginPage");
+const OverviewPage = lazyPage("OverviewPage");
+const AddTransactionPage = lazyPage("AddTransactionPage");
+const TransactionsPage = lazyPage("TransactionsPage");
+const PledgesPage = lazyPage("PledgesPage");
+const TransactionDetailPage = lazyPage("TransactionDetailPage");
+const StatementsPage = lazyPage("StatementsPage");
+const StatementDetailPage = lazyPage("StatementDetailPage");
+const SettingsPage = lazyPage("SettingsPage");
+const SharePage = lazyPage("SharePage");
+const AnnouncementsPage = lazyPage("AnnouncementsPage");
+const ReportsPage = lazyPage("ReportsPage");
+
+/** A page that fails to load shows a notice in place; moving to another page clears it. */
+function RouteBoundary({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  return <PageErrorBoundary resetKey={pathname}>{children}</PageErrorBoundary>;
+}
 
 function NotFound() {
   useDismissBoot(true);
@@ -49,6 +55,7 @@ function NotFound() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
+      <RouteBoundary>
       <Suspense fallback={null}>
         <Routes>
         <Route element={<PublicLayout />}>
@@ -78,6 +85,7 @@ createRoot(document.getElementById("root")!).render(
         <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
+      </RouteBoundary>
     </BrowserRouter>
   </StrictMode>,
 );

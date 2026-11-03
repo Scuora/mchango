@@ -29,7 +29,16 @@
   status = 200
   force = true
 
-# 2. Single-page app: every other path (including /manage) renders index.html.
+# 2. A build file that no longer exists (a tab opened before the latest deploy
+#    asking for an old page file) is a plain 404, not index.html: HTML in place
+#    of JavaScript fails as "MIME type text/html", and would be cached under the
+#    year-long /assets headers below. Existing files are served before this rule.
+[[redirects]]
+  from = "/assets/*"
+  to = "/404.html"
+  status = 404
+
+# 3. Single-page app: every other path (including /manage) renders index.html.
 [[redirects]]
   from = "/*"
   to = "/index.html"
