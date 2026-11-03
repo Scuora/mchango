@@ -1,7 +1,7 @@
 // Shared pieces for challenges: the editor, status badges, progress and the
 // "copy update" button used on the list and on each challenge's page.
 
-import { Check, Copy, MessageCircle, Plus, Save, Trophy } from "lucide-react";
+import { Check, Copy, MessageCircle, Plus, Save, Trash2, Trophy } from "lucide-react";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { SaveError } from "@/components/LoadState";
 import { PledgeProgressBar } from "@/components/pledges";
@@ -10,10 +10,10 @@ import { Checkbox, Field, Input, Textarea } from "@/components/ui/form";
 import { Badge, Card, CardBody, CardHeader } from "@/components/ui/misc";
 import { Choice, DateField } from "@/components/ui/pickers";
 import { api, fieldError, useResource } from "@/lib/api";
-import { STARTER_TEMPLATE, TEMPLATE_FIELDS, buildChallengeUpdate, fillTemplate, type ChallengeEntry, type ShareLang } from "@/lib/challengeShare";
+import { STARTERS, TEMPLATE_GROUPS, buildChallengeUpdate, fillTemplate, type ChallengeEntry, type ShareLang } from "@/lib/challengeShare";
 import { formatKesShort, parseKes } from "@/lib/money";
 import { formatNairobiDate } from "@/lib/time";
-import type { Account, AccountKind, ChallengeInput, ChallengeSummary, Detail, Fundraiser, GivingMethod, Kind, ListItem, ListResponse, PublicPreview } from "@/lib/types";
+import type { Account, AccountKind, ChallengeInput, ChallengeMessage, ChallengeSummary, Detail, Fundraiser, GivingMethod, Kind, ListItem, ListResponse, PublicPreview } from "@/lib/types";
 import { copyText } from "@/public/share";
 
 /** Only money received and pledges come in through a challenge. */
@@ -55,13 +55,13 @@ export const emptyChallenge: ChallengeInput = {
   giving_number: "",
   giving_account: "",
   giving_name: "",
-  message_template: "",
+  messages: [],
 };
 
 export function challengeInput(c: ChallengeSummary): ChallengeInput {
   const { name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published, account_id } = c;
-  const { giving_method, giving_number, giving_account, giving_name, message_template } = c;
-  return { name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published, account_id, giving_method, giving_number, giving_account, giving_name, message_template };
+  const { giving_method, giving_number, giving_account, giving_name, messages } = c;
+  return { name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published, account_id, giving_method, giving_number, giving_account, giving_name, messages };
 }
 
 /** Where givers send money for a challenge: its own details when set, else the fundraiser's. */
@@ -115,7 +115,8 @@ export function useShareContext() {
   const settings = useResource<Fundraiser>("/api/manage/settings");
   const preview = useResource<PublicPreview>("/api/manage/public-preview");
   const publicUrl = preview.data?.public_url ?? null;
-  return useMemo(() => ({ settings: settings.data, publicUrl }), [settings.data, publicUrl]);
+  const page = preview.data?.page ?? null;
+  return useMemo(() => ({ settings: settings.data, publicUrl, page }), [settings.data, publicUrl, page]);
 }
 
 /** Money received through the challenge, as it may be shown publicly: public names (or the anonymous label), oldest first. */
@@ -132,8 +133,11 @@ export function publicEntries(items: ListItem[], settings: Fundraiser | null | u
     );
 }
 
-/** The message to share: the family's own template when it has one ("template"), or the standard update. */
-export type ShareMode = "template" | ShareLang;
+/** The message to share: one of the challenge's own (`own-0`, `own-1`, …) or the standard update in a language. */
+export type ShareMode = `own-${number}` | ShareLang;
+
+export const ownMode = (index: number): ShareMode => `own-${index}`;
+export const isOwnMode = (mode: ShareMode): mode is `own-${number}` => mode.startsWith("own-");
 
 export function shareText(
   challenge: ChallengeSummary,
@@ -141,13 +145,15 @@ export function shareText(
   options: { lang: ShareMode; entries?: ChallengeEntry[]; includeList?: boolean; includeGiving?: boolean; includeLink?: boolean },
 ): string {
   const s = ctx.settings;
-  if (options.lang === "template") {
-    return fillTemplate(challenge.message_template, {
+  if (isOwnMode(options.lang)) {
+    const message = challenge.messages[Number(options.lang.slice(4))] ?? challenge.messages[0];
+    return fillTemplate(message?.body ?? "", {
       challenge,
       entries: options.entries ?? [],
       memorialName: s?.memorial_name || null,
       giving: challengeGiving(challenge, s).giving,
       publicUrl: ctx.publicUrl,
+      fundraiser: ctx.page,
     });
   }
   return buildChallengeUpdate({
@@ -163,48 +169,89 @@ export function shareText(
   });
 }
 
-/** The family's own WhatsApp message: written their way, with {placeholders} for the live figures. */
-function TemplateField({ value, onChange, error }: { value: string; onChange: (v: string) => void; error?: string }) {
+/** The family's own WhatsApp messages: written their way, with {placeholders} for the live figures. */
+function MessagesField({ value, onChange, error }: { value: ChallengeMessage[]; onChange: (v: ChallengeMessage[]) => void; error?: string }) {
+  const set = (i: number, patch: Partial<ChallengeMessage>) => onChange(value.map((m, j) => (j === i ? { ...m, ...patch } : m)));
+  const unused = STARTERS.filter((s) => !value.some((m) => m.body === s.body));
+  return (
+    <fieldset className="space-y-4 rounded-xl border border-stone-200 p-4">
+      <legend className="px-1 font-semibold text-stone-800">WhatsApp messages (optional)</legend>
+      <p className="-mt-1 text-sm text-stone-600">
+        Write each message the way you share it. Words in braces are filled in with the latest figures each time you copy it; tap one to add it. With none, the standard update is used.
+      </p>
+      {value.map((m, i) => (
+        <MessageEditor key={i} index={i} message={m} onChange={(patch) => set(i, patch)} onRemove={() => onChange(value.filter((_, j) => j !== i))} />
+      ))}
+      {error && (
+        <p className="text-sm font-medium text-brick-700" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {value.length < 10 && (
+          <Button type="button" variant="secondary" size="sm" icon={<Plus className="size-4" aria-hidden />} onClick={() => onChange([...value, { title: "", body: "" }])}>
+            {value.length ? "Add another message" : "Add a message"}
+          </Button>
+        )}
+        {value.length < 10 &&
+          unused.map((s) => (
+            <Button key={s.title} type="button" variant="ghost" size="sm" onClick={() => onChange([...value, s])}>
+              Add the example &ldquo;{s.title}&rdquo;
+            </Button>
+          ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function MessageEditor({ index, message, onChange, onRemove }: { index: number; message: ChallengeMessage; onChange: (patch: Partial<ChallengeMessage>) => void; onRemove: () => void }) {
   const box = useRef<HTMLTextAreaElement>(null);
   function insert(key: string) {
     const area = box.current;
     const token = `{${key}}`;
-    if (!area) return onChange(value + token);
+    if (!area) return onChange({ body: message.body + token });
     const [start, end] = [area.selectionStart, area.selectionEnd];
-    onChange(value.slice(0, start) + token + value.slice(end));
+    onChange({ body: message.body.slice(0, start) + token + message.body.slice(end) });
     requestAnimationFrame(() => {
       area.focus();
       area.setSelectionRange(start + token.length, start + token.length);
     });
   }
   return (
-    <fieldset className="space-y-3 rounded-xl border border-stone-200 p-4">
-      <legend className="px-1 font-semibold text-stone-800">WhatsApp message (optional)</legend>
-      <p className="-mt-1 text-sm text-stone-600">
-        Write the message the way you share it. Words in braces are filled in with the latest figures each time you copy it; tap one to add it. Left empty, the standard update is used.
-      </p>
-      <Field label="Message template" htmlFor="ch-template" optional error={error}>
-        <Textarea ref={box} id="ch-template" rows={12} className="font-mono text-sm" value={value} placeholder={STARTER_TEMPLATE} onChange={(e) => onChange(e.target.value)} />
-      </Field>
-      <div className="flex flex-wrap gap-1.5">
-        {TEMPLATE_FIELDS.map(([key, meaning]) => (
-          <button
-            key={key}
-            type="button"
-            title={meaning}
-            onClick={() => insert(key)}
-            className="press min-h-8 cursor-pointer rounded-full bg-stone-100 px-2.5 font-mono text-[13px] text-stone-700 ring-1 ring-stone-200 hover:bg-plum-50 hover:text-plum-900"
-          >
-            {`{${key}}`}
-          </button>
-        ))}
-      </div>
-      {!value && (
-        <Button type="button" variant="secondary" size="sm" onClick={() => onChange(STARTER_TEMPLATE)}>
-          Start from an example
+    <div className="space-y-2 rounded-lg bg-stone-50 p-3">
+      <div className="flex items-end gap-2">
+        <Field label="Title" htmlFor={`ch-msg-${index}-title`} className="flex-1">
+          <Input id={`ch-msg-${index}-title`} value={message.title} maxLength={60} placeholder={`Message ${index + 1}`} onChange={(e) => onChange({ title: e.target.value })} />
+        </Field>
+        <Button type="button" variant="ghost" size="sm" icon={<Trash2 className="size-4" aria-hidden />} onClick={onRemove}>
+          Remove
         </Button>
-      )}
-    </fieldset>
+      </div>
+      <Textarea ref={box} aria-label={`Message ${index + 1}`} rows={12} className="font-mono text-sm" value={message.body} onChange={(e) => onChange({ body: e.target.value })} />
+      <details className="text-sm">
+        <summary className="cursor-pointer font-medium text-stone-700">Figures you can add</summary>
+        <div className="mt-2 space-y-2">
+          {TEMPLATE_GROUPS.map((group) => (
+            <div key={group.label}>
+              <p className="mb-1 text-[13px] font-semibold tracking-wide text-stone-500 uppercase">{group.label}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {group.fields.map(([key, meaning]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    title={meaning}
+                    onClick={() => insert(key)}
+                    className="press min-h-8 cursor-pointer rounded-full bg-white px-2.5 font-mono text-[13px] text-stone-700 ring-1 ring-stone-200 hover:bg-plum-50 hover:text-plum-900"
+                  >
+                    {`{${key}}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </details>
+    </div>
   );
 }
 
@@ -310,11 +357,22 @@ export function UpdatedChallengeMessage({ transactionId }: { transactionId: numb
   if (!challengeId || !summary.data || !records.data) return null;
   const c = summary.data;
   const entries = publicEntries(records.data.items, share.settings);
-  const text = shareText(c, share, c.message_template ? { lang: "template", entries } : { lang: "en", entries, includeList: true });
+  const [mode, setMode] = useState<ShareMode>(ownMode(0));
+  const chosen: ShareMode = c.messages.length ? (isOwnMode(mode) ? mode : ownMode(0)) : "en";
+  const text = shareText(c, share, { lang: chosen, entries, includeList: true });
   return (
     <Card>
       <CardHeader title={`Updated message for “${c.name}”`} description="With this contribution included. Copy it and post it to the group." />
       <CardBody className="space-y-3">
+        {c.messages.length > 1 && (
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Message">
+            {c.messages.map((m, i) => (
+              <Button key={i} size="sm" variant={chosen === ownMode(i) ? "primary" : "secondary"} role="radio" aria-checked={chosen === ownMode(i)} onClick={() => setMode(ownMode(i))}>
+                {m.title}
+              </Button>
+            ))}
+          </div>
+        )}
         <Textarea aria-label="Updated challenge message" readOnly rows={12} className="font-mono text-sm" value={text} />
         <div className="flex flex-wrap gap-2">
           <Button
@@ -360,7 +418,7 @@ export function ChallengeEditor({ id, initial, onDone, onCancel }: { id: number 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const set = <K extends keyof ChallengeInput>(key: K, value: ChallengeInput[K]) => setInput((i) => ({ ...i, [key]: value }));
-  const fields = ["name", "name_sw", "description", "description_sw", "starts_on", "ends_on", "target_minor", "account_id", "giving_number", "giving_account", "giving_name"];
+  const fields = ["name", "name_sw", "description", "description_sw", "starts_on", "ends_on", "target_minor", "account_id", "giving_number", "giving_account", "giving_name", "messages"];
   const method = input.giving_method;
 
   async function save(event: FormEvent) {
@@ -462,7 +520,7 @@ export function ChallengeEditor({ id, initial, onDone, onCancel }: { id: number 
               <Textarea id="ch-description-sw" lang="sw" rows={4} value={input.description_sw} onChange={(e) => set("description_sw", e.target.value)} />
             </Field>
           </fieldset>
-          <TemplateField value={input.message_template} onChange={(v) => set("message_template", v)} error={fieldError(error, "message_template")} />
+          <MessagesField value={input.messages} onChange={(v) => set("messages", v)} error={fieldError(error, "messages")} />
           <Checkbox checked={input.published} onChange={(e) => set("published", e.target.checked)} label="Show on the public page" hint="Visitors see the challenge and what it has raised. Contributions stay listed as usual." />
           {id !== null && (
             <Checkbox

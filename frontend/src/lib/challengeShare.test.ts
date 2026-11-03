@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { STARTER_TEMPLATE, buildChallengeUpdate, fillTemplate } from "./challengeShare";
+import { FUNDRAISER_TEMPLATE, STARTER_TEMPLATE, buildChallengeUpdate, fillTemplate } from "./challengeShare";
+import type { PublicPage } from "./types";
 
 const challenge = {
   name: "Cousins' 1,000 challenge",
@@ -67,5 +68,28 @@ describe("challenge update", () => {
   it("leaves no gap when a placeholder is empty", () => {
     const text = fillTemplate("{name}\n\n{list}\n\nSalio : KSh {remaining}", { ...base, entries: [] });
     expect(text).toBe("Cousins' 1,000 challenge\n\nSalio : KSh 38,000");
+  });
+
+  it("fills the fundraiser's general update from the public view", () => {
+    const entry = (label: string, amount: number, hour: number) => ({ label, amount_minor: amount, date: "2026-11-03", at: `2026-11-03T0${hour}:00:00Z`, kind: "contribution" as const, direction: "in" as const, reference_hint: null, matched_to_statement: false, receipts: [] });
+    const group = (pledged: number, received: number, outstanding: number) => ({ count: 1, pledged_minor: pledged, received_minor: received, outstanding_minor: outstanding });
+    const page = {
+      fundraiser: {
+        name: "Funeral", memorial_name: "Dr. Joseph Karisa Gonzi", memorial_dates: "22 October 1952 – 1 November 2026", memorial_tribute: "Kalale Pehoni Daktari",
+        target_minor: 1_100_000_00, pledges: { family: group(570_000_00, 0, 570_000_00), friends: group(100_000_00, 0, 100_000_00) },
+      },
+      totals: { contributions_minor: 12_300_00, contributions_count: 4, expenses_minor: 0, remaining_minor: 12_300_00 },
+      // Newest first, as the public page lists them.
+      contributions: [entry("Rose Otieno", 1_000_00, 8), entry("Peter Katana", 10_000_00, 7), entry("Japhet Kalume", 300_00, 6), entry("Edward Chai", 1_000_00, 5)],
+    } as unknown as PublicPage;
+    const text = fillTemplate(FUNDRAISER_TEMPLATE, { ...base, entries: [], fundraiser: page });
+    expect(text).toContain("In loving memory of Dr. Joseph Karisa Gonzi\n22 October 1952 – 1 November 2026\nKalale Pehoni Daktari");
+    expect(text).toContain("As of Tue, 3 Nov 2026");
+    expect(text).toContain("1. Edward Chai – KES 1,000\n2. Japhet Kalume – KES 300\n3. Peter Katana – KES 10,000\n4. Rose Otieno – KES 1,000");
+    expect(text).toContain("Received: KES 12,300 (4 contributions)\nFuneral expenses paid: KES 0\nFunds remaining: KES 12,300");
+    expect(text).toContain("The goal: KES 1,100,000\nReceived from the family of Karisa Gonzi: KES 570,000");
+    expect(text).toContain("From family, friends and well-wishers: KES 12,300 of KES 530,000");
+    expect(text).toContain("not yet received: KES 100,000\nStill needed: KES 517,700");
+    expect(text).toContain("Full record of contributions and expenses: https://rip-daktari.netlify.app\n");
   });
 });

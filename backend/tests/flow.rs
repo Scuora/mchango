@@ -515,10 +515,22 @@ async fn challenges_keep_their_own_tally() {
     let walk = json(serde_json::json!({
         "name": "Sponsored walk", "account_id": organiser,
         "giving_method": "phone", "giving_number": "0722 000 000", "giving_name": "Jane Organiser",
-        "message_template": "❤️ {name} ❤️\n\n{list}   \n\n•  Salio : KSh {remaining}",
+        "messages": [
+            { "title": "Challenge message", "body": "❤️ {name} ❤️\n\n{list}   \n\n•  Salio : KSh {remaining}" },
+            { "title": "", "body": "Funds remaining: KES {funds_remaining}" },
+            { "title": "Draft", "body": "   " },
+        ],
     }));
     let walk = challenges::create(&mut tx, walk).await.unwrap().challenge;
-    assert_eq!(walk.message_template, "❤️ {name} ❤️\n\n{list}\n\n•  Salio : KSh {remaining}", "kept as written");
+    let messages: Vec<_> = walk.messages.iter().map(|m| (m.title.as_str(), m.body.as_str())).collect();
+    assert_eq!(
+        messages,
+        [
+            ("Challenge message", "❤️ {name} ❤️\n\n{list}\n\n•  Salio : KSh {remaining}"),
+            ("Message 2", "Funds remaining: KES {funds_remaining}"),
+        ],
+        "kept as written, in order; an empty one is dropped and an untitled one is named"
+    );
     let walk = walk.id;
     let mut into_kitty = record(Kind::Contribution, 4_000_00, None, None);
     into_kitty.movement.account_id = Some(organiser);

@@ -14,6 +14,8 @@ import {
   challengeInput,
   publicEntries,
   shareText,
+  isOwnMode,
+  ownMode,
   useShareContext,
   type ShareMode,
 } from "@/features/challenges";
@@ -145,8 +147,11 @@ export function ChallengeDetailPage() {
 }
 
 function ShareCard({ challenge, items, share }: { challenge: ChallengeSummary; items: ListItem[]; share: ReturnType<typeof useShareContext> }) {
-  const hasTemplate = Boolean(challenge.message_template);
-  const [lang, setLang] = useState<ShareMode>(hasTemplate ? "template" : "en");
+  const own = challenge.messages;
+  const hasTemplate = own.length > 0;
+  const [chosenLang, setLang] = useState<ShareMode>(hasTemplate ? ownMode(0) : "en");
+  // A message that was removed falls back to the first one, or the standard update.
+  const lang: ShareMode = isOwnMode(chosenLang) && Number(chosenLang.slice(4)) >= own.length ? (hasTemplate ? ownMode(0) : "en") : chosenLang;
   const [includeList, setIncludeList] = useState(true);
   const [includeGiving, setIncludeGiving] = useState(true);
   const [includeLink, setIncludeLink] = useState(true);
@@ -181,16 +186,16 @@ function ShareCard({ challenge, items, share }: { challenge: ChallengeSummary; i
         <RadioGroup<ShareMode>
           name="challenge-lang"
           legend="Message"
-          value={lang === "template" && !hasTemplate ? "en" : lang}
+          value={lang}
           onChange={regenerate(setLang)}
           options={[
-            ...(hasTemplate ? [{ value: "template" as const, label: "Your message" }] : []),
+            ...own.map((m, i) => ({ value: ownMode(i), label: m.title })),
             { value: "en", label: hasTemplate ? "Standard, English" : "English" },
             { value: "sw", label: hasTemplate ? "Standard, Kiswahili" : "Kiswahili" },
           ]}
         />
-        {lang === "template" && hasTemplate ? (
-          <p className="text-sm text-stone-600">Your own message, filled in with the latest figures. Change the wording under Edit &rarr; WhatsApp message.</p>
+        {isOwnMode(lang) ? (
+          <p className="text-sm text-stone-600">Your own message, filled in with the latest figures. Change the wording under Edit &rarr; WhatsApp messages.</p>
         ) : (
           <div>
             <Checkbox checked={includeList} onChange={(e) => regenerate(setIncludeList)(e.target.checked)} label="List the contributions" />
@@ -199,7 +204,7 @@ function ShareCard({ challenge, items, share }: { challenge: ChallengeSummary; i
             {!hasTemplate && <p className="mt-1 text-sm text-stone-500">Prefer your own wording? Add a WhatsApp message under Edit.</p>}
           </div>
         )}
-        {lang !== "template" && !challenge.published && includeLink && share.publicUrl && (
+        {!isOwnMode(lang) && !challenge.published && includeLink && share.publicUrl && (
           <Notice tone="warning">This challenge is not on the public page, so the link will not show it. Tick &ldquo;Show on the public page&rdquo; under Edit.</Notice>
         )}
         <Textarea

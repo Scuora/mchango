@@ -499,8 +499,8 @@ export interface Challenge {
   giving_number: string;
   giving_account: string;
   giving_name: string;
-  /** The family's own WhatsApp message with placeholders such as {list}; empty uses the standard update. */
-  message_template: string;
+  /** The family's own WhatsApp messages with placeholders such as {list}; none uses the standard update. */
+  messages: ChallengeMessage[];
   created_at: string;
   updated_at: string;
 }
@@ -537,7 +537,13 @@ export interface ChallengeInput {
   giving_number: string;
   giving_account: string;
   giving_name: string;
-  message_template: string;
+  messages: ChallengeMessage[];
+}
+
+/** One of a challenge's own WhatsApp messages: a title to tell it apart, and the text with {placeholders}. */
+export interface ChallengeMessage {
+  title: string;
+  body: string;
 }
 
 export interface PublicChallenge {

@@ -12,6 +12,7 @@ import {
   challengeDates,
   challengeInput,
   emptyChallenge,
+  ownMode,
   publicEntries,
   shareText,
   useShareContext,
@@ -93,7 +94,7 @@ export function ChallengesPage() {
 /** One challenge: its tally, and its message ready to copy (the family's own template when it has one). */
 function ChallengeCard({ challenge: c, share, onEdit }: { challenge: ChallengeSummary; share: ReturnType<typeof useShareContext>; onEdit: () => void }) {
   // The contributions are needed only to fill {list} in the family's own message.
-  const records = useResource<ListResponse>(c.message_template ? `/api/manage/transactions?challenge_id=${c.id}&limit=500` : null);
+  const records = useResource<ListResponse>(c.messages.length ? `/api/manage/transactions?challenge_id=${c.id}&limit=500` : null);
   const entries = publicEntries(records.data?.items ?? [], share.settings);
   return (
     <Card>
@@ -112,8 +113,10 @@ function ChallengeCard({ challenge: c, share, onEdit }: { challenge: ChallengeSu
           <Button variant="secondary" size="sm" icon={<Pencil className="size-4" aria-hidden />} onClick={onEdit}>
             Edit
           </Button>
-          {c.message_template ? (
-            <CopyUpdateButton label="Copy message" disabled={!records.data} text={() => shareText(c, share, { lang: "template", entries })} />
+          {c.messages.length ? (
+            c.messages.map((m, i) => (
+              <CopyUpdateButton key={i} label={`Copy “${m.title}”`} disabled={!records.data || !share.page} text={() => shareText(c, share, { lang: ownMode(i), entries })} />
+            ))
           ) : (
             <>
               <CopyUpdateButton label="Copy update" text={() => shareText(c, share, { lang: "en" })} />

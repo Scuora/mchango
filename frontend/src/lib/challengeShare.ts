@@ -3,8 +3,11 @@
 // amounts the family has chosen to show, and the giving details already on the
 // public page. WhatsApp formatting: *bold*, _italic_, plain lines.
 
+import { familyOf, goalOf } from "./goal";
 import { formatKesShort } from "./money";
-import type { ChallengeStatus, ChallengeTotals, GivingMethod } from "./types";
+import { formatNairobiLongDate } from "./time";
+import { oldestFirst } from "./whatsapp";
+import type { ChallengeStatus, ChallengeTotals, GivingMethod, PublicPage } from "./types";
 
 export type ShareLang = "en" | "sw";
 
@@ -38,6 +41,8 @@ export interface ChallengeShareInput {
   giving: { method: GivingMethod; number: string; account: string | null; name: string } | null;
   /** True when `giving` is the challenge's own: the money is known to be for it. */
   ownGiving?: boolean;
+  /** The fundraiser's public view, for messages that report on the whole fundraiser. */
+  fundraiser?: PublicPage | null;
   /** The public page address, without a trailing slash. */
   publicUrl: string | null;
   lang: ShareLang;
@@ -77,25 +82,57 @@ function bare(minor: number): string {
   return formatKesShort(minor).replace(/^KES\s*/, "");
 }
 
-/** The placeholders a challenge's own message can use, with what each becomes. */
-export const TEMPLATE_FIELDS: [string, string][] = [
-  ["name", "the challenge's name"],
-  ["description", "how it works"],
-  ["list", "the contributions, numbered: “1. Samuel – KSh 500”"],
-  ["count", "how many contributions"],
-  ["raised", "amount raised, e.g. 1,000"],
-  ["target", "the challenge's target"],
-  ["remaining", "still to reach the target"],
-  ["pledged", "pledged, not yet received"],
-  ["held", "still held by the challenge"],
-  ["handed_over", "handed over to the main fund"],
-  ["number", "the number to send to"],
-  ["giving_name", "the name M-Pesa shows"],
-  ["date", "today, e.g. 3 November 2026"],
-  ["date_sw", "today in Kiswahili, e.g. 3 Novemba 2026"],
-  ["time", "the time, e.g. 11:00 am"],
-  ["time_sw", "the time in Kiswahili, e.g. saa 11:00"],
-  ["link", "the challenges page"],
+/** The placeholders a challenge's own messages can use, with what each becomes. */
+export const TEMPLATE_GROUPS: { label: string; fields: [string, string][] }[] = [
+  {
+    label: "This challenge",
+    fields: [
+      ["name", "the challenge's name"],
+      ["description", "how it works"],
+      ["list", "the contributions, numbered: “1. Samuel – KSh 500”"],
+      ["count", "how many contributions"],
+      ["raised", "amount raised, e.g. 1,000"],
+      ["target", "the challenge's target"],
+      ["remaining", "still to reach the target"],
+      ["pledged", "pledged, not yet received"],
+      ["held", "still held by the challenge"],
+      ["handed_over", "handed over to the main fund"],
+      ["number", "the number to send to"],
+      ["giving_name", "the name M-Pesa shows"],
+      ["link", "the challenges page"],
+    ],
+  },
+  {
+    label: "The whole fundraiser",
+    fields: [
+      ["memorial_name", "e.g. Dr. Joseph Karisa Gonzi"],
+      ["memorial_dates", "e.g. 22 October 1952 – 1 November 2026"],
+      ["tribute", "the tribute line"],
+      ["all_list", "every contribution, numbered: “1. Edward Chai – KES 1,000”"],
+      ["total_received", "all money received"],
+      ["total_count", "how many contributions"],
+      ["expenses", "funeral expenses paid"],
+      ["funds_remaining", "funds remaining"],
+      ["goal", "the fundraiser's target"],
+      ["family", "e.g. the family of Karisa Gonzi"],
+      ["family_received", "received from the family"],
+      ["others_received", "from family, friends and well-wishers"],
+      ["others_share", "the part asked of friends and well-wishers"],
+      ["others_pledged", "pledged by them, not yet received"],
+      ["still_needed", "still needed"],
+      ["site", "the public page"],
+    ],
+  },
+  {
+    label: "Date and time",
+    fields: [
+      ["today", "e.g. Tue, 3 Nov 2026"],
+      ["date", "e.g. 3 November 2026"],
+      ["date_sw", "e.g. 3 Novemba 2026"],
+      ["time", "e.g. 11:00 am"],
+      ["time_sw", "e.g. saa 11:00"],
+    ],
+  },
 ];
 
 /** Fills the family's own message with the challenge's live figures. Unknown {words} are left as written. */
@@ -120,7 +157,10 @@ export function fillTemplate(template: string, input: Omit<ChallengeShareInput, 
     date_sw: n.dateSw,
     time: n.time,
     time_sw: n.timeSw,
+    today: formatNairobiLongDate(input.now ?? new Date()),
     link: input.publicUrl ? `${input.publicUrl}/challenges` : "",
+    site: input.publicUrl ?? "",
+    ...fundraiserValues(input.fundraiser ?? null),
   };
   // A placeholder with nothing to show (such as {list} before any contributions)
   // takes its line with it, so the message never has a gap of blank lines.
@@ -131,6 +171,61 @@ export function fillTemplate(template: string, input: Omit<ChallengeShareInput, 
     .replace(/\{([a-z_]+)\}/g, (whole, key: string) => values[key] ?? whole)
     .replace(/\n{3,}/g, "\n\n");
 }
+
+/** Placeholders about the whole fundraiser, from its public view; empty until it has loaded. */
+function fundraiserValues(page: PublicPage | null): Record<string, string> {
+  if (!page) return {};
+  const f = page.fundraiser;
+  const t = page.totals;
+  const goal = goalOf(f.target_minor, f.pledges, t.contributions_minor);
+  const maybe = (minor: number | null | undefined) => (minor === null || minor === undefined ? "" : bare(minor));
+  return {
+    memorial_name: f.memorial_name ?? f.name,
+    memorial_dates: f.memorial_dates ?? "",
+    tribute: f.memorial_tribute ?? "",
+    // Oldest first reads naturally as a running list, as in the main update.
+    all_list: oldestFirst(page.contributions)
+      .map((e, i) => `${i + 1}. ${e.label}${e.amount_minor === null ? "" : ` – KES ${bare(e.amount_minor)}`}`)
+      .join("\n"),
+    total_received: bare(t.contributions_minor),
+    total_count: String(t.contributions_count),
+    expenses: bare(t.expenses_minor),
+    funds_remaining: bare(t.remaining_minor),
+    goal: maybe(goal?.target),
+    family: familyOf(f.memorial_name),
+    family_received: maybe(goal?.familyPledged),
+    others_received: maybe(goal?.othersReceived),
+    others_share: maybe(goal?.othersShare),
+    others_pledged: maybe(goal?.othersOutstanding),
+    still_needed: maybe(goal?.stillNeeded),
+  };
+}
+
+/** The family's general update, as a message any challenge can share. */
+export const FUNDRAISER_TEMPLATE = `In loving memory of {memorial_name}
+{memorial_dates}
+{tribute}
+
+Funeral contributions update
+As of {today}
+
+Contributions received
+{all_list}
+
+Totals so far
+Received: KES {total_received} ({total_count} contributions)
+Funeral expenses paid: KES {expenses}
+Funds remaining: KES {funds_remaining}
+
+The goal: KES {goal}
+Received from {family}: KES {family_received}
+From family, friends and well-wishers: KES {others_received} of KES {others_share}
+Pledged by family, friends and well-wishers, not yet received: KES {others_pledged}
+Still needed: KES {still_needed}
+
+Full record of contributions and expenses: {site}
+
+Thank you for standing with the family.`;
 
 /** A starting point in the style of the family's first challenge message. */
 export const STARTER_TEMPLATE = `{name}
@@ -241,3 +336,9 @@ export function buildChallengeUpdate(input: ChallengeShareInput): string {
   lines.push(tr("Thank you for keeping the fundraiser going.", "Asanteni kwa kuendeleza mchango."));
   return lines.join("\n");
 }
+
+/** Starting points for a challenge's own messages. */
+export const STARTERS: { title: string; body: string }[] = [
+  { title: "Challenge message", body: STARTER_TEMPLATE },
+  { title: "Fundraiser update", body: FUNDRAISER_TEMPLATE },
+];

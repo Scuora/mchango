@@ -54,11 +54,22 @@ pub struct Challenge {
     pub giving_number: String,
     pub giving_account: String,
     pub giving_name: String,
-    /// The family's own WhatsApp message, with placeholders filled in when copied.
-    /// Empty uses the standard update. Management only.
-    pub message_template: String,
+    /// The family's own WhatsApp messages, with placeholders filled in when
+    /// copied. None uses the standard update. Management only.
+    #[sqlx(skip)]
+    pub messages: Vec<ChallengeMessage>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// One of a challenge's own WhatsApp messages: a title to tell it apart, and the
+/// text with {placeholders}.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChallengeMessage {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub body: String,
 }
 
 /// A challenge with what it has brought in so far.
@@ -98,8 +109,9 @@ pub struct ChallengeInput {
     pub giving_account: String,
     #[serde(default)]
     pub giving_name: String,
+    /// The challenge's own messages, in order. Left out, they stay as they are.
     #[serde(default)]
-    pub message_template: String,
+    pub messages: Option<Vec<ChallengeMessage>>,
 }
 
 fn active() -> ChallengeStatus {
@@ -126,7 +138,7 @@ struct Clean {
     giving_number: String,
     giving_account: String,
     giving_name: String,
-    message_template: String,
+    messages: Option<Vec<ChallengeMessage>>,
 }
 
 impl ChallengeInput {
@@ -156,11 +168,33 @@ impl ChallengeInput {
         }
         let (giving_number, giving_account, giving_name) =
             clean_giving(self.giving_method, &self.giving_number, &self.giving_account, &self.giving_name)?;
-        // Kept as written (emoji, blank lines and spacing matter in WhatsApp), apart from trailing spaces.
-        let message_template = paragraphs(&self.message_template);
-        if message_template.chars().count() > 4000 {
-            return Err(AppError::field("message_template", "Keep the message under 4,000 characters."));
-        }
+        // Kept as written (emoji, blank lines and spacing matter in WhatsApp), apart
+        // from trailing spaces. Messages left empty are dropped.
+        let messages = match self.messages {
+            None => None,
+            Some(list) => {
+                let mut kept = Vec::new();
+                for message in list {
+                    let body = paragraphs(&message.body);
+                    if body.is_empty() {
+                        continue;
+                    }
+                    if body.chars().count() > 4000 {
+                        return Err(AppError::field("messages", "Keep each message under 4,000 characters."));
+                    }
+                    let title = one_line(&message.title);
+                    if title.chars().count() > 60 {
+                        return Err(AppError::field("messages", "Keep each message's title under 60 characters."));
+                    }
+                    let title = if title.is_empty() { format!("Message {}", kept.len() + 1) } else { title };
+                    kept.push(ChallengeMessage { title, body });
+                }
+                if kept.len() > 10 {
+                    return Err(AppError::field("messages", "Keep at most 10 messages for a challenge."));
+                }
+                Some(kept)
+            }
+        };
         Ok(Clean {
             name,
             name_sw,
@@ -176,7 +210,7 @@ impl ChallengeInput {
             giving_number,
             giving_account,
             giving_name,
-            message_template,
+            messages,
         })
     }
 }
@@ -199,31 +233,62 @@ fn optional_date(value: Option<String>, field: &'static str) -> AppResult<Option
     }
 }
 
+const SELECT_CHALLENGES: &str = "SELECT c.id, c.name, c.name_sw, c.description, c.description_sw, c.target_minor,
+        c.starts_on, c.ends_on, c.status, c.published, c.account_id, a.name AS account_name, c.giving_method,
+        c.giving_number, c.giving_account, c.giving_name, c.created_at, c.updated_at
+ FROM challenges c LEFT JOIN accounts a ON a.id = c.account_id";
+
 /// Active challenges first, then the newest.
 pub async fn list(conn: &mut SqliteConnection) -> AppResult<Vec<Challenge>> {
-    Ok(sqlx::query_as(
-        "SELECT c.id, c.name, c.name_sw, c.description, c.description_sw, c.target_minor, c.starts_on, c.ends_on,
-                c.status, c.published, c.account_id, a.name AS account_name, c.giving_method, c.giving_number, c.giving_account,
-                c.giving_name, c.message_template, c.created_at, c.updated_at
-         FROM challenges c LEFT JOIN accounts a ON a.id = c.account_id
-         ORDER BY c.status = 'closed', c.created_at DESC, c.id DESC",
-    )
-    .fetch_all(conn)
-    .await?)
+    let mut list: Vec<Challenge> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "{SELECT_CHALLENGES} ORDER BY c.status = 'closed', c.created_at DESC, c.id DESC"
+    )))
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut messages: Vec<(i64, String, String)> =
+        sqlx::query_as("SELECT challenge_id, title, body FROM challenge_messages ORDER BY challenge_id, position")
+            .fetch_all(conn)
+            .await?;
+    for challenge in &mut list {
+        challenge.messages = messages
+            .extract_if(.., |(id, _, _)| *id == challenge.id)
+            .map(|(_, title, body)| ChallengeMessage { title, body })
+            .collect();
+    }
+    Ok(list)
 }
 
 pub async fn get(conn: &mut SqliteConnection, id: i64) -> AppResult<Challenge> {
-    sqlx::query_as(
-        "SELECT c.id, c.name, c.name_sw, c.description, c.description_sw, c.target_minor, c.starts_on, c.ends_on,
-                c.status, c.published, c.account_id, a.name AS account_name, c.giving_method, c.giving_number, c.giving_account,
-                c.giving_name, c.message_template, c.created_at, c.updated_at
-         FROM challenges c LEFT JOIN accounts a ON a.id = c.account_id
-         WHERE c.id = ?",
+    let mut challenge: Challenge = sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT_CHALLENGES} WHERE c.id = ?")))
+        .bind(id)
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or_else(|| AppError::not_found("That challenge"))?;
+    challenge.messages = sqlx::query_as::<_, (String, String)>(
+        "SELECT title, body FROM challenge_messages WHERE challenge_id = ? ORDER BY position",
     )
     .bind(id)
-    .fetch_optional(conn)
+    .fetch_all(conn)
     .await?
-    .ok_or_else(|| AppError::not_found("That challenge"))
+    .into_iter()
+    .map(|(title, body)| ChallengeMessage { title, body })
+    .collect();
+    Ok(challenge)
+}
+
+/// Replaces a challenge's own messages with these, in order.
+async fn replace_messages(conn: &mut SqliteConnection, id: i64, messages: &[ChallengeMessage]) -> AppResult<()> {
+    sqlx::query("DELETE FROM challenge_messages WHERE challenge_id = ?").bind(id).execute(&mut *conn).await?;
+    for (position, m) in messages.iter().enumerate() {
+        sqlx::query("INSERT INTO challenge_messages (challenge_id, position, title, body) VALUES (?, ?, ?, ?)")
+            .bind(id)
+            .bind(position as i64)
+            .bind(&m.title)
+            .bind(&m.body)
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(())
 }
 
 /// A challenge with its tally and, when it keeps its own money, what it holds and has handed over.
@@ -325,8 +390,8 @@ pub async fn create(conn: &mut SqliteConnection, input: ChallengeInput) -> AppRe
     let id: i64 = sqlx::query_scalar(
         "INSERT INTO challenges (name, name_sw, description, description_sw, target_minor, starts_on, ends_on,
                                  status, published, account_id, giving_method, giving_number, giving_account,
-                                 giving_name, message_template, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                                 giving_name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
     )
     .bind(&c.name)
     .bind(&c.name_sw)
@@ -342,12 +407,14 @@ pub async fn create(conn: &mut SqliteConnection, input: ChallengeInput) -> AppRe
     .bind(&c.giving_number)
     .bind(&c.giving_account)
     .bind(&c.giving_name)
-    .bind(&c.message_template)
     .bind(&now)
     .bind(&now)
     .fetch_one(&mut *conn)
     .await
     .map_err(|e| name_taken(e, &c.name))?;
+    if let Some(messages) = &c.messages {
+        replace_messages(conn, id, messages).await?;
+    }
     history::record(
         conn,
         Entity::Challenge,
@@ -383,7 +450,7 @@ pub async fn update(conn: &mut SqliteConnection, id: i64, input: ChallengeInput)
     sqlx::query(
         "UPDATE challenges SET name = ?, name_sw = ?, description = ?, description_sw = ?, target_minor = ?,
                 starts_on = ?, ends_on = ?, status = ?, published = ?, account_id = ?, giving_method = ?,
-                giving_number = ?, giving_account = ?, giving_name = ?, message_template = ?, updated_at = ?
+                giving_number = ?, giving_account = ?, giving_name = ?, updated_at = ?
          WHERE id = ?",
     )
     .bind(&c.name)
@@ -400,12 +467,16 @@ pub async fn update(conn: &mut SqliteConnection, id: i64, input: ChallengeInput)
     .bind(&c.giving_number)
     .bind(&c.giving_account)
     .bind(&c.giving_name)
-    .bind(&c.message_template)
     .bind(clock::now_string())
     .bind(id)
     .execute(&mut *conn)
     .await
     .map_err(|e| name_taken(e, &c.name))?;
+    if let Some(messages) = &c.messages
+        && *messages != before.messages
+    {
+        replace_messages(conn, id, messages).await?;
+    }
     let summary = match (before.status, c.status) {
         (ChallengeStatus::Active, ChallengeStatus::Closed) => format!("Challenge “{}” closed", c.name),
         (ChallengeStatus::Closed, ChallengeStatus::Active) => format!("Challenge “{}” reopened", c.name),

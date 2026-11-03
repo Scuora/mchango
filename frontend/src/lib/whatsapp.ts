@@ -20,11 +20,21 @@ function inRange(entry: PublicEntry, range: Range): boolean {
   return range.kind === "all" || entry.date >= range.date;
 }
 
+/**
+ * The public list (newest first) turned oldest first. Sorted by time rather than
+ * reversed, so the people sharing one payment keep their order.
+ */
+export function oldestFirst<T extends { at: string }>(entries: T[]): T[] {
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => a.entry.at.localeCompare(b.entry.at) || a.index - b.index)
+    .map(({ entry }) => entry);
+}
+
 function numbered(entries: PublicEntry[]): string[] {
   // Oldest first reads naturally as a running list.
   // Amounts are left out when the family has chosen not to show them.
-  return [...entries]
-    .reverse()
+  return oldestFirst(entries)
     .map((e, i) => `${i + 1}. ${e.label}${e.amount_minor === null ? "" : ` – ${formatKesShort(e.amount_minor)}`}`);
 }
 
