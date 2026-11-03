@@ -19,7 +19,11 @@ export interface Goal {
   othersOutstanding: number;
   /** The part of the target asked of friends and well-wishers. */
   othersShare: number | null;
-  /** What is still needed once every pledge is paid, never below zero. */
+  /**
+   * The target less the family's share and the money received from others, never
+   * below zero. Pledges not yet received are not subtracted: they are not money
+   * yet, so "still needed" never looks smaller than the account bears out.
+   */
   stillNeeded: number | null;
 }
 
@@ -32,7 +36,8 @@ export function goalOf(target: number | null, pledges: PledgeTotals | null, cont
   const familyOutstanding = family?.outstanding_minor ?? 0;
   const othersReceived = Math.max(0, contributions - familyReceived);
   const othersOutstanding = friends?.outstanding_minor ?? 0;
-  const covered = familyReceived + familyOutstanding + othersReceived + othersOutstanding;
+  // The family's share counts as received from the family (see GoalBar); other pledges do not count until paid.
+  const covered = familyPledged + othersReceived;
   return {
     target,
     familyPledged,

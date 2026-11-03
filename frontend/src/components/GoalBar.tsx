@@ -107,7 +107,11 @@ export function GoalBar({ goal, family, className }: { goal: Goal; family: strin
           <Row
             swatch="needed"
             label={tr("Still needed", "Bado kinahitajika")}
-            note={othersOutstanding > 0 ? tr("Once every pledge is paid in", "Ahadi zote zikishalipwa") : undefined}
+            note={
+              othersOutstanding > 0 && stillNeeded > 0
+                ? tr(`${kes(Math.min(othersOutstanding, stillNeeded))} of it is pledged`, `${kes(Math.min(othersOutstanding, stillNeeded))} kati yake zimeahidiwa`)
+                : undefined
+            }
             value={stillNeeded === 0 ? tr("Reached", "Limefikiwa") : <CountUp value={stillNeeded} format={kes} />}
           />
         )}
