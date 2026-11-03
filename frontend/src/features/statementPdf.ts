@@ -504,6 +504,7 @@ export function buildStatementPdf(r: StatementReport, options: StatementOptions)
   });
   const flow: Flow = {
     y: summary(doc, r, options, header(doc, r, options)) + 4,
+    bottom: CONTENT_BOTTOM,
     need(height) {
       if (this.y + height > CONTENT_BOTTOM) {
         doc.addPage();

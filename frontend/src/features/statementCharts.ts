@@ -562,6 +562,8 @@ function challengeMeters(doc: jsPDF, list: StatementReport["challenges"], x: num
 /** Where the next block goes, with a new page when the current one is full. */
 export interface Flow {
   y: number;
+  /** The lowest the content may reach on a page. */
+  bottom: number;
   /** Starts a block of this height, on a new page if it does not fit. */
   need: (height: number) => number;
 }
@@ -584,17 +586,22 @@ export function drawCharts(doc: jsPDF, r: StatementReport, kind: "full" | "recei
     flow.y = gauge(doc, r, x, top + 2, w) + 8;
   }
 
+  // A chart can give up a little height to stay on the page it starts on.
+  const fitted = (full: number, least: number, chrome: number) => Math.max(least, Math.min(full, flow.bottom - flow.y - chrome));
+
   if (kind !== "spent" && received.length >= 2) {
-    const y = flow.need(78);
+    const height = fitted(56, 40, 25);
+    const y = flow.need(height + 25);
     const top = sectionTitle(doc, x, y, w, "Money received, adding up", r.period_from ? "Within the period of this statement." : "From the first contribution to the end of the statement.");
-    flow.y = cumulative(doc, received, x, top + 2, w, 56) + 8;
+    flow.y = cumulative(doc, received, x, top + 2, w, height) + 8;
   }
 
   const days = new Set(received.map((e) => nairobiDay(e.at)));
   if (kind !== "spent" && days.size >= 3) {
-    const y = flow.need(64);
+    const height = fitted(46, 34, 20);
+    const y = flow.need(height + 20);
     const top = sectionTitle(doc, x, y, w, "Received each day");
-    flow.y = daily(doc, received, x, top + 2, w, 46) + 8;
+    flow.y = daily(doc, received, x, top + 2, w, height) + 8;
   }
 
   // The whole account only: on the expenses statement, "spent" means expenses and charges alone.
