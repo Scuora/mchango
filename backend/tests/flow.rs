@@ -512,8 +512,11 @@ async fn challenges_keep_their_own_tally() {
     let walk = json(serde_json::json!({
         "name": "Sponsored walk", "account_id": organiser,
         "giving_method": "phone", "giving_number": "0722 000 000", "giving_name": "Jane Organiser",
+        "message_template": "❤️ {name} ❤️\n\n{list}   \n\n•  Salio : KSh {remaining}",
     }));
-    let walk = challenges::create(&mut tx, walk).await.unwrap().challenge.id;
+    let walk = challenges::create(&mut tx, walk).await.unwrap().challenge;
+    assert_eq!(walk.message_template, "❤️ {name} ❤️\n\n{list}\n\n•  Salio : KSh {remaining}", "kept as written");
+    let walk = walk.id;
     let mut into_kitty = record(Kind::Contribution, 4_000_00, None, None);
     into_kitty.movement.account_id = Some(organiser);
     let walked = transactions::create(&mut tx, into_kitty, "test").await.unwrap().id;

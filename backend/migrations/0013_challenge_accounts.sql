@@ -14,3 +14,8 @@ ALTER TABLE challenges ADD COLUMN giving_method TEXT
 ALTER TABLE challenges ADD COLUMN giving_number TEXT NOT NULL DEFAULT '';
 ALTER TABLE challenges ADD COLUMN giving_account TEXT NOT NULL DEFAULT '';
 ALTER TABLE challenges ADD COLUMN giving_name TEXT NOT NULL DEFAULT '';
+
+-- The family's own WhatsApp message for the challenge, with placeholders such as
+-- {list} and {raised} filled in from the records when copied. Empty means the
+-- standard update is used.
+ALTER TABLE challenges ADD COLUMN message_template TEXT NOT NULL DEFAULT '';

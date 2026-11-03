@@ -15,9 +15,9 @@ import {
   publicEntries,
   shareText,
   useShareContext,
+  type ShareMode,
 } from "@/features/challenges";
 import { api, useResource } from "@/lib/api";
-import type { ShareLang } from "@/lib/challengeShare";
 import { formatNairobi } from "@/lib/time";
 import type { ChallengeSummary, ListItem, ListResponse } from "@/lib/types";
 import { copyText } from "@/public/share";
@@ -145,7 +145,8 @@ export function ChallengeDetailPage() {
 }
 
 function ShareCard({ challenge, items, share }: { challenge: ChallengeSummary; items: ListItem[]; share: ReturnType<typeof useShareContext> }) {
-  const [lang, setLang] = useState<ShareLang>("en");
+  const hasTemplate = Boolean(challenge.message_template);
+  const [lang, setLang] = useState<ShareMode>(hasTemplate ? "template" : "en");
   const [includeList, setIncludeList] = useState(true);
   const [includeGiving, setIncludeGiving] = useState(true);
   const [includeLink, setIncludeLink] = useState(true);
@@ -177,22 +178,28 @@ function ShareCard({ challenge, items, share }: { challenge: ChallengeSummary; i
         }
       />
       <CardBody className="space-y-4">
-        <RadioGroup<ShareLang>
+        <RadioGroup<ShareMode>
           name="challenge-lang"
-          legend="Language"
-          value={lang}
+          legend="Message"
+          value={lang === "template" && !hasTemplate ? "en" : lang}
           onChange={regenerate(setLang)}
           options={[
-            { value: "en", label: "English" },
-            { value: "sw", label: "Kiswahili" },
+            ...(hasTemplate ? [{ value: "template" as const, label: "Your message" }] : []),
+            { value: "en", label: hasTemplate ? "Standard, English" : "English" },
+            { value: "sw", label: hasTemplate ? "Standard, Kiswahili" : "Kiswahili" },
           ]}
         />
-        <div>
-          <Checkbox checked={includeList} onChange={(e) => regenerate(setIncludeList)(e.target.checked)} label="List the contributions" />
-          <Checkbox checked={includeGiving} onChange={(e) => regenerate(setIncludeGiving)(e.target.checked)} label="How to take part (M-Pesa details)" />
-          {share.publicUrl && <Checkbox checked={includeLink} onChange={(e) => regenerate(setIncludeLink)(e.target.checked)} label="Link to the challenges on the public page" />}
-        </div>
-        {!challenge.published && includeLink && share.publicUrl && (
+        {lang === "template" && hasTemplate ? (
+          <p className="text-sm text-stone-600">Your own message, filled in with the latest figures. Change the wording under Edit &rarr; WhatsApp message.</p>
+        ) : (
+          <div>
+            <Checkbox checked={includeList} onChange={(e) => regenerate(setIncludeList)(e.target.checked)} label="List the contributions" />
+            <Checkbox checked={includeGiving} onChange={(e) => regenerate(setIncludeGiving)(e.target.checked)} label="How to take part (M-Pesa details)" />
+            {share.publicUrl && <Checkbox checked={includeLink} onChange={(e) => regenerate(setIncludeLink)(e.target.checked)} label="Link to the challenges on the public page" />}
+            {!hasTemplate && <p className="mt-1 text-sm text-stone-500">Prefer your own wording? Add a WhatsApp message under Edit.</p>}
+          </div>
+        )}
+        {lang !== "template" && !challenge.published && includeLink && share.publicUrl && (
           <Notice tone="warning">This challenge is not on the public page, so the link will not show it. Tick &ldquo;Show on the public page&rdquo; under Edit.</Notice>
         )}
         <Textarea

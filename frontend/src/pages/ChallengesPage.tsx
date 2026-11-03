@@ -12,12 +12,13 @@ import {
   challengeDates,
   challengeInput,
   emptyChallenge,
+  publicEntries,
   shareText,
   useShareContext,
 } from "@/features/challenges";
 import { useResource } from "@/lib/api";
 import { formatKesShort } from "@/lib/money";
-import type { ChallengeInput, ChallengeSummary } from "@/lib/types";
+import type { ChallengeInput, ChallengeSummary, ListResponse } from "@/lib/types";
 
 /** Fun games and dares that raise money. Each keeps its own kitty inside the main fund. */
 export function ChallengesPage() {
@@ -81,30 +82,46 @@ export function ChallengesPage() {
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {list.data.map((c) => (
-            <Card key={c.id}>
-              <CardBody className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <ChallengeBadges challenge={c} />
-                  {challengeDates(c) && <span className="text-sm text-stone-500">{challengeDates(c)}</span>}
-                </div>
-                <Link to={`/manage/challenges/${c.id}`} className="group flex items-start justify-between gap-2 text-stone-900 no-underline hover:no-underline">
-                  <h2 className="challenge-name text-[1.3rem] leading-snug group-hover:text-plum-800">{c.name}</h2>
-                  <ChevronRight className="mt-1.5 size-5 shrink-0 text-stone-400 group-hover:text-plum-700" aria-hidden />
-                </Link>
-                {c.description && <p className="line-clamp-3 leading-relaxed whitespace-pre-line text-stone-700">{c.description}</p>}
-                <ChallengeProgress challenge={c} />
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Button variant="secondary" size="sm" icon={<Pencil className="size-4" aria-hidden />} onClick={() => setEditing({ id: c.id, input: challengeInput(c) })}>
-                    Edit
-                  </Button>
-                  <CopyUpdateButton label="Copy update" text={() => shareText(c, share, { lang: "en" })} />
-                  <CopyUpdateButton label="Copy in Kiswahili" text={() => shareText(c, share, { lang: "sw" })} />
-                </div>
-              </CardBody>
-            </Card>
+            <ChallengeCard key={c.id} challenge={c} share={share} onEdit={() => setEditing({ id: c.id, input: challengeInput(c) })} />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+/** One challenge: its tally, and its message ready to copy (the family's own template when it has one). */
+function ChallengeCard({ challenge: c, share, onEdit }: { challenge: ChallengeSummary; share: ReturnType<typeof useShareContext>; onEdit: () => void }) {
+  // The contributions are needed only to fill {list} in the family's own message.
+  const records = useResource<ListResponse>(c.message_template ? `/api/manage/transactions?challenge_id=${c.id}&limit=500` : null);
+  const entries = publicEntries(records.data?.items ?? [], share.settings);
+  return (
+    <Card>
+      <CardBody className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ChallengeBadges challenge={c} />
+          {challengeDates(c) && <span className="text-sm text-stone-500">{challengeDates(c)}</span>}
+        </div>
+        <Link to={`/manage/challenges/${c.id}`} className="group flex items-start justify-between gap-2 text-stone-900 no-underline hover:no-underline">
+          <h2 className="challenge-name text-[1.3rem] leading-snug group-hover:text-plum-800">{c.name}</h2>
+          <ChevronRight className="mt-1.5 size-5 shrink-0 text-stone-400 group-hover:text-plum-700" aria-hidden />
+        </Link>
+        {c.description && <p className="line-clamp-3 leading-relaxed whitespace-pre-line text-stone-700">{c.description}</p>}
+        <ChallengeProgress challenge={c} />
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button variant="secondary" size="sm" icon={<Pencil className="size-4" aria-hidden />} onClick={onEdit}>
+            Edit
+          </Button>
+          {c.message_template ? (
+            <CopyUpdateButton label="Copy message" disabled={!records.data} text={() => shareText(c, share, { lang: "template", entries })} />
+          ) : (
+            <>
+              <CopyUpdateButton label="Copy update" text={() => shareText(c, share, { lang: "en" })} />
+              <CopyUpdateButton label="Copy in Kiswahili" text={() => shareText(c, share, { lang: "sw" })} />
+            </>
+          )}
+        </div>
+      </CardBody>
+    </Card>
   );
 }

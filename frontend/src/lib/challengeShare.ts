@@ -48,8 +48,8 @@ export interface ChallengeShareInput {
 
 const MONTHS_SW = ["Januari", "Februari", "Machi", "Aprili", "Mei", "Juni", "Julai", "Agosti", "Septemba", "Oktoba", "Novemba", "Desemba"];
 
-/** "3 November 2026, 11:00 am" or, in Kiswahili, "3 Novemba 2026, saa 11:00" (clock time, as on the clock). */
-export function asAt(now: Date, lang: ShareLang): string {
+/** The date and the time in Nairobi, in both languages; the time as the clock shows it. */
+function nairobi(now: Date) {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", day: "numeric", month: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hourCycle: "h23" })
       .formatToParts(now)
@@ -57,10 +57,94 @@ export function asAt(now: Date, lang: ShareLang): string {
   );
   const [day, hour] = [Number(parts.day), Number(parts.hour)];
   const clock = `${hour % 12 || 12}:${parts.minute}`;
-  if (lang === "sw") return `${day} ${MONTHS_SW[Number(parts.month) - 1]} ${parts.year}, saa ${clock}`;
   const month = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", month: "long" }).format(now);
-  return `${day} ${month} ${parts.year}, ${clock} ${hour < 12 ? "am" : "pm"}`;
+  return {
+    date: `${day} ${month} ${parts.year}`,
+    dateSw: `${day} ${MONTHS_SW[Number(parts.month) - 1]} ${parts.year}`,
+    time: `${clock} ${hour < 12 ? "am" : "pm"}`,
+    timeSw: `saa ${clock}`,
+  };
 }
+
+/** "3 November 2026, 11:00 am" or, in Kiswahili, "3 Novemba 2026, saa 11:00" (clock time, as on the clock). */
+export function asAt(now: Date, lang: ShareLang): string {
+  const n = nairobi(now);
+  return lang === "sw" ? `${n.dateSw}, ${n.timeSw}` : `${n.date}, ${n.time}`;
+}
+
+/** An amount without the currency, e.g. "50,000", so a template can say "KSh {raised}". */
+function bare(minor: number): string {
+  return formatKesShort(minor).replace(/^KES\s*/, "");
+}
+
+/** The placeholders a challenge's own message can use, with what each becomes. */
+export const TEMPLATE_FIELDS: [string, string][] = [
+  ["name", "the challenge's name"],
+  ["description", "how it works"],
+  ["list", "the contributions, numbered: “1. Samuel – KSh 500”"],
+  ["count", "how many contributions"],
+  ["raised", "amount raised, e.g. 1,000"],
+  ["target", "the challenge's target"],
+  ["remaining", "still to reach the target"],
+  ["pledged", "pledged, not yet received"],
+  ["held", "still held by the challenge"],
+  ["handed_over", "handed over to the main fund"],
+  ["number", "the number to send to"],
+  ["giving_name", "the name M-Pesa shows"],
+  ["date", "today, e.g. 3 November 2026"],
+  ["date_sw", "today in Kiswahili, e.g. 3 Novemba 2026"],
+  ["time", "the time, e.g. 11:00 am"],
+  ["time_sw", "the time in Kiswahili, e.g. saa 11:00"],
+  ["link", "the challenges page"],
+];
+
+/** Fills the family's own message with the challenge's live figures. Unknown {words} are left as written. */
+export function fillTemplate(template: string, input: Omit<ChallengeShareInput, "lang" | "includeList" | "includeGiving">): string {
+  const { challenge: c } = input;
+  const t = c.totals;
+  const n = nairobi(input.now ?? new Date());
+  const values: Record<string, string> = {
+    name: c.name,
+    description: c.description,
+    list: input.entries.map((e, i) => `${i + 1}. ${e.label}${e.amount_minor === null ? "" : ` – KSh ${bare(e.amount_minor)}`}`).join("\n"),
+    count: String(t.contributions_count),
+    raised: bare(t.raised_minor),
+    target: c.target_minor ? bare(c.target_minor) : "",
+    remaining: c.target_minor ? bare(Math.max(0, c.target_minor - t.raised_minor)) : "",
+    pledged: bare(t.pledged_outstanding_minor),
+    held: bare(t.held_minor ?? 0),
+    handed_over: bare(t.handed_over_minor ?? 0),
+    number: input.giving?.number ?? "",
+    giving_name: input.giving?.name ?? "",
+    date: n.date,
+    date_sw: n.dateSw,
+    time: n.time,
+    time_sw: n.timeSw,
+    link: input.publicUrl ? `${input.publicUrl}/challenges` : "",
+  };
+  return template.replace(/\{([a-z_]+)\}/g, (whole, key: string) => values[key] ?? whole);
+}
+
+/** A starting point in the style of the family's first challenge message. */
+export const STARTER_TEMPLATE = `{name}
+
+{description}
+
+{list}
+
+🎯 TAARIFA ZA MCHANGO
+
+•  Target Amount : KSh {target}
+•  Iliyopatikana: KSh {raised}
+•  Salio : KSh {remaining}
+
+💳 NAMBA YA MWEKA HAZINA
+
+📱 {number}
+
+👤 Jina: {giving_name}
+
+🕊️ TUKUMBUKE WEMA WAKE, TUENDELEZE UPENDO WAKE. ❤️`;
 
 function spaced(number: string): string {
   const digits = number.replace(/\D/g, "");

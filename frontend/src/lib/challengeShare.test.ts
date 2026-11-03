@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildChallengeUpdate } from "./challengeShare";
+import { STARTER_TEMPLATE, buildChallengeUpdate, fillTemplate } from "./challengeShare";
 
 const challenge = {
   name: "Cousins' 1,000 challenge",
@@ -46,5 +46,21 @@ describe("challenge update", () => {
     expect(text).toContain("Still with the challenge, to be handed over: KES 2,000");
     expect(text).toContain("M-Pesa, Send Money: *0722 000 000* (Jane Organiser)");
     expect(text).not.toContain("Let us know");
+  });
+
+  it("fills the family's own message with the live figures", () => {
+    const entries = [
+      { label: "Samuel Mashanga", amount_minor: 500_00 },
+      { label: "Hon. Phillister Sauti", amount_minor: 100_00 },
+    ];
+    const giving = { method: "phone" as const, number: "0706608654", account: null, name: "Samuel Isaac" };
+    const own = { ...challenge, name: "❤️ DAY 1 CHALLENGE ❤️", totals: { ...challenge.totals, raised_minor: 1_000_00 } };
+    const text = fillTemplate(STARTER_TEMPLATE, { ...base, challenge: own, entries, giving });
+    expect(text).toContain("❤️ DAY 1 CHALLENGE ❤️");
+    expect(text).toContain("1. Samuel Mashanga – KSh 500\n2. Hon. Phillister Sauti – KSh 100");
+    expect(text).toContain("•  Target Amount : KSh 50,000\n•  Iliyopatikana: KSh 1,000\n•  Salio : KSh 49,000");
+    expect(text).toContain("📱 0706608654");
+    expect(text).toContain("👤 Jina: Samuel Isaac");
+    expect(fillTemplate("Hadi {date_sw}, {time_sw} {unknown}", { ...base, entries })).toBe("Hadi 3 Novemba 2026, saa 11:00 {unknown}");
   });
 });

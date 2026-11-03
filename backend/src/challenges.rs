@@ -54,6 +54,9 @@ pub struct Challenge {
     pub giving_number: String,
     pub giving_account: String,
     pub giving_name: String,
+    /// The family's own WhatsApp message, with placeholders filled in when copied.
+    /// Empty uses the standard update. Management only.
+    pub message_template: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -95,6 +98,8 @@ pub struct ChallengeInput {
     pub giving_account: String,
     #[serde(default)]
     pub giving_name: String,
+    #[serde(default)]
+    pub message_template: String,
 }
 
 fn active() -> ChallengeStatus {
@@ -121,6 +126,7 @@ struct Clean {
     giving_number: String,
     giving_account: String,
     giving_name: String,
+    message_template: String,
 }
 
 impl ChallengeInput {
@@ -150,6 +156,11 @@ impl ChallengeInput {
         }
         let (giving_number, giving_account, giving_name) =
             clean_giving(self.giving_method, &self.giving_number, &self.giving_account, &self.giving_name)?;
+        // Kept as written (emoji, blank lines and spacing matter in WhatsApp), apart from trailing spaces.
+        let message_template = paragraphs(&self.message_template);
+        if message_template.chars().count() > 4000 {
+            return Err(AppError::field("message_template", "Keep the message under 4,000 characters."));
+        }
         Ok(Clean {
             name,
             name_sw,
@@ -165,6 +176,7 @@ impl ChallengeInput {
             giving_number,
             giving_account,
             giving_name,
+            message_template,
         })
     }
 }
@@ -192,7 +204,7 @@ pub async fn list(conn: &mut SqliteConnection) -> AppResult<Vec<Challenge>> {
     Ok(sqlx::query_as(
         "SELECT c.id, c.name, c.name_sw, c.description, c.description_sw, c.target_minor, c.starts_on, c.ends_on,
                 c.status, c.published, c.account_id, a.name AS account_name, c.giving_method, c.giving_number, c.giving_account,
-                c.giving_name, c.created_at, c.updated_at
+                c.giving_name, c.message_template, c.created_at, c.updated_at
          FROM challenges c LEFT JOIN accounts a ON a.id = c.account_id
          ORDER BY c.status = 'closed', c.created_at DESC, c.id DESC",
     )
@@ -204,7 +216,7 @@ pub async fn get(conn: &mut SqliteConnection, id: i64) -> AppResult<Challenge> {
     sqlx::query_as(
         "SELECT c.id, c.name, c.name_sw, c.description, c.description_sw, c.target_minor, c.starts_on, c.ends_on,
                 c.status, c.published, c.account_id, a.name AS account_name, c.giving_method, c.giving_number, c.giving_account,
-                c.giving_name, c.created_at, c.updated_at
+                c.giving_name, c.message_template, c.created_at, c.updated_at
          FROM challenges c LEFT JOIN accounts a ON a.id = c.account_id
          WHERE c.id = ?",
     )
@@ -313,8 +325,8 @@ pub async fn create(conn: &mut SqliteConnection, input: ChallengeInput) -> AppRe
     let id: i64 = sqlx::query_scalar(
         "INSERT INTO challenges (name, name_sw, description, description_sw, target_minor, starts_on, ends_on,
                                  status, published, account_id, giving_method, giving_number, giving_account,
-                                 giving_name, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                                 giving_name, message_template, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
     )
     .bind(&c.name)
     .bind(&c.name_sw)
@@ -330,6 +342,7 @@ pub async fn create(conn: &mut SqliteConnection, input: ChallengeInput) -> AppRe
     .bind(&c.giving_number)
     .bind(&c.giving_account)
     .bind(&c.giving_name)
+    .bind(&c.message_template)
     .bind(&now)
     .bind(&now)
     .fetch_one(&mut *conn)
@@ -370,7 +383,7 @@ pub async fn update(conn: &mut SqliteConnection, id: i64, input: ChallengeInput)
     sqlx::query(
         "UPDATE challenges SET name = ?, name_sw = ?, description = ?, description_sw = ?, target_minor = ?,
                 starts_on = ?, ends_on = ?, status = ?, published = ?, account_id = ?, giving_method = ?,
-                giving_number = ?, giving_account = ?, giving_name = ?, updated_at = ?
+                giving_number = ?, giving_account = ?, giving_name = ?, message_template = ?, updated_at = ?
          WHERE id = ?",
     )
     .bind(&c.name)
@@ -387,6 +400,7 @@ pub async fn update(conn: &mut SqliteConnection, id: i64, input: ChallengeInput)
     .bind(&c.giving_number)
     .bind(&c.giving_account)
     .bind(&c.giving_name)
+    .bind(&c.message_template)
     .bind(clock::now_string())
     .bind(id)
     .execute(&mut *conn)

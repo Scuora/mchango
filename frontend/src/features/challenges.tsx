@@ -2,7 +2,7 @@
 // "copy update" button used on the list and on each challenge's page.
 
 import { Check, Copy, Plus, Save, Trophy } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { SaveError } from "@/components/LoadState";
 import { PledgeProgressBar } from "@/components/pledges";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Checkbox, Field, Input, Textarea } from "@/components/ui/form";
 import { Badge, Card, CardBody, CardHeader } from "@/components/ui/misc";
 import { Choice, DateField } from "@/components/ui/pickers";
 import { api, fieldError, useResource } from "@/lib/api";
-import { buildChallengeUpdate, type ChallengeEntry, type ShareLang } from "@/lib/challengeShare";
+import { STARTER_TEMPLATE, TEMPLATE_FIELDS, buildChallengeUpdate, fillTemplate, type ChallengeEntry, type ShareLang } from "@/lib/challengeShare";
 import { formatKesShort, parseKes } from "@/lib/money";
 import { formatNairobiDate } from "@/lib/time";
 import type { Account, AccountKind, ChallengeInput, ChallengeSummary, Fundraiser, GivingMethod, Kind, ListItem, PublicPreview } from "@/lib/types";
@@ -55,12 +55,13 @@ export const emptyChallenge: ChallengeInput = {
   giving_number: "",
   giving_account: "",
   giving_name: "",
+  message_template: "",
 };
 
 export function challengeInput(c: ChallengeSummary): ChallengeInput {
   const { name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published, account_id } = c;
-  const { giving_method, giving_number, giving_account, giving_name } = c;
-  return { name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published, account_id, giving_method, giving_number, giving_account, giving_name };
+  const { giving_method, giving_number, giving_account, giving_name, message_template } = c;
+  return { name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published, account_id, giving_method, giving_number, giving_account, giving_name, message_template };
 }
 
 /** Where givers send money for a challenge: its own details when set, else the fundraiser's. */
@@ -128,12 +129,24 @@ export function publicEntries(items: ListItem[], settings: Fundraiser | null | u
     }));
 }
 
+/** The message to share: the family's own template when it has one ("template"), or the standard update. */
+export type ShareMode = "template" | ShareLang;
+
 export function shareText(
   challenge: ChallengeSummary,
   ctx: ReturnType<typeof useShareContext>,
-  options: { lang: ShareLang; entries?: ChallengeEntry[]; includeList?: boolean; includeGiving?: boolean; includeLink?: boolean },
+  options: { lang: ShareMode; entries?: ChallengeEntry[]; includeList?: boolean; includeGiving?: boolean; includeLink?: boolean },
 ): string {
   const s = ctx.settings;
+  if (options.lang === "template") {
+    return fillTemplate(challenge.message_template, {
+      challenge,
+      entries: options.entries ?? [],
+      memorialName: s?.memorial_name || null,
+      giving: challengeGiving(challenge, s).giving,
+      publicUrl: ctx.publicUrl,
+    });
+  }
   return buildChallengeUpdate({
     challenge,
     entries: options.entries ?? [],
@@ -145,6 +158,51 @@ export function shareText(
     includeList: options.includeList ?? false,
     includeGiving: options.includeGiving ?? true,
   });
+}
+
+/** The family's own WhatsApp message: written their way, with {placeholders} for the live figures. */
+function TemplateField({ value, onChange, error }: { value: string; onChange: (v: string) => void; error?: string }) {
+  const box = useRef<HTMLTextAreaElement>(null);
+  function insert(key: string) {
+    const area = box.current;
+    const token = `{${key}}`;
+    if (!area) return onChange(value + token);
+    const [start, end] = [area.selectionStart, area.selectionEnd];
+    onChange(value.slice(0, start) + token + value.slice(end));
+    requestAnimationFrame(() => {
+      area.focus();
+      area.setSelectionRange(start + token.length, start + token.length);
+    });
+  }
+  return (
+    <fieldset className="space-y-3 rounded-xl border border-stone-200 p-4">
+      <legend className="px-1 font-semibold text-stone-800">WhatsApp message (optional)</legend>
+      <p className="-mt-1 text-sm text-stone-600">
+        Write the message the way you share it. Words in braces are filled in with the latest figures each time you copy it; tap one to add it. Left empty, the standard update is used.
+      </p>
+      <Field label="Message template" htmlFor="ch-template" optional error={error}>
+        <Textarea ref={box} id="ch-template" rows={12} className="font-mono text-sm" value={value} placeholder={STARTER_TEMPLATE} onChange={(e) => onChange(e.target.value)} />
+      </Field>
+      <div className="flex flex-wrap gap-1.5">
+        {TEMPLATE_FIELDS.map(([key, meaning]) => (
+          <button
+            key={key}
+            type="button"
+            title={meaning}
+            onClick={() => insert(key)}
+            className="press min-h-8 cursor-pointer rounded-full bg-stone-100 px-2.5 font-mono text-[13px] text-stone-700 ring-1 ring-stone-200 hover:bg-plum-50 hover:text-plum-900"
+          >
+            {`{${key}}`}
+          </button>
+        ))}
+      </div>
+      {!value && (
+        <Button type="button" variant="secondary" size="sm" onClick={() => onChange(STARTER_TEMPLATE)}>
+          Start from an example
+        </Button>
+      )}
+    </fieldset>
+  );
 }
 
 /** Choose the account a challenge keeps its own money in, or add one for it. */
@@ -235,12 +293,13 @@ function OwnAccount({ challengeId, value, onChange, error }: { challengeId: numb
 }
 
 /** Copies a ready-made update; the label says which language. */
-export function CopyUpdateButton({ text, label }: { text: () => string; label: string }) {
+export function CopyUpdateButton({ text, label, disabled }: { text: () => string; label: string; disabled?: boolean }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
       variant="secondary"
       size="sm"
+      disabled={disabled}
       icon={copied ? <Check className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
       onClick={() => void copyText(text()).then((ok) => ok && (setCopied(true), window.setTimeout(() => setCopied(false), 2000)))}
     >
@@ -358,6 +417,7 @@ export function ChallengeEditor({ id, initial, onDone, onCancel }: { id: number 
               <Textarea id="ch-description-sw" lang="sw" rows={4} value={input.description_sw} onChange={(e) => set("description_sw", e.target.value)} />
             </Field>
           </fieldset>
+          <TemplateField value={input.message_template} onChange={(v) => set("message_template", v)} error={fieldError(error, "message_template")} />
           <Checkbox checked={input.published} onChange={(e) => set("published", e.target.checked)} label="Show on the public page" hint="Visitors see the challenge and what it has raised. Contributions stay listed as usual." />
           {id !== null && (
             <Checkbox
