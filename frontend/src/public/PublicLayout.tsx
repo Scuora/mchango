@@ -68,7 +68,30 @@ function Ribbon({ page }: { page: PublicPage }) {
   );
 }
 
-/** The public site: one load of the public data shared by every page. */
+/**
+ * Fetches the public data again on every page visited and whenever the tab is
+ * shown again, so totals, lists and trends always reflect the latest records.
+ * The figures already on screen stay there until the new ones arrive.
+ */
+function useFreshOnVisit(pathname: string, reload: () => void) {
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false; // the first load is already under way
+      return;
+    }
+    reload();
+  }, [pathname, reload]);
+  useEffect(() => {
+    const onShow = () => {
+      if (document.visibilityState === "visible") reload();
+    };
+    document.addEventListener("visibilitychange", onShow);
+    return () => document.removeEventListener("visibilitychange", onShow);
+  }, [reload]);
+}
+
+/** The public site: the public data, shared by every page and refreshed on each visit. */
 export function PublicLayout() {
   return (
     <LangProvider>
@@ -82,6 +105,7 @@ function PublicSite() {
   const tr = useTr();
   const resource = useResource<PublicPage>("/api/public/page");
   const { pathname, hash } = useLocation();
+  useFreshOnVisit(pathname, resource.reload);
   useReveal();
   useEffect(() => {
     if (!hash) window.scrollTo({ top: 0 });

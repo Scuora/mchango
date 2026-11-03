@@ -4,7 +4,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::{Value, json};
 
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, HeaderName, header};
 
 use super::{AppState, extension_for, file_response, file_response_cached};
 use crate::error::{AppError, AppResult};
@@ -27,9 +27,10 @@ async fn health(State(state): State<AppState>) -> AppResult<Json<Value>> {
     Ok(Json(json!({ "status": "ok" })))
 }
 
-async fn page(State(state): State<AppState>) -> AppResult<Json<PublicPage>> {
+/// Never served from a cache: every visit shows the records as they are now.
+async fn page(State(state): State<AppState>) -> AppResult<([(HeaderName, &'static str); 1], Json<PublicPage>)> {
     let mut conn = state.pool.acquire().await?;
-    Ok(Json(publication::page(&mut conn).await?))
+    Ok(([(header::CACHE_CONTROL, "no-cache")], Json(publication::page(&mut conn).await?)))
 }
 
 async fn receipt(State(state): State<AppState>, Path(token): Path<String>) -> AppResult<Response> {
