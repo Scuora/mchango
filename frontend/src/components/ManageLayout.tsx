@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { ExternalLink, FileDown, FileText, HandCoins, Home, List, LogOut, Megaphone, Menu, PlusCircle, Settings, Share2, X, type LucideIcon } from "lucide-react";
+import { ExternalLink, FileDown, FileText, HandCoins, Home, List, LogOut, Megaphone, Menu, PlusCircle, Settings, Share2, Trophy, X, type LucideIcon } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { RequireAuth, useAuth } from "@/features/auth";
@@ -25,6 +25,7 @@ const NAV: NavItem[] = [
   { to: "/manage/transactions", label: "Transactions", short: "Records", icon: List },
   { to: "/manage/add", label: "Add transaction", short: "Add", icon: PlusCircle },
   { to: "/manage/pledges", label: "Pledges", short: "Pledges", icon: HandCoins },
+  { to: "/manage/challenges", label: "Challenges", short: "Challenges", icon: Trophy },
   { to: "/manage/statements", label: "Statements", short: "Statements", icon: FileText },
   { to: "/manage/announcements", label: "Announcements", short: "Updates", icon: Megaphone },
   { to: "/manage/reports", label: "Reports (PDF)", short: "Reports", icon: FileDown },
@@ -33,8 +34,9 @@ const NAV: NavItem[] = [
 ];
 
 /** Bottom tabs on phones: the four most used places, plus "More" for the rest. */
-const MORE = ["/manage/pledges", "/manage/share", "/manage/announcements", "/manage/reports", "/manage/settings"];
+const MORE = ["/manage/pledges", "/manage/challenges", "/manage/share", "/manage/announcements", "/manage/reports", "/manage/settings"];
 const TABS = NAV.filter((item) => !MORE.includes(item.to));
+const inMore = (pathname: string) => MORE.some((to) => pathname === to || pathname.startsWith(`${to}/`));
 
 export function ManageLayout() {
   return (
@@ -229,10 +231,10 @@ function Shell() {
           aria-expanded={moreOpen}
           className={clsx(
             "flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-plum-600",
-            moreOpen || MORE.includes(pathname) ? "text-plum-800" : "text-stone-600",
+            moreOpen || inMore(pathname) ? "text-plum-800" : "text-stone-600",
           )}
         >
-          <span className={clsx("flex h-7 w-12 items-center justify-center rounded-full", (moreOpen || MORE.includes(pathname)) && "bg-plum-100")}>
+          <span className={clsx("flex h-7 w-12 items-center justify-center rounded-full", (moreOpen || inMore(pathname)) && "bg-plum-100")}>
             <Menu className="size-5" aria-hidden />
           </span>
           More

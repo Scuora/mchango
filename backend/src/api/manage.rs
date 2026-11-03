@@ -12,6 +12,7 @@ use super::{AppState, extension_for, file_response};
 use crate::announcements::{self, Announcement, AnnouncementInput};
 use crate::auth;
 use crate::capture::{self, ParsedMessage};
+use crate::challenges::{self, ChallengeInput, ChallengeSummary};
 use crate::config::Config;
 use crate::db;
 use crate::error::{AppError, AppResult};
@@ -43,6 +44,9 @@ pub fn routes(config: &Config) -> Router<AppState> {
         )
         .route("/api/manage/announcements", get(list_announcements).post(create_announcement))
         .route("/api/manage/announcements/{id}", put(update_announcement).delete(delete_announcement))
+        .route("/api/manage/challenges", get(list_challenges).post(create_challenge))
+        .route("/api/manage/challenges/{id}", get(get_challenge).put(update_challenge).delete(delete_challenge))
+        .route("/api/manage/challenges/{id}/transactions", post(link_challenge_transactions))
         .route("/api/manage/accounts", get(list_accounts).post(create_account))
         .route("/api/manage/accounts/{id}", put(update_account))
         .route("/api/manage/capture/parse", post(parse_message))
@@ -51,6 +55,7 @@ pub fn routes(config: &Config) -> Router<AppState> {
         .route("/api/manage/transactions/{id}", get(transaction_detail))
         .route("/api/manage/transactions/{id}/presentation", put(update_presentation))
         .route("/api/manage/transactions/{id}/corrections", post(correct_transaction))
+        .route("/api/manage/transactions/{id}/challenge", put(set_transaction_challenge))
         .route("/api/manage/transactions/{id}/receipts", post(upload_receipt).layer(upload_limit))
         .route("/api/manage/documents/{id}/file", get(document_file))
         .route("/api/manage/documents/{id}/publish", post(publish_document))
@@ -92,6 +97,8 @@ struct Overview {
     reconciled_periods: Vec<ReconciledPeriod>,
     recent: Vec<ListItem>,
     pledges: totals::PledgeTotals,
+    /// Every challenge with what it has brought in (already part of `totals`).
+    challenges: Vec<ChallengeSummary>,
 }
 
 async fn overview(State(state): State<AppState>) -> AppResult<Json<Overview>> {
@@ -133,6 +140,7 @@ async fn overview(State(state): State<AppState>) -> AppResult<Json<Overview>> {
     let reconciled_periods = reconciliation::reconciled_periods(&mut conn).await?;
     let recent = transactions::list(&mut conn, ListQuery { limit: Some(5), ..ListQuery::default() }).await?.items;
     let pledges = totals::pledge_totals(&totals::pledge_progress(&records));
+    let challenges = challenges::summaries(&mut conn).await?;
 
     Ok(Json(Overview {
         fundraiser,
@@ -146,6 +154,7 @@ async fn overview(State(state): State<AppState>) -> AppResult<Json<Overview>> {
         reconciled_periods,
         recent,
         pledges,
+        challenges,
     }))
 }
 
@@ -247,6 +256,82 @@ async fn update_account(
     let account = settings::update_account(&mut tx, id, input).await?;
     tx.commit().await?;
     Ok(Json(account))
+}
+
+// ---------------------------------------------------------------------------
+// Challenges
+
+async fn list_challenges(State(state): State<AppState>) -> AppResult<Json<Vec<ChallengeSummary>>> {
+    let mut conn = state.pool.acquire().await?;
+    Ok(Json(challenges::summaries(&mut conn).await?))
+}
+
+async fn get_challenge(State(state): State<AppState>, Path(id): Path<i64>) -> AppResult<Json<ChallengeSummary>> {
+    let mut conn = state.pool.acquire().await?;
+    Ok(Json(challenges::summary(&mut conn, id).await?))
+}
+
+async fn create_challenge(
+    State(state): State<AppState>,
+    Json(input): Json<ChallengeInput>,
+) -> AppResult<(StatusCode, Json<ChallengeSummary>)> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    let saved = challenges::create(&mut tx, input).await?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(saved)))
+}
+
+async fn update_challenge(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(input): Json<ChallengeInput>,
+) -> AppResult<Json<ChallengeSummary>> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    let saved = challenges::update(&mut tx, id, input).await?;
+    tx.commit().await?;
+    Ok(Json(saved))
+}
+
+async fn delete_challenge(State(state): State<AppState>, Path(id): Path<i64>) -> AppResult<Json<Value>> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    challenges::delete(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct LinkTransactions {
+    transaction_ids: Vec<i64>,
+}
+
+async fn link_challenge_transactions(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(request): Json<LinkTransactions>,
+) -> AppResult<Json<ChallengeSummary>> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    challenges::link_many(&mut tx, id, &request.transaction_ids).await?;
+    let saved = challenges::summary(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(saved))
+}
+
+#[derive(Deserialize)]
+struct SetChallenge {
+    /// `null` takes the record out of its challenge.
+    challenge_id: Option<i64>,
+}
+
+async fn set_transaction_challenge(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(request): Json<SetChallenge>,
+) -> AppResult<Json<Detail>> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    challenges::set_for_transaction(&mut tx, id, request.challenge_id).await?;
+    tx.commit().await?;
+    let mut conn = state.pool.acquire().await?;
+    Ok(Json(transactions::detail(&mut conn, id).await?))
 }
 
 // ---------------------------------------------------------------------------

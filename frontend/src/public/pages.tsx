@@ -1,4 +1,4 @@
-import { ArrowRight, CircleHelp, Copy, MapPin, Share2, TrendingUp } from "lucide-react";
+import { ArrowRight, CircleHelp, Copy, MapPin, Share2, TrendingUp, Trophy } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router";
 import { ApiError, api } from "@/lib/api";
@@ -55,6 +55,34 @@ function TrendsLink({ page }: { page: PublicPage }) {
   );
 }
 
+/** A way into the Challenges page while any are open. */
+function ChallengesLink({ page }: { page: PublicPage }) {
+  const tr = useTr();
+  const open = (page.challenges ?? []).filter((c) => c.status === "active");
+  if (open.length === 0) return null;
+  const raised = (page.challenges ?? []).reduce((sum, c) => sum + c.raised_minor, 0);
+  const title = open.length === 1 ? tr(open[0].name, open[0].name_sw || open[0].name) : tr(`${open.length} challenges are on`, `Changamoto ${open.length} zinaendelea`);
+  return (
+    <Link
+      to="/challenges"
+      data-reveal
+      className="group lift flex items-center gap-4 rounded-2xl border border-ochre-200 bg-[#fffaf0] px-5 py-4 text-stone-900 no-underline shadow-sm hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600"
+    >
+      <span className="grid size-12 shrink-0 place-items-center rounded-full bg-ochre-100 text-ochre-800 transition-transform duration-300 group-hover:scale-105">
+        <Trophy className="size-6" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] font-semibold tracking-[0.14em] text-ochre-800 uppercase">{tr("Challenge", "Changamoto")}</span>
+        <span className="block font-display text-[1.35rem] leading-tight font-semibold">{title}</span>
+        <span className="mt-0.5 block text-[15px] text-stone-600">
+          {tr(`${kes(raised)} raised through challenges so far. Join in!`, `${kes(raised)} zimechangwa kupitia changamoto hadi sasa. Jiunge!`)}
+        </span>
+      </span>
+      <ArrowRight className="size-5 shrink-0 text-stone-400 transition-all duration-300 group-hover:translate-x-1 group-hover:text-plum-700" aria-hidden />
+    </Link>
+  );
+}
+
 /** Remember him, give, then see where the money went. */
 export function HomePage() {
   const page = usePublicPage();
@@ -71,6 +99,7 @@ export function HomePage() {
   const main = (
     <>
       <LatestUpdate page={page} />
+      <ChallengesLink page={page} />
       <TrendsLink page={page} />
       <GoalCard page={page} />
       {nothingYet ? (

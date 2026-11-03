@@ -261,6 +261,7 @@ async fn sms(tx: &mut db::Tx, message: &str, kind: Kind, name: Option<&str>, des
             charge_minor: p.charge_minor.value.map(amount),
             client_key: None,
             confirm_possible_duplicate: true,
+            challenge_id: None,
         },
         "demo data",
     )
@@ -291,6 +292,7 @@ async fn sms_personal(tx: &mut db::Tx, message: &str, direction: Direction, note
             charge_minor: None,
             client_key: None,
             confirm_possible_duplicate: true,
+            challenge_id: None,
         },
         "demo data",
     )
@@ -319,6 +321,7 @@ async fn manual(
             charge_minor: None,
             client_key: None,
             confirm_possible_duplicate: true,
+            challenge_id: None,
         },
         "demo data",
     )
@@ -347,6 +350,7 @@ async fn family_pledge(tx: &mut db::Tx, minor: i64, at: &str, presentation: Pres
         charge_minor: None,
         client_key: None,
         confirm_possible_duplicate: true,
+        challenge_id: None,
     };
     Ok(transactions::create(tx, request, "demo data").await?.id)
 }
@@ -380,6 +384,7 @@ async fn promise(
             charge_minor: None,
             client_key: None,
             confirm_possible_duplicate: true,
+            challenge_id: None,
         },
         "demo data",
     )

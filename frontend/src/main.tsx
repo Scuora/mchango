@@ -16,6 +16,7 @@ import { ContributePage } from "@/public/ContributePage";
 import { UpdatePage } from "@/public/UpdatePage";
 import { CheckPage, ExpensesPage, HomePage, UpdatesPage } from "@/public/pages";
 import { TrendsPage } from "@/public/TrendsPage";
+import { ChallengesPage as PublicChallengesPage } from "@/public/ChallengesPage";
 
 // Management is loaded separately, so visitors to the public page never
 // download it (or PrimeReact). See lib/lazyPages.
@@ -25,6 +26,8 @@ const OverviewPage = lazyPage("OverviewPage");
 const AddTransactionPage = lazyPage("AddTransactionPage");
 const TransactionsPage = lazyPage("TransactionsPage");
 const PledgesPage = lazyPage("PledgesPage");
+const ChallengesPage = lazyPage("ChallengesPage");
+const ChallengeDetailPage = lazyPage("ChallengeDetailPage");
 const TransactionDetailPage = lazyPage("TransactionDetailPage");
 const StatementsPage = lazyPage("StatementsPage");
 const StatementDetailPage = lazyPage("StatementDetailPage");
@@ -66,6 +69,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="contributions" element={<ContributionsPage />} />
           <Route path="expenses" element={<ExpensesPage />} />
           <Route path="trends" element={<TrendsPage />} />
+          <Route path="challenges" element={<PublicChallengesPage />} />
           <Route path="check" element={<CheckPage />} />
         </Route>
         <Route path="/manage/login" element={<LoginPage />} />
@@ -74,6 +78,8 @@ createRoot(document.getElementById("root")!).render(
           <Route path="add" element={<AddTransactionPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="pledges" element={<PledgesPage />} />
+          <Route path="challenges" element={<ChallengesPage />} />
+          <Route path="challenges/:id" element={<ChallengeDetailPage />} />
           <Route path="transactions/:id" element={<TransactionDetailPage />} />
           <Route path="statements" element={<StatementsPage />} />
           <Route path="statements/:id" element={<StatementDetailPage />} />

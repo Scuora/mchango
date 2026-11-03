@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { AlertTriangle, CheckCircle2, CircleDashed, FileWarning, GitCompareArrows } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleDashed, FileWarning, GitCompareArrows, Trophy } from "lucide-react";
 import { Link } from "react-router";
 import { formatKes } from "@/lib/money";
 import { ATTENTION_LABELS, KIND_LABELS, RECONCILIATION_LABELS } from "@/lib/labels";
@@ -61,6 +61,16 @@ export function itemLabel(item: ListItem): string {
   return item.description || item.counterparty || item.public_name || KIND_LABELS[item.kind];
 }
 
+/** The challenge a record came in through. */
+export function ChallengeTag({ name }: { name: string }) {
+  return (
+    <Badge tone="info">
+      <Trophy className="size-3.5" aria-hidden />
+      {name}
+    </Badge>
+  );
+}
+
 export function TransactionRow({ item }: { item: ListItem }) {
   return (
     <li>
@@ -78,6 +88,7 @@ export function TransactionRow({ item }: { item: ListItem }) {
             <KindBadge kind={item.kind} />
             {item.kind === "pledge" && item.pledged_by && <PledgeGroupTag by={item.pledged_by} />}
             {item.kind === "personal" && <span className="text-xs text-stone-500">not counted</span>}
+            {item.challenge_name && <ChallengeTag name={item.challenge_name} />}
             <ReconciliationBadge status={item.reconciliation} />
             {item.attention.map((a) => (
               <Badge key={a} tone="warning">

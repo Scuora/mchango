@@ -10,12 +10,14 @@ use sqlx::SqliteConnection;
 use std::collections::HashMap;
 
 use crate::announcements;
+use crate::challenges::{self, ChallengeStatus};
 use crate::clock;
 use crate::error::{AppError, AppResult};
 use crate::reconciliation;
 use crate::settings::{self, GivingMethod, Organiser};
 use crate::transactions::totals::{
-    FundraiserRecord, PledgeStatus, PledgeTotals, Totals, fundraiser_records, pledge_progress, pledge_totals,
+    FundraiserRecord, PledgeStatus, PledgeTotals, Totals, challenge_totals, fundraiser_records, pledge_progress,
+    pledge_totals,
 };
 use crate::transactions::{Direction, Kind, PledgedBy};
 
@@ -32,7 +34,26 @@ pub struct PublicPage {
     pub promises: Option<PublicPromises>,
     pub statement_checks: PublicStatementChecks,
     pub announcements: Vec<PublicAnnouncement>,
+    /// Published challenges, active first. Their money is part of `totals` already.
+    pub challenges: Vec<PublicChallenge>,
     pub last_updated: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PublicChallenge {
+    pub id: i64,
+    pub name: String,
+    pub name_sw: Option<String>,
+    pub description: String,
+    pub description_sw: Option<String>,
+    pub target_minor: Option<i64>,
+    pub starts_on: Option<String>,
+    pub ends_on: Option<String>,
+    pub status: ChallengeStatus,
+    /// Money received through the challenge (always shown, like the main totals).
+    pub raised_minor: i64,
+    pub contributions_count: i64,
+    pub pledged_outstanding_minor: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -122,6 +143,8 @@ pub struct PublicEntry {
     pub reference_hint: Option<String>,
     pub matched_to_statement: bool,
     pub receipts: Vec<PublicReceipt>,
+    /// The published challenge this came in through.
+    pub challenge_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -185,6 +208,9 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
     let statement_accounts: Vec<i64> =
         sqlx::query_scalar("SELECT id FROM accounts WHERE kind <> 'cash'").fetch_all(&mut *conn).await?;
 
+    let all_challenges = challenges::list(conn).await?;
+    let published_challenges: Vec<i64> = all_challenges.iter().filter(|c| c.published).map(|c| c.id).collect();
+
     let anonymous = fundraiser.anonymous_label.clone();
     let entry = |r: &FundraiserRecord| -> PublicEntry {
         let described = |fallback: &str| {
@@ -217,6 +243,7 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
             reference_hint,
             matched_to_statement: r.matched,
             receipts: receipts.get(&r.id).cloned().unwrap_or_default(),
+            challenge_id: r.challenge_id.filter(|c| published_challenges.contains(c)),
         }
     };
 
@@ -264,6 +291,29 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
         .await?
         .into_iter()
         .map(|p| PublicPeriod { start: p.period_start, end: p.period_end })
+        .collect();
+
+    let mut kitties = challenge_totals(&records);
+    let public_challenges = all_challenges
+        .into_iter()
+        .filter(|c| c.published)
+        .map(|c| {
+            let t = kitties.remove(&c.id).unwrap_or_default();
+            PublicChallenge {
+                id: c.id,
+                name: c.name,
+                name_sw: Some(c.name_sw).filter(|s| !s.is_empty()),
+                description: c.description,
+                description_sw: Some(c.description_sw).filter(|s| !s.is_empty()),
+                target_minor: c.target_minor,
+                starts_on: c.starts_on,
+                ends_on: c.ends_on,
+                status: c.status,
+                raised_minor: t.raised_minor,
+                contributions_count: t.contributions_count,
+                pledged_outstanding_minor: t.pledged_outstanding_minor,
+            }
+        })
         .collect();
 
     let last_updated: Option<String> =
@@ -341,6 +391,7 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
                 published_at: a.created_at,
             })
             .collect(),
+        challenges: public_challenges,
         last_updated,
     })
 }

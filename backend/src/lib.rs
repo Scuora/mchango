@@ -8,6 +8,7 @@ pub mod announcements;
 pub mod api;
 pub mod auth;
 pub mod capture;
+pub mod challenges;
 pub mod clock;
 pub mod config;
 pub mod db;

@@ -20,13 +20,15 @@ export function usePublicPage(): PublicPage {
   return useOutletContext<PublicContext>().page;
 }
 
-const LINKS: { to: string; label: [string, string]; end?: boolean }[] = [
+// `short` is used in the desktop bar on tablet widths, where the full labels do not fit.
+const LINKS: { to: string; label: [string, string]; short?: [string, string]; end?: boolean }[] = [
   { to: "/", label: ["Home", "Nyumbani"], end: true },
   { to: "/updates", label: ["Updates", "Taarifa"] },
   { to: "/contributions", label: ["Contributions", "Michango"] },
   { to: "/expenses", label: ["Expenses", "Matumizi"] },
   { to: "/trends", label: ["Trends", "Mwenendo"] },
-  { to: "/check", label: ["Check my contribution", "Hakiki mchango"] },
+  { to: "/challenges", label: ["Challenges", "Changamoto"] },
+  { to: "/check", label: ["Check my contribution", "Hakiki mchango"], short: ["Check", "Hakiki"] },
 ];
 
 /**
@@ -185,6 +187,7 @@ function PublicNav({ page }: { page: PublicPage }) {
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
   const f = page.fundraiser;
   const name = f.memorial_name ?? f.name;
+  const links = LINKS.filter((link) => link.to !== "/challenges" || (page.challenges?.length ?? 0) > 0);
   const overHero = pathname === "/" && !scrolled && !open;
 
   useEffect(() => {
@@ -240,20 +243,27 @@ function PublicNav({ page }: { page: PublicPage }) {
                 style={{ left: indicator.left, width: indicator.width }}
               />
             )}
-            {LINKS.map((link) => (
+            {links.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
                 end={link.end}
                 className={({ isActive }) =>
                   clsx(
-                    "relative z-10 rounded-full px-3.5 py-1.5 text-[15px] whitespace-nowrap no-underline transition-colors hover:no-underline",
+                    "relative z-10 rounded-full px-2.5 py-1.5 text-[15px] whitespace-nowrap no-underline transition-colors hover:no-underline lg:px-3.5",
                     "focus-visible:outline-2 focus-visible:outline-[#ffd086]",
                     isActive ? "text-white" : "text-[#f6efe4]/75 hover:text-white",
                   )
                 }
               >
-                {tr(link.label[0], link.label[1])}
+                {link.short ? (
+                  <>
+                    <span className="lg:hidden">{tr(link.short[0], link.short[1])}</span>
+                    <span className="hidden lg:inline">{tr(link.label[0], link.label[1])}</span>
+                  </>
+                ) : (
+                  tr(link.label[0], link.label[1])
+                )}
               </NavLink>
             ))}
           </div>
@@ -300,7 +310,7 @@ function PublicNav({ page }: { page: PublicPage }) {
       {open && (
         <div id="public-menu" className="sheet-in border-t border-white/10 px-4 pt-2 pb-5 md:hidden">
           <nav aria-label={tr("Fundraiser pages", "Kurasa za mchango")} className="flex flex-col">
-            {LINKS.map((link) => (
+            {links.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}

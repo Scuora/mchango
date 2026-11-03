@@ -165,6 +165,9 @@ export interface ListItem {
   description: string;
   notes: string;
   pledged_by: PledgedBy | null;
+  /** The challenge it came in through, if any. */
+  challenge_id: number | null;
+  challenge_name: string | null;
   receipt_count: number;
   reconciliation: ReconciliationStatus;
   attention: Attention[];
@@ -270,6 +273,8 @@ export interface CreateRequest {
   client_key: string | null;
   /** Sent after the person confirms a possible-duplicate warning. */
   confirm_possible_duplicate: boolean;
+  /** The challenge it came in through. Money for a pledge made in a challenge joins it unless set. */
+  challenge_id?: number | null;
 }
 
 export interface Created {
@@ -451,6 +456,68 @@ export interface Overview {
   reconciled_periods: ReconciledPeriod[];
   recent: ListItem[];
   pledges: PledgeTotals;
+  /** Every challenge with what it has brought in (already part of the totals). */
+  challenges: ChallengeSummary[];
+}
+
+export type ChallengeStatus = "active" | "closed";
+
+/** A fun game or dare that raises money. Its money is ordinary fundraiser money, counted once in the totals. */
+export interface Challenge {
+  id: number;
+  name: string;
+  /** Kiswahili versions; empty shows the English in both languages. */
+  name_sw: string;
+  description: string;
+  description_sw: string;
+  target_minor: number | null;
+  /** Nairobi dates. */
+  starts_on: string | null;
+  ends_on: string | null;
+  status: ChallengeStatus;
+  published: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChallengeTotals {
+  raised_minor: number;
+  contributions_count: number;
+  pledged_minor: number;
+  /** Pledged through the challenge, not yet received. */
+  pledged_outstanding_minor: number;
+  last_received_at: string | null;
+}
+
+export interface ChallengeSummary extends Challenge {
+  totals: ChallengeTotals;
+}
+
+export interface ChallengeInput {
+  name: string;
+  name_sw: string;
+  description: string;
+  description_sw: string;
+  target_minor: number | null;
+  starts_on: string | null;
+  ends_on: string | null;
+  status: ChallengeStatus;
+  published: boolean;
+}
+
+export interface PublicChallenge {
+  id: number;
+  name: string;
+  name_sw: string | null;
+  description: string;
+  description_sw: string | null;
+  target_minor: number | null;
+  starts_on: string | null;
+  ends_on: string | null;
+  status: ChallengeStatus;
+  raised_minor: number;
+  contributions_count: number;
+  pledged_outstanding_minor: number;
 }
 
 /** Who made a pledge: the family's pledges are its share of the target. */
@@ -514,6 +581,8 @@ export interface PublicEntry {
   reference_hint: string | null;
   matched_to_statement: boolean;
   receipts: PublicReceipt[];
+  /** The published challenge it came in through. */
+  challenge_id?: number | null;
 }
 
 export interface PublicTotals {
@@ -567,6 +636,8 @@ export interface PublicPage {
     not_matched_count: number;
   };
   announcements: PublicAnnouncement[];
+  /** Published challenges, active first. Their money is part of the totals already. */
+  challenges?: PublicChallenge[];
   last_updated: string | null;
 }
 

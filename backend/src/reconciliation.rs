@@ -525,6 +525,7 @@ pub async fn create_from_row(
             charge_minor: None,
             client_key: None,
             confirm_possible_duplicate: true,
+            challenge_id: None,
         },
         &format!("from statement import #{import_id}"),
     )

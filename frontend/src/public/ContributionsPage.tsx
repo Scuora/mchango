@@ -4,7 +4,7 @@
 // chunks as the visitor scrolls, so a thousand names stay quick on a phone.
 
 import { clsx } from "clsx";
-import { ArrowUp, HandHeart, Search, X } from "lucide-react";
+import { ArrowUp, HandHeart, Search, Trophy, X } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router";
@@ -336,6 +336,7 @@ export function ContributionsPage() {
   const list = useRef<HTMLElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
 
+  const challengeNames = new Map((page.challenges ?? []).map((c) => [c.id, tr(c.name, c.name_sw || c.name)]));
   const rows = useMemo<Row[]>(
     () => page.contributions.map((e, key) => ({ ...e, key, folded: fold(e.label), anonymous: e.label === anonymousLabel })),
     [page.contributions, anonymousLabel],
@@ -622,7 +623,15 @@ export function ContributionsPage() {
                           <p className={clsx("truncate font-medium", row.anonymous ? "text-stone-600" : "text-stone-900")}>
                             {row.anonymous ? localiseName(row.label, lang) : <Highlight text={row.label} folded={row.folded} query={deferred} />}
                           </p>
-                          <p className="text-[14px] text-stone-500">{timeOnly ? formatNairobiTime(row.at) : formatShortDateTime(row.at)}</p>
+                          <p className="flex flex-wrap items-center gap-x-2 text-[14px] text-stone-500">
+                            <span>{timeOnly ? formatNairobiTime(row.at) : formatShortDateTime(row.at)}</span>
+                            {row.challenge_id && challengeNames.has(row.challenge_id) && (
+                              <Link to="/challenges" className="inline-flex items-center gap-1 text-ochre-800 no-underline hover:underline">
+                                <Trophy className="size-3.5" aria-hidden />
+                                {challengeNames.get(row.challenge_id)}
+                              </Link>
+                            )}
+                          </p>
                         </div>
                         {row.amount_minor !== null && (
                           <p className="shrink-0 text-right font-semibold text-stone-900 tabular-nums">

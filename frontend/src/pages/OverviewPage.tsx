@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, FileUp, GitCompareArrows, Loader2, Megaphone, PlusCircle, Receipt, Share2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, FileUp, GitCompareArrows, Loader2, Megaphone, PlusCircle, Receipt, Share2, Trophy } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { CountUp } from "@/components/CountUp";
@@ -9,7 +9,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, EmptyState } from "@/components/ui/misc";
 import { useResource } from "@/lib/api";
 import { familyOf, goalOf } from "@/lib/goal";
-import { formatKes } from "@/lib/money";
+import { formatKes, formatKesShort } from "@/lib/money";
 import { formatNairobiDate } from "@/lib/time";
 import type { Overview } from "@/lib/types";
 
@@ -170,6 +170,39 @@ export function OverviewPage() {
             </dl>
           </CardBody>
         </Card>
+
+        {o.challenges.length > 0 && (
+          <Card>
+            <CardHeader
+              title="Challenges"
+              description="What each challenge has brought in. Already part of the contributions above."
+              actions={
+                <ButtonLink to="/manage/challenges" variant="secondary" size="sm" icon={<Trophy className="size-4" aria-hidden />}>
+                  Challenges
+                </ButtonLink>
+              }
+            />
+            <CardBody>
+              <dl className="divide-y divide-stone-100 text-[15px]">
+                {o.challenges
+                  .filter((c) => c.status === "active" || c.totals.raised_minor > 0)
+                  .slice(0, 6)
+                  .map((c) => (
+                    <div key={c.id} className="flex justify-between gap-3 py-2">
+                      <dt className="min-w-0 text-stone-700">
+                        <Link to={`/manage/challenges/${c.id}`}>{c.name}</Link>
+                        {c.status === "closed" && <span className="ml-1.5 text-sm text-stone-500">(closed)</span>}
+                      </dt>
+                      <dd className="text-right font-semibold whitespace-nowrap tabular-nums">
+                        {formatKes(c.totals.raised_minor)}
+                        {c.target_minor ? <span className="block text-xs font-normal text-stone-500">of {formatKesShort(c.target_minor)}</span> : null}
+                      </dd>
+                    </div>
+                  ))}
+              </dl>
+            </CardBody>
+          </Card>
+        )}
 
         {(totals.pledged_outstanding_minor > 0 || totals.unpaid_bills_minor > 0) && (
           <Card>

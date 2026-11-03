@@ -26,13 +26,15 @@ pub struct FundraiserRecord {
     pub public_name: Option<String>,
     pub description: String,
     pub pledged_by: Option<PledgedBy>,
+    /// The challenge it came in through. Its money still counts once, in the main totals.
+    pub challenge_id: Option<i64>,
     pub matched: bool,
 }
 
 pub async fn fundraiser_records(conn: &mut SqliteConnection) -> AppResult<Vec<FundraiserRecord>> {
     let rows = sqlx::query_as(
         "SELECT t.id, v.kind, v.direction, v.amount_minor, v.occurred_at, v.account_id, v.to_account_id,
-                v.reference, v.related_transaction_id, t.public_name, t.description, t.pledged_by,
+                v.reference, v.related_transaction_id, t.public_name, t.description, t.pledged_by, t.challenge_id,
                 EXISTS (SELECT 1 FROM statement_rows r JOIN statement_imports i ON i.id = r.import_id
                         WHERE r.transaction_id = t.id AND i.status = 'ready') AS matched
          FROM transactions t
@@ -210,6 +212,46 @@ pub fn pledge_totals(progress: &[PledgeProgress]) -> PledgeTotals {
     totals
 }
 
+/// What one challenge has brought in. Its money is part of the fundraiser's
+/// totals already; this only adds up the records linked to the challenge.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct ChallengeTotals {
+    pub raised_minor: i64,
+    pub contributions_count: i64,
+    pub pledged_minor: i64,
+    /// Pledged through the challenge and not yet received.
+    pub pledged_outstanding_minor: i64,
+    /// UTC instant of the latest money received through it.
+    pub last_received_at: Option<String>,
+}
+
+/// Every challenge's kitty, from the money received and pledged through it.
+pub fn challenge_totals(records: &[FundraiserRecord]) -> BTreeMap<i64, ChallengeTotals> {
+    let mut by_challenge: BTreeMap<i64, ChallengeTotals> = BTreeMap::new();
+    for r in records {
+        let Some(challenge) = r.challenge_id else { continue };
+        let t = by_challenge.entry(challenge).or_default();
+        match r.kind {
+            Kind::Contribution => {
+                t.raised_minor += r.amount_minor;
+                t.contributions_count += 1;
+                if t.last_received_at.as_deref().is_none_or(|last| r.occurred_at.as_str() > last) {
+                    t.last_received_at = Some(r.occurred_at.clone());
+                }
+            }
+            Kind::Pledge => t.pledged_minor += r.amount_minor,
+            _ => {}
+        }
+    }
+    for p in pledge_progress(records) {
+        let challenge = records.iter().find(|r| r.id == p.id).and_then(|r| r.challenge_id);
+        if let Some(t) = challenge.and_then(|c| by_challenge.get_mut(&c)) {
+            t.pledged_outstanding_minor += (p.amount_minor - p.received_minor).max(0);
+        }
+    }
+    by_challenge
+}
+
 /// Where the fundraiser's money is, per account. Transfers move it between
 /// accounts without changing the total.
 pub fn funds_by_account(records: &[FundraiserRecord], opening: Option<(i64, i64)>) -> BTreeMap<i64, i64> {
@@ -257,6 +299,7 @@ mod tests {
             public_name: None,
             description: String::new(),
             pledged_by: None,
+            challenge_id: None,
             matched: false,
         }
     }
@@ -288,5 +331,30 @@ mod tests {
         let places = funds_by_account(&records, Some((1, 10_000)));
         assert_eq!(places.values().sum::<i64>(), t.remaining_minor);
         assert_eq!(places[&2], 20_000);
+    }
+
+    #[test]
+    fn a_challenge_is_a_view_of_the_main_totals() {
+        let in_challenge = |mut r: FundraiserRecord| {
+            r.challenge_id = Some(9);
+            r
+        };
+        let mut paid = in_challenge(rec(4, Kind::Contribution, Some(Direction::In), 2_000));
+        paid.related_transaction_id = Some(3);
+        paid.occurred_at = "2024-06-03T00:00:00Z".into();
+        let records = vec![
+            rec(1, Kind::Contribution, Some(Direction::In), 10_000),
+            in_challenge(rec(2, Kind::Contribution, Some(Direction::In), 500)),
+            in_challenge(rec(3, Kind::Pledge, None, 5_000)),
+            paid,
+            // Linked by mistake to something that is not money received: ignored.
+            in_challenge(rec(5, Kind::Expense, Some(Direction::Out), 700)),
+        ];
+        let kitty = &challenge_totals(&records)[&9];
+        assert_eq!((kitty.raised_minor, kitty.contributions_count), (2_500, 2));
+        assert_eq!((kitty.pledged_minor, kitty.pledged_outstanding_minor), (5_000, 3_000));
+        assert_eq!(kitty.last_received_at.as_deref(), Some("2024-06-03T00:00:00Z"));
+        // The same money counts once in the fundraiser's totals.
+        assert_eq!(Totals::from_records(&records, 0).contributions_minor, 12_500);
     }
 }

@@ -13,6 +13,7 @@ pub enum Entity {
     StatementImport,
     Document,
     Announcement,
+    Challenge,
 }
 
 impl Entity {
@@ -24,6 +25,7 @@ impl Entity {
             Entity::StatementImport => "statement_import",
             Entity::Document => "document",
             Entity::Announcement => "announcement",
+            Entity::Challenge => "challenge",
         }
     }
 }

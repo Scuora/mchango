@@ -81,6 +81,10 @@ pub struct CreateRequest {
     /// that this is a different transaction.
     #[serde(default)]
     pub confirm_possible_duplicate: bool,
+    /// The challenge the money or pledge came in through. Money received for a
+    /// pledge made in a challenge joins that challenge unless told otherwise.
+    #[serde(default)]
+    pub challenge_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -153,6 +157,25 @@ pub async fn create(conn: &mut SqliteConnection, request: CreateRequest, origin:
         Some(amount) => Some(charge_line(&movement, amount)?),
     };
 
+    let challenge_id = match request.challenge_id {
+        Some(challenge) => Some(challenge),
+        None if movement.kind == Kind::Contribution => match movement.related_transaction_id {
+            Some(pledge) => sqlx::query_scalar("SELECT challenge_id FROM transactions WHERE id = ?")
+                .bind(pledge)
+                .fetch_optional(&mut *conn)
+                .await?
+                .flatten(),
+            None => None,
+        },
+        None => None,
+    };
+    if challenge_id.is_some() && !crate::challenges::can_belong(movement.kind) {
+        return Err(AppError::field(
+            "challenge_id",
+            "Only money received and pledges can come in through a challenge.",
+        ));
+    }
+
     let id = insert_transaction(conn, &presentation, client_key.as_deref()).await?;
     insert_version(conn, id, 1, &movement, false, None).await?;
     history::record(
@@ -169,6 +192,10 @@ pub async fn create(conn: &mut SqliteConnection, request: CreateRequest, origin:
         Some(json!({ "origin": origin })),
     )
     .await?;
+
+    if challenge_id.is_some() {
+        crate::challenges::set_for_transaction(conn, id, challenge_id).await?;
+    }
 
     if let Some(text) = &message {
         sqlx::query(
@@ -463,6 +490,17 @@ async fn apply_correction(
     )
     .await?;
 
+    // Only money received and pledges belong to a challenge.
+    if removed || !crate::challenges::can_belong(after.kind) {
+        let linked: Option<i64> = sqlx::query_scalar("SELECT challenge_id FROM transactions WHERE id = ?")
+            .bind(id)
+            .fetch_one(&mut *conn)
+            .await?;
+        if linked.is_some() {
+            crate::challenges::set_for_transaction(conn, id, None).await?;
+        }
+    }
+
     reconciliation::recheck_links(conn, id).await?;
     if let Some(reference) = &after.reference {
         reconciliation::rematch_reference(conn, reference).await?;
@@ -660,6 +698,8 @@ pub struct ListItem {
     pub description: String,
     pub notes: String,
     pub pledged_by: Option<PledgedBy>,
+    pub challenge_id: Option<i64>,
+    pub challenge_name: Option<String>,
     pub receipt_count: i64,
     #[serde(skip)]
     pub matched: bool,
@@ -706,6 +746,7 @@ const ITEMS_CTE: &str = "WITH items AS (
            v.to_account_id, ta.name AS to_account_name,
            v.reference, v.is_fee, v.removed, v.counterparty, v.related_transaction_id,
            t.public_name, t.description, t.notes, t.pledged_by,
+           t.challenge_id, c.name AS challenge_name,
            (SELECT COUNT(*) FROM documents d WHERE d.transaction_id = t.id AND d.kind = 'receipt') AS receipt_count,
            EXISTS (SELECT 1 FROM statement_rows r JOIN statement_imports i ON i.id = r.import_id
                    WHERE r.transaction_id = t.id AND i.status = 'ready') AS matched,
@@ -719,6 +760,7 @@ const ITEMS_CTE: &str = "WITH items AS (
     JOIN transaction_versions v ON v.transaction_id = t.id AND v.is_current = 1
     LEFT JOIN accounts a ON a.id = v.account_id
     LEFT JOIN accounts ta ON ta.id = v.to_account_id
+    LEFT JOIN challenges c ON c.id = t.challenge_id
 ) ";
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -740,6 +782,8 @@ pub struct ListQuery {
     pub to: Option<String>,
     pub status: Option<StatusFilter>,
     pub account_id: Option<i64>,
+    /// Records that came in through this challenge.
+    pub challenge_id: Option<i64>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -761,6 +805,9 @@ fn push_filters(qb: &mut QueryBuilder<Sqlite>, query: &ListQuery) -> AppResult<(
     }
     if let Some(account) = query.account_id {
         qb.push(" AND (account_id = ").push_bind(account).push(" OR to_account_id = ").push_bind(account).push(")");
+    }
+    if let Some(challenge) = query.challenge_id {
+        qb.push(" AND challenge_id = ").push_bind(challenge);
     }
     if let Some(from) = query.from.as_deref().filter(|s| !s.is_empty()) {
         let date = clock::parse_date(from).ok_or_else(|| AppError::field("from", "Use a date like 2024-06-30."))?;

@@ -14,7 +14,7 @@ pub async fn transactions_csv(conn: &mut SqliteConnection) -> AppResult<String> 
     let mut out = String::from(
         "id,version,transaction_time_nairobi,recorded_at_utc,type,direction,amount_kes,account,to_account,\
          reference,is_charge_line,counts_for_fundraiser,public_name,description,private_notes,counterparty,\
-         statement_status,removed\n",
+         statement_status,removed,challenge\n",
     );
     for t in items {
         let local = clock::parse_instant(&t.occurred_at)
@@ -47,6 +47,7 @@ pub async fn transactions_csv(conn: &mut SqliteConnection) -> AppResult<String> 
             t.counterparty.clone().unwrap_or_default(),
             format!("{:?}", t.reconciliation).to_lowercase(),
             t.removed.to_string(),
+            t.challenge_name.clone().unwrap_or_default(),
         ];
         let line: Vec<String> = fields.iter().map(|f| csv_field(f)).collect();
         out.push_str(&line.join(","));
@@ -64,9 +65,10 @@ fn csv_field(value: &str) -> String {
     if v.contains([',', '"', '\n', '\r']) { format!("\"{}\"", v.replace('"', "\"\"")) } else { v }
 }
 
-const TABLES: [(&str, &str); 8] = [
+const TABLES: [(&str, &str); 9] = [
     ("fundraiser", "SELECT * FROM fundraiser"),
     ("accounts", "SELECT * FROM accounts ORDER BY id"),
+    ("challenges", "SELECT * FROM challenges ORDER BY id"),
     ("transactions", "SELECT * FROM transactions ORDER BY id"),
     ("transaction_versions", "SELECT * FROM transaction_versions ORDER BY transaction_id, version"),
     ("documents", "SELECT * FROM documents ORDER BY id"),

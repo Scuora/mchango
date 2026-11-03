@@ -21,7 +21,7 @@ use mchango::transactions::totals::{
     PledgeStatus, Totals, fundraiser_records, funds_by_account, pledge_progress, pledge_totals,
 };
 use mchango::transactions::{self, CorrectionRequest, CreateRequest, Kind, MovementInput, PledgedBy, Presentation};
-use mchango::{announcements, db, money::Amount, publication, seed};
+use mchango::{announcements, challenges, db, money::Amount, publication, seed};
 
 fn temp_dir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("mchango-test-{}", storage::random_hex(6)));
@@ -115,6 +115,7 @@ async fn demo_flow() {
                 charge_minor: None,
                 client_key: None,
                 confirm_possible_duplicate: true,
+                challenge_id: None,
             },
             "test",
         )
@@ -148,6 +149,7 @@ async fn demo_flow() {
             charge_minor: None,
             client_key: key.map(Into::into),
             confirm_possible_duplicate: confirm,
+            challenge_id: None,
         };
         let mut tx = db::begin_write(&pool).await.unwrap();
         let flagged = transactions::create(&mut tx, manual(false, None), "test").await;
@@ -389,4 +391,104 @@ async fn routes_keep_management_private() {
         .unwrap();
     let response = manage.oneshot(post).await.unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN, "changes need the app's own header");
+}
+
+fn record(kind: Kind, amount: i64, related: Option<i64>, challenge_id: Option<i64>) -> CreateRequest {
+    CreateRequest {
+        movement: MovementInput {
+            kind,
+            direction: None,
+            amount_minor: Amount::try_from(amount).unwrap(),
+            occurred_at: "2026-09-05T10:00:00+03:00".into(),
+            account_id: (kind != Kind::Pledge).then_some(1),
+            to_account_id: None,
+            reference: None,
+            is_fee: false,
+            related_transaction_id: related,
+            counterparty: None,
+        },
+        presentation: Presentation {
+            public_name: Some("Cousin Zawadi".into()),
+            description: String::new(),
+            notes: String::new(),
+            pledged_by: None,
+        },
+        source_message: None,
+        charge_minor: None,
+        client_key: None,
+        confirm_possible_duplicate: true,
+        challenge_id,
+    }
+}
+
+/// A challenge is a kitty inside the main fund: its money counts once, in the
+/// main totals, and the challenge adds up what came in through it.
+#[tokio::test]
+async fn challenges_keep_their_own_tally() {
+    let dir = temp_dir();
+    let pool = db::connect(&dir.join("test.sqlite")).await.unwrap();
+    let storage = Storage::open(&dir.join("uploads")).unwrap();
+    seed::run(&pool, &storage, &dir).await.unwrap();
+    let before = totals(&pool).await;
+    let mut tx = db::begin_write(&pool).await.unwrap();
+
+    let input =
+        |name: &str| serde_json::from_value(serde_json::json!({ "name": name, "target_minor": 5_000_00 })).unwrap();
+    let cousins = challenges::create(&mut tx, input("Cousins' 1,000 challenge")).await.unwrap().challenge.id;
+    assert!(challenges::create(&mut tx, input("Cousins' 1,000 challenge")).await.is_err(), "names are unique");
+
+    // Money and a pledge through the challenge; the pledge's payment joins it on its own.
+    let gift = transactions::create(&mut tx, record(Kind::Contribution, 1_000_00, None, Some(cousins)), "test")
+        .await
+        .unwrap()
+        .id;
+    let pledge =
+        transactions::create(&mut tx, record(Kind::Pledge, 3_000_00, None, Some(cousins)), "test").await.unwrap().id;
+    let paid = transactions::create(&mut tx, record(Kind::Contribution, 2_000_00, Some(pledge), None), "test")
+        .await
+        .unwrap()
+        .id;
+    assert_eq!(transactions::item(&mut tx, paid).await.unwrap().challenge_id, Some(cousins));
+    let kitty = challenges::summary(&mut tx, cousins).await.unwrap().totals;
+    assert_eq!((kitty.raised_minor, kitty.contributions_count), (3_000_00, 2));
+    assert_eq!(kitty.pledged_outstanding_minor, 1_000_00);
+    let records = fundraiser_records(&mut tx).await.unwrap();
+    assert_eq!(
+        Totals::from_records(&records, 12_000_00).contributions_minor,
+        before.contributions_minor + 3_000_00,
+        "challenge money is counted once, in the main totals"
+    );
+
+    // Only money received and pledges come in through a challenge.
+    let expense: i64 = sqlx::query_scalar(
+        "SELECT transaction_id FROM transaction_versions WHERE is_current = 1 AND kind = 'expense' LIMIT 1",
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    assert!(matches!(
+        challenges::set_for_transaction(&mut tx, expense, Some(cousins)).await,
+        Err(AppError::Invalid { .. })
+    ));
+
+    // A removed record leaves its challenge; a challenge with records is closed, not deleted.
+    transactions::correct(&mut tx, gift, CorrectionRequest { reason: "Entered twice".into(), replacement: None })
+        .await
+        .unwrap();
+    assert_eq!(transactions::item(&mut tx, gift).await.unwrap().challenge_id, None);
+    assert_eq!(challenges::summary(&mut tx, cousins).await.unwrap().totals.raised_minor, 2_000_00);
+    assert!(matches!(challenges::delete(&mut tx, cousins).await, Err(AppError::Conflict(_))));
+
+    // The public page shows published challenges and tags their contributions.
+    let page = publication::build(&mut tx).await.unwrap();
+    let shown = page.challenges.iter().find(|c| c.id == cousins).unwrap();
+    let tagged: i64 =
+        page.contributions.iter().filter(|e| e.challenge_id == Some(cousins)).filter_map(|e| e.amount_minor).sum();
+    assert_eq!((shown.raised_minor, tagged), (2_000_00, 2_000_00));
+    let hidden =
+        serde_json::from_value(serde_json::json!({ "name": "Cousins' 1,000 challenge", "published": false })).unwrap();
+    challenges::update(&mut tx, cousins, hidden).await.unwrap();
+    let page = publication::build(&mut tx).await.unwrap();
+    assert!(page.challenges.is_empty() && page.contributions.iter().all(|e| e.challenge_id.is_none()));
+    tx.rollback().await.unwrap();
 }

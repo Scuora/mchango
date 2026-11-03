@@ -5,6 +5,7 @@ import { LoadState, SaveError } from "@/components/LoadState";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/form";
 import { Badge, Card, CardBody, CardHeader, Notice } from "@/components/ui/misc";
+import { ChallengePicker, canJoinChallenge } from "@/features/challenges";
 import {
   MovementFields,
   apiDraftErrors,
@@ -44,6 +45,9 @@ export function AddTransactionPage() {
   // From the Pledges page: `?kind=pledge&by=family` starts a new pledge; `?pledge=12` records money for pledge 12.
   const [params] = useSearchParams();
   const pledgeFor = params.get("pledge");
+  // From a challenge's page: `?challenge=3` records money that came in through challenge 3.
+  const challengeFor = params.get("challenge");
+  const [challenge, setChallenge] = useState(challengeFor ?? "");
   const newPledgeBy = params.get("kind") === "pledge" ? (params.get("by") === "family" ? "family" : "friends") : null;
   useEffect(() => {
     if (!accounts.data || !newPledgeBy) return;
@@ -71,6 +75,7 @@ export function AddTransactionPage() {
     setChargeError(undefined);
     setSaveError(null);
     setReadError(null);
+    setChallenge(challengeFor ?? "");
   }
 
   async function readMessage(event: FormEvent) {
@@ -169,6 +174,7 @@ export function AddTransactionPage() {
       charge_minor: chargeMinor,
       client_key: formKey,
       confirm_possible_duplicate: confirmPossibleDuplicate,
+      challenge_id: canJoinChallenge(draft.kind) && challenge ? Number(challenge) : null,
     };
     setSaving(true);
     try {
@@ -193,6 +199,11 @@ export function AddTransactionPage() {
           <ButtonLink to={`/manage/transactions/${step.created.id}`} variant="secondary">
             View transaction
           </ButtonLink>
+          {challengeFor && (
+            <ButtonLink to={`/manage/challenges/${challengeFor}`} variant="secondary">
+              Back to the challenge
+            </ButtonLink>
+          )}
           <Button onClick={reset} icon={<ClipboardPaste className="size-4" aria-hidden />}>
             Add another
           </Button>
@@ -318,6 +329,22 @@ export function AddTransactionPage() {
               error={saveError}
               idPrefix="add-p"
             />
+            {canJoinChallenge(draft.kind) && (
+              <Field
+                label="Came in through a challenge"
+                htmlFor="add-challenge"
+                optional
+                className="mt-4"
+                error={fieldError(saveError, "challenge_id")}
+                hint={
+                  draft.kind === "contribution" && draft.relatedId && !challenge
+                    ? "Money for a pledge made in a challenge joins that challenge on its own."
+                    : "It still counts once in the main totals; the challenge just keeps its own tally."
+                }
+              >
+                <ChallengePicker id="add-challenge" value={challenge} onChange={setChallenge} />
+              </Field>
+            )}
           </CardBody>
         </Card>
       )}

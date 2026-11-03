@@ -1,13 +1,14 @@
-import { ArrowLeft, Eye, EyeOff, FilePlus2, FileText, HandCoins, History, PencilLine, Trash2 } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, FilePlus2, FileText, HandCoins, History, PencilLine, Save, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
 import { LoadState, SaveError } from "@/components/LoadState";
-import { Amount, KindBadge, ReconciliationBadge, TransactionRow, itemLabel } from "@/components/money";
+import { Amount, ChallengeTag, KindBadge, ReconciliationBadge, TransactionRow, itemLabel } from "@/components/money";
 import { PledgeGroupTag, PledgeProgressBar, PledgeStatusBadge } from "@/components/pledges";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Checkbox, Field, Textarea } from "@/components/ui/form";
 import { Dialog } from "@/components/ui/dialog";
 import { Badge, Card, CardBody, CardHeader, Detail, EmptyState, Notice } from "@/components/ui/misc";
+import { ChallengePicker, canJoinChallenge } from "@/features/challenges";
 import { MovementFields, apiDraftErrors, buildMovement, draftFromItem, type DraftErrors, type MovementDraft } from "@/features/movementForm";
 import { PresentationFields, presentationDraftFrom, toPresentation, type PresentationDraft } from "@/features/presentationFields";
 import { api, fieldError, useResource } from "@/lib/api";
@@ -50,6 +51,11 @@ export function TransactionDetailPage() {
             {t.kind === "personal" && <Badge>Not counted in fundraiser totals</Badge>}
             {t.kind === "pledge" && t.pledged_by && <PledgeGroupTag by={t.pledged_by} />}
             {t.kind === "pledge" && !t.removed && <PledgeStatusBadge status={pledgeStatus} />}
+            {t.challenge_id && t.challenge_name && (
+              <Link to={`/manage/challenges/${t.challenge_id}`} className="no-underline hover:no-underline">
+                <ChallengeTag name={t.challenge_name} />
+              </Link>
+            )}
           </div>
         </div>
         <Amount minor={t.amount_minor} direction={t.direction} kind={t.kind} className="text-2xl" />
@@ -118,6 +124,7 @@ export function TransactionDetailPage() {
             <PresentationCard detail={d} anonymousLabel={settings.data?.anonymous_label} onSaved={detail.setData} />
           )}
           {t.kind === "personal" && <PresentationCard detail={d} onSaved={detail.setData} notesOnly />}
+          {!t.removed && canJoinChallenge(t.kind) && <ChallengeCard detail={d} onSaved={detail.setData} />}
 
           {(t.kind === "expense" || receipts.length > 0) && <ReceiptsCard detail={d} receipts={receipts} onChanged={detail.reload} onSaved={detail.setData} />}
 
@@ -229,6 +236,46 @@ export function TransactionDetailPage() {
       )}
       <RemoveDialog open={removing} onClose={() => setRemoving(false)} detail={d} onSaved={detail.setData} />
     </div>
+  );
+}
+
+/** Which challenge a contribution or pledge came in through. No money moves when it changes. */
+function ChallengeCard({ detail, onSaved }: { detail: DetailData; onSaved: (d: DetailData) => void }) {
+  const t = detail.transaction;
+  const current = t.challenge_id ? String(t.challenge_id) : "";
+  const [value, setValue] = useState(current);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  useEffect(() => setValue(current), [current]);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(await api.put<DetailData>(`/api/manage/transactions/${t.id}/challenge`, { challenge_id: value ? Number(value) : null }));
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader title="Challenge" description="Did this come in through a challenge? It counts once in the main totals either way." />
+      <form onSubmit={save}>
+        <CardBody className="space-y-3">
+          <Field label="Came in through" htmlFor="tx-challenge" optional error={fieldError(error, "challenge_id")}>
+            <ChallengePicker id="tx-challenge" value={value} onChange={setValue} />
+          </Field>
+          <SaveError error={error && !fieldError(error, "challenge_id") ? error : null} />
+          <Button type="submit" variant="secondary" size="sm" busy={busy} disabled={value === current} icon={<Save className="size-4" aria-hidden />}>
+            {value ? "Save challenge" : current ? "Take out of the challenge" : "Save"}
+          </Button>
+        </CardBody>
+      </form>
+    </Card>
   );
 }
 
