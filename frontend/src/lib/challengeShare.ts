@@ -122,7 +122,14 @@ export function fillTemplate(template: string, input: Omit<ChallengeShareInput, 
     time_sw: n.timeSw,
     link: input.publicUrl ? `${input.publicUrl}/challenges` : "",
   };
-  return template.replace(/\{([a-z_]+)\}/g, (whole, key: string) => values[key] ?? whole);
+  // A placeholder with nothing to show (such as {list} before any contributions)
+  // takes its line with it, so the message never has a gap of blank lines.
+  return template
+    .split("\n")
+    .filter((line) => !/^\s*(\{[a-z_]+\}\s*)+$/.test(line) || line.replace(/\{([a-z_]+)\}/g, (whole, key: string) => values[key] ?? whole).trim() !== "")
+    .join("\n")
+    .replace(/\{([a-z_]+)\}/g, (whole, key: string) => values[key] ?? whole)
+    .replace(/\n{3,}/g, "\n\n");
 }
 
 /** A starting point in the style of the family's first challenge message. */

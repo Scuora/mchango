@@ -63,4 +63,9 @@ describe("challenge update", () => {
     expect(text).toContain("👤 Jina: Samuel Isaac");
     expect(fillTemplate("Hadi {date_sw}, {time_sw} {unknown}", { ...base, entries })).toBe("Hadi 3 Novemba 2026, saa 11:00 {unknown}");
   });
+
+  it("leaves no gap when a placeholder is empty", () => {
+    const text = fillTemplate("{name}\n\n{list}\n\nSalio : KSh {remaining}", { ...base, entries: [] });
+    expect(text).toBe("Cousins' 1,000 challenge\n\nSalio : KSh 38,000");
+  });
 });
