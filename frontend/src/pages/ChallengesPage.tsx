@@ -40,8 +40,8 @@ export function ChallengesPage() {
         <div>
           <h1 className="page-title">Challenges</h1>
           <p className="mt-1 max-w-2xl text-stone-600">
-            Fun games and dares that keep the fundraiser going. Each challenge keeps its own kitty so you can see what it brought in, but the money is in the main
-            account and counts once in the totals.
+            Fun games and dares that keep the fundraiser going. Each challenge keeps its own tally, and can collect to its own number or account; either way its
+            money counts once in the fundraiser&rsquo;s totals, and what a challenge still holds is owed to the main fund until it is handed over.
           </p>
         </div>
         {!editing && (
