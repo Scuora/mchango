@@ -41,13 +41,13 @@ export function AccountsCard({ accounts, onChanged }: { accounts: Account[]; onC
     <Card>
       <CardHeader title="Add or rename accounts" description="Accounts used in records and statements. Transfers between them do not change totals." />
       <CardBody className="space-y-4">
-        <ul className="space-y-3">
+        <ul className="space-y-3 divide-y divide-stone-100 sm:divide-y-0 [&>li]:pt-3 sm:[&>li]:pt-0">
           {accounts.map((a) => (
             <AccountRow key={a.id} account={a} onChanged={onChanged} />
           ))}
         </ul>
-        <form onSubmit={add} className="grid gap-3 border-t border-stone-100 pt-4 sm:grid-cols-[1fr_10rem_10rem_auto] sm:items-end">
-          <Field label="New account name" htmlFor="acc-new-name" error={fieldError(error, "name")}>
+        <form onSubmit={add} className="grid grid-cols-2 items-end gap-3 border-t border-stone-100 pt-4 sm:grid-cols-[1fr_10rem_10rem_auto]">
+          <Field label="New account name" htmlFor="acc-new-name" error={fieldError(error, "name")} className="col-span-2 sm:col-span-1">
             <Input id="acc-new-name" value={adding.name} onChange={(e) => setAdding({ ...adding, name: e.target.value })} />
           </Field>
           <Field label="Type" htmlFor="acc-new-kind">
@@ -56,7 +56,7 @@ export function AccountsCard({ accounts, onChanged }: { accounts: Account[]; onC
           <Field label="Last digits" htmlFor="acc-new-hint" optional error={fieldError(error, "number_hint")}>
             <Input id="acc-new-hint" inputMode="numeric" value={adding.number_hint ?? ""} onChange={(e) => setAdding({ ...adding, number_hint: e.target.value })} />
           </Field>
-          <Button type="submit" variant="secondary" busy={busy} disabled={!adding.name.trim()} icon={<Plus className="size-4" aria-hidden />}>
+          <Button type="submit" variant="secondary" className="col-span-2 sm:col-span-1" busy={busy} disabled={!adding.name.trim()} icon={<Plus className="size-4" aria-hidden />}>
             Add
           </Button>
         </form>
@@ -90,8 +90,8 @@ function AccountRow({ account, onChanged }: { account: Account; onChanged: () =>
 
   return (
     <li>
-      <form onSubmit={save} className="grid gap-3 sm:grid-cols-[1fr_10rem_10rem_auto] sm:items-end">
-        <Field label="Name" htmlFor={`acc-${account.id}-name`} error={fieldError(error, "name")}>
+      <form onSubmit={save} className="grid grid-cols-2 items-end gap-3 sm:grid-cols-[1fr_10rem_10rem_auto]">
+        <Field label="Name" htmlFor={`acc-${account.id}-name`} error={fieldError(error, "name")} className="col-span-2 sm:col-span-1">
           <Input id={`acc-${account.id}-name`} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <Field label="Type" htmlFor={`acc-${account.id}-kind`}>
@@ -100,7 +100,7 @@ function AccountRow({ account, onChanged }: { account: Account; onChanged: () =>
         <Field label="Last digits" htmlFor={`acc-${account.id}-hint`} optional error={fieldError(error, "number_hint")}>
           <Input id={`acc-${account.id}-hint`} inputMode="numeric" value={hint} onChange={(e) => setHint(e.target.value)} disabled={account.kind !== "mpesa"} />
         </Field>
-        <Button type="submit" variant="secondary" busy={busy} disabled={!changed}>
+        <Button type="submit" variant="secondary" className="col-span-2 sm:col-span-1" busy={busy} disabled={!changed}>
           Save
         </Button>
       </form>

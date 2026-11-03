@@ -46,7 +46,7 @@ export function AccountsPage() {
           <div className="border-t border-stone-100 bg-ochre-50/60">
             <div className="flex items-baseline justify-between gap-3 px-4 pt-3 sm:px-5">
               <p className="font-semibold text-ochre-900">Held by challenges, to be handed over</p>
-              <p className="font-semibold text-ochre-900 tabular-nums">{formatKes(o.held_by_challenges_minor)}</p>
+              <p className="font-semibold whitespace-nowrap text-ochre-900 tabular-nums">{formatKes(o.held_by_challenges_minor)}</p>
             </div>
             <p className="px-4 text-sm text-stone-600 sm:px-5">Counted in the totals; owed to the main fund until each challenge hands its money over.</p>
             <ul className="divide-y divide-ochre-100">
@@ -58,7 +58,7 @@ export function AccountsPage() {
         )}
         <div className="flex items-baseline justify-between gap-3 border-t border-stone-200 px-4 py-3 sm:px-5">
           <p className="font-semibold text-stone-900">All fundraiser money</p>
-          <p className="text-lg font-semibold tabular-nums">{formatKes(o.totals.remaining_minor)}</p>
+          <p className="text-lg font-semibold whitespace-nowrap tabular-nums">{formatKes(o.totals.remaining_minor)}</p>
         </div>
       </Card>
 
@@ -85,7 +85,7 @@ function AccountLine({ account: a, hint, challenge }: { account: AccountFunds; h
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-        <span className="mr-2 font-semibold tabular-nums">{formatKes(a.amount_minor)}</span>
+        <span className="mr-2 font-semibold whitespace-nowrap tabular-nums">{formatKes(a.amount_minor)}</span>
         <ButtonLink to={`/manage/transactions?account_id=${a.account_id}`} size="sm" variant="secondary" icon={<List className="size-4" aria-hidden />}>
           Records
         </ButtonLink>

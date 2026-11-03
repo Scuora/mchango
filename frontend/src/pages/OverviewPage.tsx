@@ -174,7 +174,7 @@ export function OverviewPage() {
               <div className="mt-3 rounded-lg bg-ochre-50 px-3 py-2">
                 <p className="flex justify-between gap-3 py-1 text-[15px] font-semibold text-ochre-900">
                   <span>Held by challenges, to be handed over</span>
-                  <span className="tabular-nums">{formatKes(o.held_by_challenges_minor)}</span>
+                  <span className="whitespace-nowrap tabular-nums">{formatKes(o.held_by_challenges_minor)}</span>
                 </p>
                 <dl className="text-sm">
                   {o.funds_by_account

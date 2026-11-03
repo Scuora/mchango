@@ -116,6 +116,12 @@
   }
 }
 
+/* A grid item never grows past its column: long names, picked values and
+   tables shrink or wrap instead of pushing the page wider than a phone. */
+.grid > * {
+  min-width: 0;
+}
+
 /* Page titles use the display serif, set a little larger to suit its small x-height. */
 @utility page-title {
   @apply font-display text-[1.9rem] leading-tight font-semibold text-stone-900;

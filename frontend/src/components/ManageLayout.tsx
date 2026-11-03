@@ -101,9 +101,12 @@ function Shell() {
         </Link>
 
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
-          <ButtonLink to="/manage/add" size="sm" className="hidden sm:inline-flex" icon={<PlusCircle className="size-4" aria-hidden />}>
-            Add transaction
-          </ButtonLink>
+          {/* Phones have Add in the bottom bar; the name gets the room instead. */}
+          <div className="hidden sm:block">
+            <ButtonLink to="/manage/add" size="sm" icon={<PlusCircle className="size-4" aria-hidden />}>
+              Add transaction
+            </ButtonLink>
+          </div>
           <a
             href="/"
             target="_blank"

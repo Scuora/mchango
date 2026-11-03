@@ -106,7 +106,7 @@ export function SharesEditor({
     <div className="space-y-2">
       <ol className="space-y-2">
         {value.map((d, i) => (
-          <li key={i} className="grid grid-cols-[1.75rem_1fr_7.5rem_2.5rem] items-center gap-2">
+          <li key={i} className="grid grid-cols-[1.25rem_1fr_5.5rem_2.5rem] items-center gap-1.5 sm:grid-cols-[1.75rem_1fr_7.5rem_2.5rem] sm:gap-2">
             <span className="text-right text-sm text-stone-500 tabular-nums">{i + 1}.</span>
             <Input aria-label={`Name ${i + 1}`} value={d.name} placeholder={anonymousLabel} onChange={(e) => set(i, { name: e.target.value })} />
             <Input aria-label={`Amount ${i + 1} (KES)`} inputMode="decimal" className="text-right tabular-nums" value={d.amount} onChange={(e) => set(i, { amount: e.target.value })} />

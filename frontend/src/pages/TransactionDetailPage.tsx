@@ -55,7 +55,7 @@ export function TransactionDetailPage() {
             {t.kind === "pledge" && t.pledged_by && <PledgeGroupTag by={t.pledged_by} />}
             {t.kind === "pledge" && !t.removed && <PledgeStatusBadge status={pledgeStatus} />}
             {t.challenge_id && t.challenge_name && (
-              <Link to={`/manage/challenges/${t.challenge_id}`} className="no-underline hover:no-underline">
+              <Link to={`/manage/challenges/${t.challenge_id}`} className="inline-flex max-w-full min-w-0 no-underline hover:no-underline">
                 <ChallengeTag name={t.challenge_name} />
               </Link>
             )}

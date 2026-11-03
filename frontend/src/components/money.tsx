@@ -68,9 +68,11 @@ export function itemLabel(item: ListItem): string {
 /** The challenge a record came in through. */
 export function ChallengeTag({ name }: { name: string }) {
   return (
-    <Badge tone="info">
-      <Trophy className="size-3.5" aria-hidden />
-      {name}
+    <Badge tone="info" className="max-w-full min-w-0">
+      <Trophy className="size-3.5 shrink-0" aria-hidden />
+      <span className="truncate" title={name}>
+        {name}
+      </span>
     </Badge>
   );
 }
