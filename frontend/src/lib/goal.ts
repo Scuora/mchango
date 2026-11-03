@@ -52,9 +52,13 @@ export function goalOf(target: number | null, pledges: PledgeTotals | null, cont
  */
 export const listedAsPledge = (p: { pledged_by: PledgedBy }) => p.pledged_by === "friends";
 
-/** "the family of Karisa Gonzi" (or "familia ya Karisa Gonzi") from "Joseph Karisa Gonzi": the name without the given name. */
+/** Titles before a name, which are not part of the family's name. */
+const TITLE = /^(dr|dkt|prof|mzee|mr|mrs|ms|rev|hon|eng|sir|bishop|pastor)\.?$/i;
+
+/** "the family of Karisa Gonzi" (or "familia ya Karisa Gonzi") from "Dr. Joseph Karisa Gonzi": the name without the title and given name. */
 export function familyOf(memorialName: string | null | undefined, lang: "en" | "sw" = "en"): string {
   const words = (memorialName ?? "").trim().split(/\s+/).filter(Boolean);
+  while (words.length > 1 && TITLE.test(words[0])) words.shift();
   if (words.length === 0) return lang === "sw" ? "familia" : "the family";
   const surname = (words.length >= 3 ? words.slice(1) : words).join(" ");
   return lang === "sw" ? `familia ya ${surname}` : `the family of ${surname}`;
