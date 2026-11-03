@@ -1,9 +1,13 @@
 //! Challenges: fun games and dares that keep the fundraiser going.
 //!
-//! A challenge is a kitty tracked on its own, like a sub-account. Its money is
-//! not kept apart: contributions linked to a challenge are ordinary fundraiser
-//! money in the main accounts, counted once in the totals. The challenge only
-//! groups them, so the family can see what each challenge has brought in.
+//! A challenge is a sub-account of the fundraiser. Contributions and pledges
+//! that come in through it are the fundraiser's own records, counted once in its
+//! totals; the challenge adds up what it brought in.
+//!
+//! A challenge can also keep its own money in an account used only for it (the
+//! organiser's M-Pesa line, a cash box). Money received there belongs to the
+//! challenge. Until it is handed over to the main account with a transfer, what
+//! that account holds is owed to the main fund: a receivable.
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -13,7 +17,8 @@ use crate::clock;
 use crate::error::{AppError, AppResult};
 use crate::history::{self, Entity};
 use crate::money::{Amount, format_kes};
-use crate::transactions::totals::{ChallengeTotals, challenge_totals, fundraiser_records};
+use crate::settings::{GivingMethod, clean_giving};
+use crate::transactions::totals::{ChallengeTotals, FundraiserRecord, challenge_totals, fundraiser_records, kitty};
 use crate::transactions::{Kind, current_version};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -40,6 +45,15 @@ pub struct Challenge {
     pub ends_on: Option<String>,
     pub status: ChallengeStatus,
     pub published: bool,
+    /// The account it keeps its own money in, if any.
+    pub account_id: Option<i64>,
+    pub account_name: Option<String>,
+    /// Where givers send money for it, when that is not the fundraiser's own
+    /// number (another phone, Paybill or till). `None` uses the fundraiser's details.
+    pub giving_method: Option<GivingMethod>,
+    pub giving_number: String,
+    pub giving_account: String,
+    pub giving_name: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -71,6 +85,16 @@ pub struct ChallengeInput {
     pub status: ChallengeStatus,
     #[serde(default = "published_by_default")]
     pub published: bool,
+    #[serde(default)]
+    pub account_id: Option<i64>,
+    #[serde(default)]
+    pub giving_method: Option<GivingMethod>,
+    #[serde(default)]
+    pub giving_number: String,
+    #[serde(default)]
+    pub giving_account: String,
+    #[serde(default)]
+    pub giving_name: String,
 }
 
 fn active() -> ChallengeStatus {
@@ -92,6 +116,11 @@ struct Clean {
     ends_on: Option<String>,
     status: ChallengeStatus,
     published: bool,
+    account_id: Option<i64>,
+    giving_method: Option<GivingMethod>,
+    giving_number: String,
+    giving_account: String,
+    giving_name: String,
 }
 
 impl ChallengeInput {
@@ -119,6 +148,8 @@ impl ChallengeInput {
         {
             return Err(AppError::field("ends_on", "The challenge cannot end before it starts."));
         }
+        let (giving_number, giving_account, giving_name) =
+            clean_giving(self.giving_method, &self.giving_number, &self.giving_account, &self.giving_name)?;
         Ok(Clean {
             name,
             name_sw,
@@ -129,6 +160,11 @@ impl ChallengeInput {
             ends_on,
             status: self.status,
             published: self.published,
+            account_id: self.account_id,
+            giving_method: self.giving_method,
+            giving_number,
+            giving_account,
+            giving_name,
         })
     }
 }
@@ -154,9 +190,11 @@ fn optional_date(value: Option<String>, field: &'static str) -> AppResult<Option
 /// Active challenges first, then the newest.
 pub async fn list(conn: &mut SqliteConnection) -> AppResult<Vec<Challenge>> {
     Ok(sqlx::query_as(
-        "SELECT id, name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published,
-                created_at, updated_at
-         FROM challenges ORDER BY status = 'closed', created_at DESC, id DESC",
+        "SELECT c.id, c.name, c.name_sw, c.description, c.description_sw, c.target_minor, c.starts_on, c.ends_on,
+                c.status, c.published, c.account_id, a.name AS account_name, c.giving_method, c.giving_number, c.giving_account,
+                c.giving_name, c.created_at, c.updated_at
+         FROM challenges c LEFT JOIN accounts a ON a.id = c.account_id
+         ORDER BY c.status = 'closed', c.created_at DESC, c.id DESC",
     )
     .fetch_all(conn)
     .await?)
@@ -164,9 +202,11 @@ pub async fn list(conn: &mut SqliteConnection) -> AppResult<Vec<Challenge>> {
 
 pub async fn get(conn: &mut SqliteConnection, id: i64) -> AppResult<Challenge> {
     sqlx::query_as(
-        "SELECT id, name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published,
-                created_at, updated_at
-         FROM challenges WHERE id = ?",
+        "SELECT c.id, c.name, c.name_sw, c.description, c.description_sw, c.target_minor, c.starts_on, c.ends_on,
+                c.status, c.published, c.account_id, a.name AS account_name, c.giving_method, c.giving_number, c.giving_account,
+                c.giving_name, c.created_at, c.updated_at
+         FROM challenges c LEFT JOIN accounts a ON a.id = c.account_id
+         WHERE c.id = ?",
     )
     .bind(id)
     .fetch_optional(conn)
@@ -174,31 +214,107 @@ pub async fn get(conn: &mut SqliteConnection, id: i64) -> AppResult<Challenge> {
     .ok_or_else(|| AppError::not_found("That challenge"))
 }
 
+/// A challenge with its tally and, when it keeps its own money, what it holds and has handed over.
+fn summarise(challenge: Challenge, records: &[FundraiserRecord]) -> ChallengeSummary {
+    let mut totals = challenge_totals(records).remove(&challenge.id).unwrap_or_default();
+    if let Some(account) = challenge.account_id {
+        let (held, handed_over) = kitty(records, account);
+        totals.held_minor = Some(held);
+        totals.handed_over_minor = Some(handed_over);
+    }
+    ChallengeSummary { challenge, totals }
+}
+
 /// Every challenge with its kitty, in the order of [`list`].
 pub async fn summaries(conn: &mut SqliteConnection) -> AppResult<Vec<ChallengeSummary>> {
     let records = fundraiser_records(conn).await?;
-    let mut totals = challenge_totals(&records);
-    Ok(list(conn)
-        .await?
-        .into_iter()
-        .map(|challenge| ChallengeSummary { totals: totals.remove(&challenge.id).unwrap_or_default(), challenge })
-        .collect())
+    Ok(list(conn).await?.into_iter().map(|challenge| summarise(challenge, &records)).collect())
 }
 
 pub async fn summary(conn: &mut SqliteConnection, id: i64) -> AppResult<ChallengeSummary> {
     let challenge = get(conn, id).await?;
     let records = fundraiser_records(conn).await?;
-    let totals = challenge_totals(&records).remove(&id).unwrap_or_default();
-    Ok(ChallengeSummary { challenge, totals })
+    Ok(summarise(challenge, &records))
+}
+
+/// Money the challenges still hold in their own accounts: owed to the main fund.
+pub fn held_by_challenges(challenges: &[Challenge], records: &[FundraiserRecord]) -> i64 {
+    challenges.iter().filter_map(|c| c.account_id).map(|account| kitty(records, account).0).sum()
+}
+
+/// The challenge that keeps its own money in this account, if any.
+pub async fn owner_of_account(conn: &mut SqliteConnection, account_id: i64) -> AppResult<Option<(i64, String)>> {
+    Ok(sqlx::query_as("SELECT id, name FROM challenges WHERE account_id = ?")
+        .bind(account_id)
+        .fetch_optional(conn)
+        .await?)
+}
+
+/// An account can become a challenge's own only if it is kept for that challenge:
+/// not another challenge's, not where the opening funds are, and holding no
+/// money received outside the challenge.
+async fn check_account(conn: &mut SqliteConnection, account_id: i64, challenge_id: Option<i64>) -> AppResult<()> {
+    let name: Option<String> = sqlx::query_scalar("SELECT name FROM accounts WHERE id = ?")
+        .bind(account_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+    let name = name.ok_or_else(|| AppError::field("account_id", "That account does not exist."))?;
+    if let Some((owner, owner_name)) = owner_of_account(conn, account_id).await?
+        && Some(owner) != challenge_id
+    {
+        return Err(AppError::field("account_id", format!("“{name}” already keeps the money of “{owner_name}”.")));
+    }
+    let opening: Option<i64> = sqlx::query_scalar("SELECT opening_funds_account_id FROM fundraiser WHERE id = 1")
+        .fetch_one(&mut *conn)
+        .await?;
+    if opening == Some(account_id) {
+        return Err(AppError::field(
+            "account_id",
+            format!("“{name}” holds the fundraiser's opening funds; choose an account kept for this challenge."),
+        ));
+    }
+    let others: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM transaction_versions v JOIN transactions t ON t.id = v.transaction_id
+         WHERE v.is_current = 1 AND v.removed = 0 AND v.kind = 'contribution' AND v.account_id = ?1
+           AND (?2 IS NULL OR t.challenge_id IS NOT ?2)",
+    )
+    .bind(account_id)
+    .bind(challenge_id)
+    .fetch_one(&mut *conn)
+    .await?;
+    if others > 0 {
+        return Err(AppError::field(
+            "account_id",
+            format!(
+                "“{name}” already holds money received outside this challenge; choose or add an account kept only for it."
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// Live records on an account, in or out.
+async fn records_on(conn: &mut SqliteConnection, account_id: i64) -> AppResult<i64> {
+    Ok(sqlx::query_scalar(
+        "SELECT COUNT(*) FROM transaction_versions
+         WHERE is_current = 1 AND removed = 0 AND (account_id = ?1 OR to_account_id = ?1)",
+    )
+    .bind(account_id)
+    .fetch_one(conn)
+    .await?)
 }
 
 pub async fn create(conn: &mut SqliteConnection, input: ChallengeInput) -> AppResult<ChallengeSummary> {
     let c = input.clean()?;
+    if let Some(account) = c.account_id {
+        check_account(conn, account, None).await?;
+    }
     let now = clock::now_string();
     let id: i64 = sqlx::query_scalar(
         "INSERT INTO challenges (name, name_sw, description, description_sw, target_minor, starts_on, ends_on,
-                                 status, published, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                                 status, published, account_id, giving_method, giving_number, giving_account,
+                                 giving_name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
     )
     .bind(&c.name)
     .bind(&c.name_sw)
@@ -209,6 +325,11 @@ pub async fn create(conn: &mut SqliteConnection, input: ChallengeInput) -> AppRe
     .bind(&c.ends_on)
     .bind(c.status)
     .bind(c.published)
+    .bind(c.account_id)
+    .bind(c.giving_method)
+    .bind(&c.giving_number)
+    .bind(&c.giving_account)
+    .bind(&c.giving_name)
     .bind(&now)
     .bind(&now)
     .fetch_one(&mut *conn)
@@ -230,9 +351,26 @@ pub async fn create(conn: &mut SqliteConnection, input: ChallengeInput) -> AppRe
 pub async fn update(conn: &mut SqliteConnection, id: i64, input: ChallengeInput) -> AppResult<ChallengeSummary> {
     let c = input.clean()?;
     let before = get(conn, id).await?;
+    if before.account_id != c.account_id {
+        if let Some(old) = before.account_id
+            && records_on(conn, old).await? > 0
+        {
+            return Err(AppError::field(
+                "account_id",
+                format!(
+                    "“{}” already has records, so it stays this challenge's account.",
+                    before.account_name.as_deref().unwrap_or("The account")
+                ),
+            ));
+        }
+        if let Some(account) = c.account_id {
+            check_account(conn, account, Some(id)).await?;
+        }
+    }
     sqlx::query(
         "UPDATE challenges SET name = ?, name_sw = ?, description = ?, description_sw = ?, target_minor = ?,
-                starts_on = ?, ends_on = ?, status = ?, published = ?, updated_at = ?
+                starts_on = ?, ends_on = ?, status = ?, published = ?, account_id = ?, giving_method = ?,
+                giving_number = ?, giving_account = ?, giving_name = ?, updated_at = ?
          WHERE id = ?",
     )
     .bind(&c.name)
@@ -244,6 +382,11 @@ pub async fn update(conn: &mut SqliteConnection, id: i64, input: ChallengeInput)
     .bind(&c.ends_on)
     .bind(c.status)
     .bind(c.published)
+    .bind(c.account_id)
+    .bind(c.giving_method)
+    .bind(&c.giving_number)
+    .bind(&c.giving_account)
+    .bind(&c.giving_name)
     .bind(clock::now_string())
     .bind(id)
     .execute(&mut *conn)
@@ -252,6 +395,9 @@ pub async fn update(conn: &mut SqliteConnection, id: i64, input: ChallengeInput)
     let summary = match (before.status, c.status) {
         (ChallengeStatus::Active, ChallengeStatus::Closed) => format!("Challenge “{}” closed", c.name),
         (ChallengeStatus::Closed, ChallengeStatus::Active) => format!("Challenge “{}” reopened", c.name),
+        _ if before.account_id != c.account_id && c.account_id.is_some() => {
+            format!("Challenge “{}” now keeps its own money", c.name)
+        }
         _ => format!("Challenge “{}” updated", c.name),
     };
     history::record(conn, Entity::Challenge, Some(id), "updated", &summary, None, None).await?;
@@ -333,6 +479,21 @@ pub async fn set_for_transaction(
         }
         None => None,
     };
+    // Money received into a challenge's own account is that challenge's.
+    if current.kind == Kind::Contribution
+        && !current.removed
+        && let Some(account) = current.account_id
+        && let Some((owner, owner_name)) = owner_of_account(conn, account).await?
+        && challenge_id != Some(owner)
+    {
+        return Err(AppError::field(
+            "challenge_id",
+            format!(
+                "This money was received into the account of “{owner_name}”, so it belongs to that challenge. \
+                 If it was recorded in the wrong account, correct the record first."
+            ),
+        ));
+    }
     let before_name = match before {
         Some(id) => Some(get(conn, id).await?.name),
         None => None,

@@ -157,9 +157,23 @@ pub async fn create(conn: &mut SqliteConnection, request: CreateRequest, origin:
         Some(amount) => Some(charge_line(&movement, amount)?),
     };
 
-    let challenge_id = match request.challenge_id {
-        Some(challenge) => Some(challenge),
-        None if movement.kind == Kind::Contribution => match movement.related_transaction_id {
+    // The challenge it came in through: money received into a challenge's own
+    // account is that challenge's; otherwise the one chosen, or the challenge of
+    // the pledge the money fulfils.
+    let owner = match (movement.kind, movement.account_id) {
+        (Kind::Contribution, Some(account)) => crate::challenges::owner_of_account(conn, account).await?,
+        _ => None,
+    };
+    let challenge_id = match (owner, request.challenge_id) {
+        (Some((owner, _)), Some(chosen)) if chosen != owner => {
+            return Err(AppError::field(
+                "challenge_id",
+                "This account keeps another challenge's money; money received into it belongs to that challenge.",
+            ));
+        }
+        (Some((owner, _)), _) => Some(owner),
+        (None, Some(chosen)) => Some(chosen),
+        (None, None) if movement.kind == Kind::Contribution => match movement.related_transaction_id {
             Some(pledge) => sqlx::query_scalar("SELECT challenge_id FROM transactions WHERE id = ?")
                 .bind(pledge)
                 .fetch_optional(&mut *conn)
@@ -167,7 +181,7 @@ pub async fn create(conn: &mut SqliteConnection, request: CreateRequest, origin:
                 .flatten(),
             None => None,
         },
-        None => None,
+        (None, None) => None,
     };
     if challenge_id.is_some() && !crate::challenges::can_belong(movement.kind) {
         return Err(AppError::field(
@@ -490,6 +504,14 @@ async fn apply_correction(
     )
     .await?;
 
+    // Money moved into a challenge's own account joins that challenge.
+    if !removed
+        && after.kind == Kind::Contribution
+        && let Some(account) = after.account_id
+        && let Some((owner, _)) = crate::challenges::owner_of_account(conn, account).await?
+    {
+        crate::challenges::set_for_transaction(conn, id, Some(owner)).await?;
+    }
     // Only money received and pledges belong to a challenge.
     if removed || !crate::challenges::can_belong(after.kind) {
         let linked: Option<i64> = sqlx::query_scalar("SELECT challenge_id FROM transactions WHERE id = ?")

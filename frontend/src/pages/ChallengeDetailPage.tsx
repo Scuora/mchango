@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Copy, HandCoins, Link2, MessageCircle, Pencil, Search, Trash2, Unlink } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, Check, Copy, HandCoins, Link2, MessageCircle, Pencil, Search, Trash2, Unlink, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { LoadState, SaveError } from "@/components/LoadState";
@@ -76,13 +76,35 @@ export function ChallengeDetailPage() {
             )}
             {challenge.description && <p className="max-w-3xl leading-relaxed whitespace-pre-line text-stone-700">{challenge.description}</p>}
             <ChallengeProgress challenge={challenge} large />
-            <p className="text-sm text-stone-500">
-              This is a view of the main fund, not a separate account: the money is in the fundraiser&rsquo;s accounts and counts once in its totals.
-            </p>
+            {challenge.account_id ? (
+              <p className="flex items-start gap-2 text-sm text-stone-600">
+                <Wallet className="mt-0.5 size-4 shrink-0 text-stone-500" aria-hidden />
+                <span>
+                  Keeps its own money in <strong className="font-semibold text-stone-800">{challenge.account_name}</strong>. Money received there belongs to the
+                  challenge and counts in the fundraiser&rsquo;s totals; what it still holds is owed to the main fund until it is handed over.
+                </span>
+              </p>
+            ) : (
+              <p className="text-sm text-stone-500">
+                Its money goes to the fundraiser&rsquo;s main account and counts once in the totals; the challenge keeps its own tally.
+              </p>
+            )}
+            {challenge.giving_method && (
+              <p className="text-sm text-stone-600">
+                <span className="font-medium text-stone-800">Givers send to: </span>
+                {challenge.giving_method === "phone" ? "Send Money" : challenge.giving_method === "paybill" ? "Paybill" : "Till"} {challenge.giving_number}
+                {challenge.giving_method === "paybill" && challenge.giving_account ? `, account ${challenge.giving_account}` : ""} ({challenge.giving_name})
+              </p>
+            )}
             <div className="flex flex-wrap gap-2 pt-1">
               {challenge.status === "active" && (
                 <ButtonLink to={`/manage/add?challenge=${id}`} size="sm" icon={<HandCoins className="size-4" aria-hidden />}>
                   Record money for this challenge
+                </ButtonLink>
+              )}
+              {challenge.account_id && (
+                <ButtonLink to={`/manage/add?handover=${id}`} size="sm" variant="secondary" icon={<ArrowRightLeft className="size-4" aria-hidden />}>
+                  Record a hand-over to the main account
                 </ButtonLink>
               )}
               <Button variant="secondary" size="sm" icon={<Pencil className="size-4" aria-hidden />} onClick={() => setEditing(true)}>

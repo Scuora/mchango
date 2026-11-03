@@ -445,6 +445,15 @@ export function FundsCard({ page }: { page: PublicPage }) {
           </dl>
         </>
       )}
+      {(t.held_by_challenges_minor ?? 0) > 0 && (
+        <p className="mt-3 text-[15px] text-stone-600">
+          {tr(
+            `Of what remains, ${kes(t.held_by_challenges_minor ?? 0)} is still held by challenges and will be handed over to the main fund.`,
+            `Kati ya iliyobaki, ${kes(t.held_by_challenges_minor ?? 0)} bado ziko kwenye changamoto na zitakabidhiwa kwa mfuko mkuu.`,
+          )}{" "}
+          <Link to="/challenges">{tr("Challenges", "Changamoto")}</Link>
+        </p>
+      )}
       {page.opening_funds && (
         <p className="mt-3 text-[15px] text-stone-600">
           {tr(`Includes ${kes(page.opening_funds.amount_minor)} held before contributions opened:`, `Inajumuisha ${kes(page.opening_funds.amount_minor)} zilizokuwepo kabla ya michango kufunguliwa:`)}{" "}

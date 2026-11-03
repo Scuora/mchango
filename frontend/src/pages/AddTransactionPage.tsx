@@ -20,7 +20,7 @@ import { ApiError, api, fieldError, useResource } from "@/lib/api";
 import { movesMoney } from "@/lib/labels";
 import { parseKes, toInput } from "@/lib/money";
 import { nowNairobiInput, toNairobiInputValue } from "@/lib/time";
-import type { Account, Created, CreateRequest, Fundraiser, ListResponse, ParseResponse } from "@/lib/types";
+import type { Account, ChallengeSummary, Created, CreateRequest, Fundraiser, ListResponse, ParseResponse } from "@/lib/types";
 
 type Step = { name: "paste" } | { name: "confirm"; parse: ParseResponse | null; message: string | null } | { name: "done"; created: Created };
 
@@ -45,9 +45,28 @@ export function AddTransactionPage() {
   // From the Pledges page: `?kind=pledge&by=family` starts a new pledge; `?pledge=12` records money for pledge 12.
   const [params] = useSearchParams();
   const pledgeFor = params.get("pledge");
-  // From a challenge's page: `?challenge=3` records money that came in through challenge 3.
+  // From a challenge's page: `?challenge=3` records money that came in through challenge 3;
+  // `?handover=3` records challenge 3 handing its money over to the main account.
   const challengeFor = params.get("challenge");
+  const handoverFor = params.get("handover");
   const [challenge, setChallenge] = useState(challengeFor ?? "");
+  const challenges = useResource<ChallengeSummary[]>("/api/manage/challenges");
+  const owner = (challenges.data ?? []).find((c) => String(c.id) === (challengeFor ?? handoverFor));
+  // Money received into a challenge's own account belongs to that challenge.
+  const kittyOwner = (challenges.data ?? []).find((c) => c.account_id !== null && String(c.account_id) === draft?.accountId);
+  const receivedIntoKitty = draft?.kind === "contribution" && kittyOwner !== undefined;
+  useEffect(() => {
+    if (receivedIntoKitty && kittyOwner) setChallenge(String(kittyOwner.id));
+  }, [receivedIntoKitty, kittyOwner]);
+  useEffect(() => {
+    if (!accounts.data || !handoverFor || !owner?.account_id) return;
+    const kitty = owner.account_id;
+    const main = accounts.data.find((a) => a.kind === "mpesa" && a.id !== kitty) ?? accounts.data.find((a) => a.id !== kitty);
+    setDraft({ ...emptyDraft(accounts.data), kind: "transfer", accountId: String(kitty), toAccountId: main ? String(main.id) : "", occurredAt: nowNairobiInput() });
+    setPresentation({ ...emptyPresentation(), description: `Hand-over from the challenge “${owner.name}”` });
+    setFormKey(newFormKey());
+    setStep({ name: "confirm", parse: null, message: null });
+  }, [accounts.data, handoverFor, owner]);
   const newPledgeBy = params.get("kind") === "pledge" ? (params.get("by") === "family" ? "family" : "friends") : null;
   useEffect(() => {
     if (!accounts.data || !newPledgeBy) return;
@@ -110,6 +129,7 @@ export function AddTransactionPage() {
         if (original) next.relatedId = String(original.id);
       }
       if (pledgeFor && next.kind === "contribution") next.relatedId = pledgeFor;
+      if (owner?.account_id && next.kind === "contribution") next.accountId = String(owner.account_id);
       const notes: Uncertain = {};
       if (!p.suggested_kind) notes.kind = "The message does not say what this was. Choose the type.";
       if (!p.amount_minor.certain) notes.amount = p.amount_minor.note ?? "Check the amount.";
@@ -135,6 +155,7 @@ export function AddTransactionPage() {
       ...emptyDraft(accountList),
       occurredAt: nowNairobiInput(),
       ...(pledgeFor ? { kind: "contribution" as const, relatedId: pledgeFor } : {}),
+      ...(challengeFor ? { kind: "contribution" as const, ...(owner?.account_id ? { accountId: String(owner.account_id) } : {}) } : {}),
     });
     setUncertain({});
     setCharge("");
@@ -199,8 +220,8 @@ export function AddTransactionPage() {
           <ButtonLink to={`/manage/transactions/${step.created.id}`} variant="secondary">
             View transaction
           </ButtonLink>
-          {challengeFor && (
-            <ButtonLink to={`/manage/challenges/${challengeFor}`} variant="secondary">
+          {(challengeFor ?? handoverFor) && (
+            <ButtonLink to={`/manage/challenges/${challengeFor ?? handoverFor}`} variant="secondary">
               Back to the challenge
             </ButtonLink>
           )}
@@ -337,9 +358,11 @@ export function AddTransactionPage() {
                 className="mt-4"
                 error={fieldError(saveError, "challenge_id")}
                 hint={
-                  draft.kind === "contribution" && draft.relatedId && !challenge
-                    ? "Money for a pledge made in a challenge joins that challenge on its own."
-                    : "It still counts once in the main totals; the challenge just keeps its own tally."
+                  receivedIntoKitty
+                    ? `Received into ${kittyOwner.account_name}, so it belongs to “${kittyOwner.name}”. It counts in the totals and is owed to the main fund until handed over.`
+                    : draft.kind === "contribution" && draft.relatedId && !challenge
+                      ? "Money for a pledge made in a challenge joins that challenge on its own."
+                      : "It still counts once in the main totals; the challenge just keeps its own tally."
                 }
               >
                 <ChallengePicker id="add-challenge" value={challenge} onChange={setChallenge} />

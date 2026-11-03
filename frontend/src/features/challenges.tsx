@@ -1,7 +1,7 @@
 // Shared pieces for challenges: the editor, status badges, progress and the
 // "copy update" button used on the list and on each challenge's page.
 
-import { Check, Copy, Save, Trophy } from "lucide-react";
+import { Check, Copy, Plus, Save, Trophy } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { SaveError } from "@/components/LoadState";
 import { PledgeProgressBar } from "@/components/pledges";
@@ -13,7 +13,7 @@ import { api, fieldError, useResource } from "@/lib/api";
 import { buildChallengeUpdate, type ChallengeEntry, type ShareLang } from "@/lib/challengeShare";
 import { formatKesShort, parseKes } from "@/lib/money";
 import { formatNairobiDate } from "@/lib/time";
-import type { ChallengeInput, ChallengeSummary, Fundraiser, Kind, ListItem, PublicPreview } from "@/lib/types";
+import type { Account, AccountKind, ChallengeInput, ChallengeSummary, Fundraiser, GivingMethod, Kind, ListItem, PublicPreview } from "@/lib/types";
 import { copyText } from "@/public/share";
 
 /** Only money received and pledges come in through a challenge. */
@@ -50,11 +50,24 @@ export const emptyChallenge: ChallengeInput = {
   ends_on: null,
   status: "active",
   published: true,
+  account_id: null,
+  giving_method: null,
+  giving_number: "",
+  giving_account: "",
+  giving_name: "",
 };
 
 export function challengeInput(c: ChallengeSummary): ChallengeInput {
-  const { name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published } = c;
-  return { name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published };
+  const { name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published, account_id } = c;
+  const { giving_method, giving_number, giving_account, giving_name } = c;
+  return { name, name_sw, description, description_sw, target_minor, starts_on, ends_on, status, published, account_id, giving_method, giving_number, giving_account, giving_name };
+}
+
+/** Where givers send money for a challenge: its own details when set, else the fundraiser's. */
+export function challengeGiving(c: ChallengeSummary, fundraiser: Fundraiser | null | undefined) {
+  if (c.giving_method) return { own: true, giving: { method: c.giving_method, number: c.giving_number, account: c.giving_account || null, name: c.giving_name } };
+  const f = fundraiser;
+  return { own: false, giving: f?.giving_method ? { method: f.giving_method, number: f.giving_number, account: f.giving_account || null, name: f.giving_name } : null };
 }
 
 export function ChallengeBadges({ challenge }: { challenge: ChallengeSummary }) {
@@ -86,6 +99,12 @@ export function ChallengeProgress({ challenge, large = false }: { challenge: Cha
         {t.pledged_outstanding_minor > 0 ? ` · ${formatKesShort(t.pledged_outstanding_minor)} pledged, not yet received` : ""}
       </p>
       {challenge.target_minor ? <PledgeProgressBar received={t.raised_minor} amount={challenge.target_minor} className="mt-2.5 h-2.5" /> : null}
+      {t.held_minor !== null && (
+        <p className="mt-2 text-sm text-stone-600">
+          <span className="font-semibold text-stone-800">{formatKesShort(t.held_minor)}</span> held in {challenge.account_name ?? "its account"}, to be handed over ·{" "}
+          {formatKesShort(t.handed_over_minor ?? 0)} handed over
+        </p>
+      )}
     </div>
   );
 }
@@ -119,12 +138,100 @@ export function shareText(
     challenge,
     entries: options.entries ?? [],
     memorialName: s?.memorial_name || null,
-    giving: s?.giving_method ? { method: s.giving_method, number: s.giving_number, account: s.giving_account || null, name: s.giving_name } : null,
+    giving: challengeGiving(challenge, s).giving,
+    ownGiving: challengeGiving(challenge, s).own,
     publicUrl: options.includeLink === false ? null : ctx.publicUrl,
     lang: options.lang,
     includeList: options.includeList ?? false,
     includeGiving: options.includeGiving ?? true,
   });
+}
+
+/** Choose the account a challenge keeps its own money in, or add one for it. */
+function OwnAccount({ challengeId, value, onChange, error }: { challengeId: number | null; value: number | null; onChange: (id: number | null) => void; error?: string }) {
+  const accounts = useResource<Account[]>("/api/manage/accounts");
+  const challenges = useResource<ChallengeSummary[]>("/api/manage/challenges");
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<AccountKind>("mpesa");
+  const [busy, setBusy] = useState(false);
+  const [addError, setAddError] = useState<unknown>(null);
+  const taken = new Map((challenges.data ?? []).filter((c) => c.account_id !== null && c.id !== challengeId).map((c) => [c.account_id, c.name]));
+  const options = (accounts.data ?? []).filter((a) => !taken.has(a.id)).map((a) => ({ value: String(a.id), label: a.name }));
+
+  async function add() {
+    setBusy(true);
+    setAddError(null);
+    try {
+      const created = await api.post<Account>("/api/manage/accounts", { name, kind });
+      accounts.reload();
+      onChange(created.id);
+      setAdding(false);
+      setName("");
+    } catch (e) {
+      setAddError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <Field
+        label="Its own account"
+        htmlFor="ch-account"
+        optional
+        error={error}
+        hint="For a challenge that collects its own money, such as the organiser's M-Pesa line or a cash box. Money received there belongs to the challenge, and the fundraiser counts it as owed to the main fund until it is handed over. Leave empty when the money goes straight to the main account."
+      >
+        <Choice id="ch-account" value={value === null ? "" : String(value)} options={options} onChange={(v) => onChange(v ? Number(v) : null)} clearable placeholder="None: the money goes to the main account" />
+      </Field>
+      {adding ? (
+        <div className="grid gap-3 rounded-lg bg-stone-50 p-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+          <Field label="Account name" htmlFor="ch-new-account" error={fieldError(addError, "name")}>
+            <Input
+              id="ch-new-account"
+              value={name}
+              placeholder="e.g. Walk organiser's M-Pesa"
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                // Inside the challenge form: Enter adds the account, not the challenge.
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (name.trim()) void add();
+                }
+              }}
+            />
+          </Field>
+          <Field label="Type" htmlFor="ch-new-kind">
+            <Choice
+              id="ch-new-kind"
+              value={kind}
+              onChange={(v) => setKind((v || "mpesa") as AccountKind)}
+              options={[
+                { value: "mpesa", label: "M-Pesa" },
+                { value: "cash", label: "Cash" },
+                { value: "bank", label: "Bank" },
+              ]}
+            />
+          </Field>
+          <div className="flex gap-2">
+            <Button type="button" busy={busy} disabled={!name.trim()} onClick={() => void add()}>
+              Add
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setAdding(false)}>
+              Cancel
+            </Button>
+          </div>
+          <SaveError error={addError && !fieldError(addError, "name") ? addError : null} />
+        </div>
+      ) : (
+        <Button type="button" variant="ghost" size="sm" icon={<Plus className="size-4" aria-hidden />} onClick={() => setAdding(true)}>
+          Add an account for it
+        </Button>
+      )}
+    </div>
+  );
 }
 
 /** Copies a ready-made update; the label says which language. */
@@ -149,7 +256,8 @@ export function ChallengeEditor({ id, initial, onDone, onCancel }: { id: number 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const set = <K extends keyof ChallengeInput>(key: K, value: ChallengeInput[K]) => setInput((i) => ({ ...i, [key]: value }));
-  const fields = ["name", "name_sw", "description", "description_sw", "starts_on", "ends_on", "target_minor"];
+  const fields = ["name", "name_sw", "description", "description_sw", "starts_on", "ends_on", "target_minor", "account_id", "giving_number", "giving_account", "giving_name"];
+  const method = input.giving_method;
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -198,6 +306,48 @@ export function ChallengeEditor({ id, initial, onDone, onCancel }: { id: number 
               <DateField id="ch-end" value={input.ends_on ?? ""} onChange={(v) => set("ends_on", v || null)} />
             </Field>
           </div>
+          <fieldset className="space-y-4 rounded-xl border border-stone-200 p-4">
+            <legend className="px-1 font-semibold text-stone-800">Its own money (optional)</legend>
+            <OwnAccount challengeId={id} value={input.account_id} onChange={(v) => set("account_id", v)} error={fieldError(error, "account_id")} />
+            <Field
+              label="Where givers send money"
+              htmlFor="ch-giving"
+              hint="Shown on the public page and in the challenge's updates. Choose another number only when the challenge collects to its own phone, Paybill or till."
+            >
+              <Choice
+                id="ch-giving"
+                value={method ?? ""}
+                options={[
+                  { value: "", label: "The fundraiser's own giving details" },
+                  { value: "phone", label: "Send Money to another phone number" },
+                  { value: "paybill", label: "Another Paybill (business number + account)" },
+                  { value: "till", label: "Another till number (Buy Goods)" },
+                ]}
+                onChange={(v) => set("giving_method", (v || null) as GivingMethod | null)}
+              />
+            </Field>
+            {method && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={method === "paybill" ? "Business number" : method === "till" ? "Till number" : "Phone number"} htmlFor="ch-giving-number" error={fieldError(error, "giving_number")}>
+                  <Input id="ch-giving-number" inputMode={method === "phone" ? "tel" : "numeric"} value={input.giving_number} onChange={(e) => set("giving_number", e.target.value)} />
+                </Field>
+                {method === "paybill" && (
+                  <Field label="Account number" htmlFor="ch-giving-account" error={fieldError(error, "giving_account")}>
+                    <Input id="ch-giving-account" value={input.giving_account} onChange={(e) => set("giving_account", e.target.value)} />
+                  </Field>
+                )}
+                <Field
+                  label="Name M-Pesa shows before the PIN"
+                  htmlFor="ch-giving-name"
+                  error={fieldError(error, "giving_name")}
+                  hint="Exactly as M-Pesa displays it, so givers can check they have the right account."
+                  className="sm:col-span-2"
+                >
+                  <Input id="ch-giving-name" value={input.giving_name} onChange={(e) => set("giving_name", e.target.value)} />
+                </Field>
+              </div>
+            )}
+          </fieldset>
           <fieldset className="space-y-4 rounded-xl border border-stone-200 p-4">
             <legend className="px-1 font-semibold text-stone-800">In Kiswahili (optional)</legend>
             <p className="-mt-1 text-sm text-stone-600">Used in Kiswahili updates and on the public page in Kiswahili. Left empty, the English is used.</p>

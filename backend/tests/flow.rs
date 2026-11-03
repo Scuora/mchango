@@ -21,7 +21,7 @@ use mchango::transactions::totals::{
     PledgeStatus, Totals, fundraiser_records, funds_by_account, pledge_progress, pledge_totals,
 };
 use mchango::transactions::{self, CorrectionRequest, CreateRequest, Kind, MovementInput, PledgedBy, Presentation};
-use mchango::{announcements, challenges, db, money::Amount, publication, seed};
+use mchango::{announcements, challenges, db, money::Amount, publication, seed, settings};
 
 fn temp_dir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("mchango-test-{}", storage::random_hex(6)));
@@ -436,6 +436,9 @@ async fn challenges_keep_their_own_tally() {
         |name: &str| serde_json::from_value(serde_json::json!({ "name": name, "target_minor": 5_000_00 })).unwrap();
     let cousins = challenges::create(&mut tx, input("Cousins' 1,000 challenge")).await.unwrap().challenge.id;
     assert!(challenges::create(&mut tx, input("Cousins' 1,000 challenge")).await.is_err(), "names are unique");
+    let main_account = serde_json::json!({ "name": "Shared", "account_id": 1 });
+    let shared = challenges::create(&mut tx, serde_json::from_value(main_account).unwrap()).await;
+    assert!(shared.is_err(), "the main account, holding other money, cannot become a challenge's own");
 
     // Money and a pledge through the challenge; the pledge's payment joins it on its own.
     let gift = transactions::create(&mut tx, record(Kind::Contribution, 1_000_00, None, Some(cousins)), "test")
@@ -490,5 +493,45 @@ async fn challenges_keep_their_own_tally() {
     challenges::update(&mut tx, cousins, hidden).await.unwrap();
     let page = publication::build(&mut tx).await.unwrap();
     assert!(page.challenges.is_empty() && page.contributions.iter().all(|e| e.challenge_id.is_none()));
+
+    // A challenge that keeps its own money: what it receives is its own, and what it
+    // still holds is owed to the main fund (a receivable) until handed over.
+    fn json<T: serde::de::DeserializeOwned>(v: serde_json::Value) -> T {
+        serde_json::from_value(v).unwrap()
+    }
+    let organiser =
+        settings::create_account(&mut tx, json(serde_json::json!({ "name": "Walk organiser", "kind": "mpesa" })))
+            .await
+            .unwrap()
+            .id;
+    // Givers send to the organiser's number, not the fundraiser's: an optional setting, checked like the fundraiser's.
+    let unnamed = json(
+        serde_json::json!({ "name": "Sponsored walk", "giving_method": "phone", "giving_number": "0722 000 000" }),
+    );
+    assert!(challenges::create(&mut tx, unnamed).await.is_err(), "the name M-Pesa shows is required");
+    let walk = json(serde_json::json!({
+        "name": "Sponsored walk", "account_id": organiser,
+        "giving_method": "phone", "giving_number": "0722 000 000", "giving_name": "Jane Organiser",
+    }));
+    let walk = challenges::create(&mut tx, walk).await.unwrap().challenge.id;
+    let mut into_kitty = record(Kind::Contribution, 4_000_00, None, None);
+    into_kitty.movement.account_id = Some(organiser);
+    let walked = transactions::create(&mut tx, into_kitty, "test").await.unwrap().id;
+    assert_eq!(transactions::item(&mut tx, walked).await.unwrap().challenge_id, Some(walk));
+    assert!(
+        challenges::set_for_transaction(&mut tx, walked, None).await.is_err(),
+        "money in its account stays its own"
+    );
+    let mut handover = record(Kind::Transfer, 3_000_00, None, None);
+    handover.movement.account_id = Some(organiser);
+    handover.movement.to_account_id = Some(1);
+    transactions::create(&mut tx, handover, "test").await.unwrap();
+    let t = challenges::summary(&mut tx, walk).await.unwrap().totals;
+    assert_eq!((t.raised_minor, t.held_minor, t.handed_over_minor), (4_000_00, Some(1_000_00), Some(3_000_00)));
+    let page = publication::build(&mut tx).await.unwrap();
+    assert_eq!(page.totals.held_by_challenges_minor, 1_000_00, "the overall fund tracks it as a receivable");
+    let shown = page.challenges.iter().find(|c| c.id == walk).unwrap();
+    assert_eq!(shown.giving.as_ref().map(|g| g.number.as_str()), Some("0722 000 000"));
+    assert_eq!(page.totals.contributions_minor, before.contributions_minor + 2_000_00 + 4_000_00);
     tx.rollback().await.unwrap();
 }

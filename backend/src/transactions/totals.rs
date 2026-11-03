@@ -223,6 +223,12 @@ pub struct ChallengeTotals {
     pub pledged_outstanding_minor: i64,
     /// UTC instant of the latest money received through it.
     pub last_received_at: Option<String>,
+    /// For a challenge that keeps its own money: what its account still holds,
+    /// owed to the main fund until handed over.
+    pub held_minor: Option<i64>,
+    /// For a challenge that keeps its own money: what it has handed over to the
+    /// fundraiser's other accounts.
+    pub handed_over_minor: Option<i64>,
 }
 
 /// Every challenge's kitty, from the money received and pledged through it.
@@ -250,6 +256,18 @@ pub fn challenge_totals(records: &[FundraiserRecord]) -> BTreeMap<i64, Challenge
         }
     }
     by_challenge
+}
+
+/// A challenge's own account: what it holds now, and what it has handed over to
+/// the fundraiser's other accounts (transfers out of it).
+pub fn kitty(records: &[FundraiserRecord], account: i64) -> (i64, i64) {
+    let held = funds_by_account(records, None).get(&account).copied().unwrap_or(0);
+    let handed_over = records
+        .iter()
+        .filter(|r| r.kind == Kind::Transfer && r.account_id == Some(account) && r.to_account_id != Some(account))
+        .map(|r| r.amount_minor)
+        .sum();
+    (held, handed_over)
 }
 
 /// Where the fundraiser's money is, per account. Transfers move it between

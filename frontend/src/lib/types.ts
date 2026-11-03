@@ -442,6 +442,8 @@ export interface AccountFunds {
   name: string;
   kind: AccountKind;
   amount_minor: number;
+  /** Set when the account keeps a challenge's own money: owed to the main fund. */
+  challenge_id: number | null;
 }
 
 export interface Overview {
@@ -458,6 +460,8 @@ export interface Overview {
   pledges: PledgeTotals;
   /** Every challenge with what it has brought in (already part of the totals). */
   challenges: ChallengeSummary[];
+  /** Part of the remaining funds still held in challenges' own accounts: a receivable until handed over. */
+  held_by_challenges_minor: number;
 }
 
 export type ChallengeStatus = "active" | "closed";
@@ -476,6 +480,14 @@ export interface Challenge {
   ends_on: string | null;
   status: ChallengeStatus;
   published: boolean;
+  /** The account it keeps its own money in, if any. */
+  account_id: number | null;
+  account_name: string | null;
+  /** Where givers send money for it, when not the fundraiser's own number. Null uses the fundraiser's details. */
+  giving_method: GivingMethod | null;
+  giving_number: string;
+  giving_account: string;
+  giving_name: string;
   created_at: string;
   updated_at: string;
 }
@@ -487,6 +499,10 @@ export interface ChallengeTotals {
   /** Pledged through the challenge, not yet received. */
   pledged_outstanding_minor: number;
   last_received_at: string | null;
+  /** With its own account: what it still holds, owed to the main fund until handed over. */
+  held_minor: number | null;
+  /** With its own account: what it has handed over to the main account. */
+  handed_over_minor: number | null;
 }
 
 export interface ChallengeSummary extends Challenge {
@@ -503,6 +519,11 @@ export interface ChallengeInput {
   ends_on: string | null;
   status: ChallengeStatus;
   published: boolean;
+  account_id: number | null;
+  giving_method: GivingMethod | null;
+  giving_number: string;
+  giving_account: string;
+  giving_name: string;
 }
 
 export interface PublicChallenge {
@@ -518,6 +539,11 @@ export interface PublicChallenge {
   raised_minor: number;
   contributions_count: number;
   pledged_outstanding_minor: number;
+  /** When it keeps its own money: what it still holds and what it has handed over. */
+  held_minor?: number | null;
+  handed_over_minor?: number | null;
+  /** Where to send money for it, when not the fundraiser's own number. */
+  giving?: { method: GivingMethod; number: string; account: string | null; name: string } | null;
 }
 
 /** Who made a pledge: the family's pledges are its share of the target. */
@@ -596,6 +622,8 @@ export interface PublicTotals {
   reversals_out_minor: number;
   opening_funds_minor: number;
   remaining_minor: number;
+  /** Part of the remaining funds still held by challenges, to be handed over to the main account. */
+  held_by_challenges_minor?: number;
 }
 
 export interface PublicPage {

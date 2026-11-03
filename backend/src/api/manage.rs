@@ -82,6 +82,8 @@ struct AccountFunds {
     name: String,
     kind: AccountKind,
     amount_minor: i64,
+    /// Set when the account keeps a challenge's own money: owed to the main fund.
+    challenge_id: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -99,6 +101,9 @@ struct Overview {
     pledges: totals::PledgeTotals,
     /// Every challenge with what it has brought in (already part of `totals`).
     challenges: Vec<ChallengeSummary>,
+    /// Part of the remaining funds still held in challenges' own accounts:
+    /// a receivable until handed over to the main account.
+    held_by_challenges_minor: i64,
 }
 
 async fn overview(State(state): State<AppState>) -> AppResult<Json<Overview>> {
@@ -108,11 +113,14 @@ async fn overview(State(state): State<AppState>) -> AppResult<Json<Overview>> {
     let totals = Totals::from_records(&records, fundraiser.opening_funds_minor);
     let opening = fundraiser.opening_funds_account_id.map(|a| (a, fundraiser.opening_funds_minor));
     let places = totals::funds_by_account(&records, opening);
+    let challenges = challenges::summaries(&mut conn).await?;
+    let held_by_challenges_minor = challenges.iter().filter_map(|c| c.totals.held_minor).sum();
     let funds_by_account = settings::accounts(&mut conn)
         .await?
         .into_iter()
         .map(|a| AccountFunds {
             amount_minor: places.get(&a.id).copied().unwrap_or(0),
+            challenge_id: challenges.iter().find(|c| c.challenge.account_id == Some(a.id)).map(|c| c.challenge.id),
             account_id: a.id,
             name: a.name,
             kind: a.kind,
@@ -140,7 +148,6 @@ async fn overview(State(state): State<AppState>) -> AppResult<Json<Overview>> {
     let reconciled_periods = reconciliation::reconciled_periods(&mut conn).await?;
     let recent = transactions::list(&mut conn, ListQuery { limit: Some(5), ..ListQuery::default() }).await?.items;
     let pledges = totals::pledge_totals(&totals::pledge_progress(&records));
-    let challenges = challenges::summaries(&mut conn).await?;
 
     Ok(Json(Overview {
         fundraiser,
@@ -155,6 +162,7 @@ async fn overview(State(state): State<AppState>) -> AppResult<Json<Overview>> {
         recent,
         pledges,
         challenges,
+        held_by_challenges_minor,
     }))
 }
 

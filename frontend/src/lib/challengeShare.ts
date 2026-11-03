@@ -23,7 +23,10 @@ export interface ShareableChallenge {
   description_sw: string | null;
   target_minor: number | null;
   status: ChallengeStatus;
-  totals: Pick<ChallengeTotals, "raised_minor" | "contributions_count" | "pledged_outstanding_minor">;
+  totals: Pick<ChallengeTotals, "raised_minor" | "contributions_count" | "pledged_outstanding_minor"> & {
+    held_minor?: number | null;
+    handed_over_minor?: number | null;
+  };
 }
 
 export interface ChallengeShareInput {
@@ -31,7 +34,10 @@ export interface ChallengeShareInput {
   /** Money received through the challenge, oldest first. */
   entries: ChallengeEntry[];
   memorialName: string | null;
+  /** Where to send money: the challenge's own details when it has them, else the fundraiser's. */
   giving: { method: GivingMethod; number: string; account: string | null; name: string } | null;
+  /** True when `giving` is the challenge's own: the money is known to be for it. */
+  ownGiving?: boolean;
   /** The public page address, without a trailing slash. */
   publicUrl: string | null;
   lang: ShareLang;
@@ -106,6 +112,10 @@ export function buildChallengeUpdate(input: ChallengeShareInput): string {
         : tr("*The challenge target has been reached. Thank you!*", "*Lengo la changamoto limefikiwa. Asanteni!*"),
     );
   }
+  if (t.held_minor !== null && t.held_minor !== undefined && t.raised_minor > 0) {
+    lines.push(tr(`Handed over to the main fund: ${formatKesShort(t.handed_over_minor ?? 0)}`, `Zimekabidhiwa kwa mfuko mkuu: ${formatKesShort(t.handed_over_minor ?? 0)}`));
+    if (t.held_minor > 0) lines.push(tr(`Still with the challenge, to be handed over: ${formatKesShort(t.held_minor)}`, `Bado ziko kwenye changamoto, zitakabidhiwa: ${formatKesShort(t.held_minor)}`));
+  }
   if (t.pledged_outstanding_minor > 0) {
     lines.push(tr(`Pledged, not yet received: ${formatKesShort(t.pledged_outstanding_minor)}`, `Ahadi ambazo bado hazijapokelewa: ${formatKesShort(t.pledged_outstanding_minor)}`));
   }
@@ -124,11 +134,13 @@ export function buildChallengeUpdate(input: ChallengeShareInput): string {
       "Kila shilingi inaingia kwenye mfuko wa mazishi na inahesabiwa kwenye lengo kuu.",
     ),
   );
-  if (input.includeGiving && input.giving && c.status === "active") {
+  if (input.includeGiving && c.status === "active" && input.giving) {
     lines.push("");
     lines.push(tr("*To take part*", "*Kushiriki*"));
     lines.push(howToGive(input.giving, lang));
-    lines.push(tr(`Let us know it is for “${name}” so we add it to the challenge.`, `Tujulishe ni kwa ajili ya “${name}” ili tuuongeze kwenye changamoto.`));
+    if (!input.ownGiving) {
+      lines.push(tr(`Let us know it is for “${name}” so we add it to the challenge.`, `Tujulishe ni kwa ajili ya “${name}” ili tuuongeze kwenye changamoto.`));
+    }
   }
   if (input.publicUrl) {
     lines.push("");

@@ -37,4 +37,14 @@ describe("challenge update", () => {
     expect(text).toContain("_Hadi 3 Novemba 2026, saa 11:00_");
     expect(text).toContain("https://rip-daktari.netlify.app/challenges?lang=sw");
   });
+
+  it("says what a challenge with its own money has handed over, and how to give to it", () => {
+    const own = { ...challenge, totals: { ...challenge.totals, held_minor: 2_000_00, handed_over_minor: 10_000_00 } };
+    const giving = { method: "phone" as const, number: "0722000000", account: null, name: "Jane Organiser" };
+    const text = buildChallengeUpdate({ ...base, challenge: own, giving, ownGiving: true, lang: "en" });
+    expect(text).toContain("Handed over to the main fund: KES 10,000");
+    expect(text).toContain("Still with the challenge, to be handed over: KES 2,000");
+    expect(text).toContain("M-Pesa, Send Money: *0722 000 000* (Jane Organiser)");
+    expect(text).not.toContain("Let us know");
+  });
 });

@@ -6,7 +6,7 @@ import { formatNairobiDate } from "@/lib/time";
 import type { PublicChallenge, PublicPage } from "@/lib/types";
 import { localiseName, useLang, useTr, type Lang } from "./i18n";
 import { CopyForWhatsApp } from "./pages";
-import { PageHeader, PublicCard, kes } from "./parts";
+import { CopyRow, PageHeader, PublicCard, kes } from "./parts";
 import { usePublicPage } from "./PublicLayout";
 import { publicLink } from "./share";
 
@@ -20,7 +20,8 @@ function challengeText(page: PublicPage, c: PublicChallenge, lang: Lang): string
     challenge: { ...c, totals: c },
     entries,
     memorialName: page.fundraiser.memorial_name,
-    giving: page.fundraiser.giving,
+    giving: c.giving ?? page.fundraiser.giving,
+    ownGiving: Boolean(c.giving),
     publicUrl: publicLink(""),
     lang,
     includeList: true,
@@ -81,6 +82,14 @@ export function ChallengesPage() {
                   {c.target_minor ? tr(` · target ${kes(c.target_minor)}`, ` · lengo ${kes(c.target_minor)}`) : ""}
                 </p>
                 {c.target_minor ? <PledgeProgressBar received={c.raised_minor} amount={c.target_minor} className="mt-3 h-2.5" /> : null}
+                {c.held_minor !== null && c.held_minor !== undefined && c.raised_minor > 0 && (
+                  <p className="mt-2 text-[15px] text-stone-600">
+                    {tr(
+                      `Handed over to the main fund: ${kes(c.handed_over_minor ?? 0)}${c.held_minor > 0 ? ` · still with the challenge: ${kes(c.held_minor)}` : ""}`,
+                      `Zimekabidhiwa kwa mfuko mkuu: ${kes(c.handed_over_minor ?? 0)}${c.held_minor > 0 ? ` · bado ziko kwenye changamoto: ${kes(c.held_minor)}` : ""}`,
+                    )}
+                  </p>
+                )}
                 {c.pledged_outstanding_minor > 0 && (
                   <p className="mt-2 text-[15px] text-stone-600">
                     {tr(`${kes(c.pledged_outstanding_minor)} pledged, not yet received`, `${kes(c.pledged_outstanding_minor)} zimeahidiwa, bado hazijapokelewa`)}
@@ -99,8 +108,25 @@ export function ChallengesPage() {
                 </p>
               )}
 
+              {c.status === "active" && c.giving && (
+                <div className="mt-4 space-y-2 rounded-xl border border-ochre-200 bg-[#fffaf0] p-4">
+                  <p className="text-[13px] font-semibold tracking-[0.14em] text-ochre-800 uppercase">{tr("To take part, send to", "Kushiriki, tuma kwa")}</p>
+                  <p className="text-[15px] text-stone-700">
+                    M-Pesa ·{" "}
+                    {c.giving.method === "paybill" ? "Pay Bill" : c.giving.method === "till" ? "Buy Goods" : tr("Send Money", "Tuma Pesa")}
+                  </p>
+                  <CopyRow
+                    label={c.giving.method === "paybill" ? tr("Business number", "Namba ya biashara") : c.giving.method === "till" ? tr("Till number", "Namba ya till") : tr("Phone number", "Namba ya simu")}
+                    value={c.giving.number}
+                  />
+                  {c.giving.method === "paybill" && c.giving.account && <CopyRow label={tr("Account", "Akaunti")} value={c.giving.account} />}
+                  <p className="text-[15px] text-stone-600">
+                    {tr("M-Pesa will show the name", "M-Pesa itaonyesha jina")} <strong className="font-semibold text-stone-800">{c.giving.name}</strong>
+                  </p>
+                </div>
+              )}
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                {c.status === "active" && page.fundraiser.giving && (
+                {c.status === "active" && !c.giving && page.fundraiser.giving && (
                   <Link
                     to="/contribute"
                     className="press inline-flex min-h-11 items-center gap-2 rounded-full bg-plum-900 px-5 font-semibold text-white no-underline hover:bg-plum-800 hover:no-underline"

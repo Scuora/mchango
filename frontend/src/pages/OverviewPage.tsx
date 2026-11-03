@@ -161,13 +161,36 @@ export function OverviewPage() {
           <CardHeader title="Where the money is" description="Fundraiser money only; personal activity is excluded." />
           <CardBody>
             <dl className="divide-y divide-stone-100 text-[15px]">
-              {o.funds_by_account.map((a) => (
-                <div key={a.account_id} className="flex justify-between gap-3 py-2">
-                  <dt className="text-stone-700">{a.name}</dt>
-                  <dd className="font-semibold tabular-nums">{formatKes(a.amount_minor)}</dd>
-                </div>
-              ))}
+              {o.funds_by_account
+                .filter((a) => a.challenge_id === null)
+                .map((a) => (
+                  <div key={a.account_id} className="flex justify-between gap-3 py-2">
+                    <dt className="text-stone-700">{a.name}</dt>
+                    <dd className="font-semibold tabular-nums">{formatKes(a.amount_minor)}</dd>
+                  </div>
+                ))}
             </dl>
+            {o.funds_by_account.some((a) => a.challenge_id !== null) && (
+              <div className="mt-3 rounded-lg bg-ochre-50 px-3 py-2">
+                <p className="flex justify-between gap-3 py-1 text-[15px] font-semibold text-ochre-900">
+                  <span>Held by challenges, to be handed over</span>
+                  <span className="tabular-nums">{formatKes(o.held_by_challenges_minor)}</span>
+                </p>
+                <dl className="text-sm">
+                  {o.funds_by_account
+                    .filter((a) => a.challenge_id !== null)
+                    .map((a) => (
+                      <div key={a.account_id} className="flex justify-between gap-3 py-1">
+                        <dt className="text-stone-700">
+                          <Link to={`/manage/challenges/${a.challenge_id}`}>{a.name}</Link>
+                        </dt>
+                        <dd className="tabular-nums">{formatKes(a.amount_minor)}</dd>
+                      </div>
+                    ))}
+                </dl>
+                <p className="mt-1 text-xs text-stone-600">Counted in the totals; owed to the main fund until each challenge hands its money over.</p>
+              </div>
+            )}
           </CardBody>
         </Card>
 

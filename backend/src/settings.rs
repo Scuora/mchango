@@ -271,14 +271,21 @@ fn phone_number(value: &str, field: &'static str) -> AppResult<String> {
     Ok(value)
 }
 
-pub async fn update_public_details(conn: &mut SqliteConnection, update: PublicDetailsUpdate) -> AppResult<Fundraiser> {
-    let (number, account, name) = match update.giving_method {
+/// Checks how to give: the number, the Paybill account and the name M-Pesa shows.
+/// Without a method, all three are empty. Used by the fundraiser and by challenges.
+pub fn clean_giving(
+    method: Option<GivingMethod>,
+    number: &str,
+    account: &str,
+    name: &str,
+) -> AppResult<(String, String, String)> {
+    let (number, account, name) = match method {
         None => (String::new(), String::new(), String::new()),
         Some(method) => {
             let number = match method {
-                GivingMethod::Phone => phone_number(&update.giving_number, "giving_number")?,
+                GivingMethod::Phone => phone_number(number, "giving_number")?,
                 GivingMethod::Paybill | GivingMethod::Till => {
-                    let digits: String = update.giving_number.chars().filter(|c| !c.is_whitespace()).collect();
+                    let digits: String = number.chars().filter(|c| !c.is_whitespace()).collect();
                     if !(4..=8).contains(&digits.len()) || !digits.bytes().all(|b| b.is_ascii_digit()) {
                         return Err(AppError::field(
                             "giving_number",
@@ -289,7 +296,7 @@ pub async fn update_public_details(conn: &mut SqliteConnection, update: PublicDe
                 }
             };
             let account = if method == GivingMethod::Paybill {
-                let account = one_line(&update.giving_account, 30, "giving_account", "the account")?;
+                let account = one_line(account, 30, "giving_account", "the account")?;
                 if account.is_empty() {
                     return Err(AppError::field("giving_account", "Enter the account number givers should use."));
                 }
@@ -297,7 +304,7 @@ pub async fn update_public_details(conn: &mut SqliteConnection, update: PublicDe
             } else {
                 String::new()
             };
-            let name = one_line(&update.giving_name, 60, "giving_name", "the name")?;
+            let name = one_line(name, 60, "giving_name", "the name")?;
             if name.is_empty() {
                 return Err(AppError::field(
                     "giving_name",
@@ -307,6 +314,12 @@ pub async fn update_public_details(conn: &mut SqliteConnection, update: PublicDe
             (number, account, name)
         }
     };
+    Ok((number, account, name))
+}
+
+pub async fn update_public_details(conn: &mut SqliteConnection, update: PublicDetailsUpdate) -> AppResult<Fundraiser> {
+    let (number, account, name) =
+        clean_giving(update.giving_method, &update.giving_number, &update.giving_account, &update.giving_name)?;
     let when = one_line(&update.funeral_when, 120, "funeral_when", "the date and time")?;
     let place = one_line(&update.funeral_where, 160, "funeral_where", "the place")?;
     let map = update.funeral_map_url.trim().to_string();

@@ -16,7 +16,7 @@ use crate::error::{AppError, AppResult};
 use crate::reconciliation;
 use crate::settings::{self, GivingMethod, Organiser};
 use crate::transactions::totals::{
-    FundraiserRecord, PledgeStatus, PledgeTotals, Totals, challenge_totals, fundraiser_records, pledge_progress,
+    FundraiserRecord, PledgeStatus, PledgeTotals, Totals, challenge_totals, fundraiser_records, kitty, pledge_progress,
     pledge_totals,
 };
 use crate::transactions::{Direction, Kind, PledgedBy};
@@ -54,6 +54,11 @@ pub struct PublicChallenge {
     pub raised_minor: i64,
     pub contributions_count: i64,
     pub pledged_outstanding_minor: i64,
+    /// When it keeps its own money: what it still holds, and what it has handed over.
+    pub held_minor: Option<i64>,
+    pub handed_over_minor: Option<i64>,
+    /// Where to send money for it, when that is not the fundraiser's own number.
+    pub giving: Option<PublicGiving>,
 }
 
 #[derive(Debug, Serialize)]
@@ -119,6 +124,9 @@ pub struct PublicTotals {
     pub reversals_out_minor: i64,
     pub opening_funds_minor: i64,
     pub remaining_minor: i64,
+    /// Part of the remaining funds still held by challenges in their own
+    /// accounts, to be handed over to the main account.
+    pub held_by_challenges_minor: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -293,12 +301,20 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
         .map(|p| PublicPeriod { start: p.period_start, end: p.period_end })
         .collect();
 
+    let held_by_challenges_minor = challenges::held_by_challenges(&all_challenges, &records);
     let mut kitties = challenge_totals(&records);
     let public_challenges = all_challenges
         .into_iter()
         .filter(|c| c.published)
         .map(|c| {
             let t = kitties.remove(&c.id).unwrap_or_default();
+            let (held, handed_over) = match c.account_id {
+                Some(account) => {
+                    let (held, handed_over) = kitty(&records, account);
+                    (Some(held), Some(handed_over))
+                }
+                None => (None, None),
+            };
             PublicChallenge {
                 id: c.id,
                 name: c.name,
@@ -312,6 +328,14 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
                 raised_minor: t.raised_minor,
                 contributions_count: t.contributions_count,
                 pledged_outstanding_minor: t.pledged_outstanding_minor,
+                held_minor: held,
+                handed_over_minor: handed_over,
+                giving: c.giving_method.map(|method| PublicGiving {
+                    method,
+                    number: c.giving_number,
+                    account: Some(c.giving_account).filter(|a| !a.is_empty()),
+                    name: c.giving_name,
+                }),
             }
         })
         .collect();
@@ -361,6 +385,7 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
             reversals_out_minor: totals.reversals_out_minor,
             opening_funds_minor: totals.opening_funds_minor,
             remaining_minor: totals.remaining_minor,
+            held_by_challenges_minor,
         },
         opening_funds: (fundraiser.opening_funds_minor > 0).then(|| PublicOpeningFunds {
             amount_minor: fundraiser.opening_funds_minor,
