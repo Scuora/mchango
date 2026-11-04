@@ -17,6 +17,7 @@
     "pretypecheck": "node scripts/prime-theme.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/montserrat": "5.3.0",
     "@fontsource-variable/source-sans-3": "5.3.1",
     "@fontsource/cormorant-garamond": "5.3.0",
     "clsx": "2.1.1",

@@ -1,15 +1,18 @@
 import { clsx } from "clsx";
-import { ChevronRight, Flame, Flower2, HandCoins, Menu, Share2, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { CalendarDays, ChevronDown, ChevronRight, Flame, Flower2, HandCoins, House, ListOrdered, Megaphone, Menu, Navigation, Receipt, SearchCheck, Share2, TrendingUp, Trophy, X, type LucideIcon } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from "react-router";
 import { LoadState } from "@/components/LoadState";
 import { EmptyState } from "@/components/ui/misc";
 import { ApiError, useResource } from "@/lib/api";
 import { showBootMemorial, useDismissBoot } from "@/lib/boot";
 import { useReveal } from "@/lib/reveal";
+import { coordinatesIn, directionsLink } from "@/lib/maps";
 import { formatNairobi } from "@/lib/time";
 import type { PublicPage } from "@/lib/types";
 import { LangProvider, LangToggle, useLang, useTr } from "./i18n";
+import { PROGRAMME, dayStatus } from "./programme";
+import { DayBadge, TodayPill, isToday, pick, useNow } from "./programmeParts";
 import { sharePage } from "./share";
 
 interface PublicContext {
@@ -20,16 +23,24 @@ export function usePublicPage(): PublicPage {
   return useOutletContext<PublicContext>().page;
 }
 
-// `short` is used in the desktop bar on tablet widths, where the full labels do not fit.
-const LINKS: { to: string; label: [string, string]; short?: [string, string]; end?: boolean }[] = [
-  { to: "/", label: ["Home", "Nyumbani"], end: true },
-  { to: "/updates", label: ["Updates", "Taarifa"] },
-  { to: "/contributions", label: ["Contributions", "Michango"] },
-  { to: "/expenses", label: ["Expenses", "Matumizi"] },
-  { to: "/trends", label: ["Trends", "Mwenendo"] },
-  { to: "/challenges", label: ["Challenges", "Changamoto"] },
-  { to: "/check", label: ["Check my contribution", "Hakiki mchango"], short: ["Check", "Hakiki"] },
+type Pair = [string, string];
+
+// The navbar keeps four entries: Home, the funeral programme, Updates and the
+// money pages, which sit together under Contributions.
+const MONEY_LINKS: { to: string; label: Pair; hint: Pair; icon: LucideIcon }[] = [
+  { to: "/contributions", label: ["Contributions", "Michango"], hint: ["Every contribution received", "Kila mchango uliopokelewa"], icon: ListOrdered },
+  { to: "/challenges", label: ["Challenges", "Changamoto"], hint: ["Giving challenges to join", "Changamoto za kuchangia"], icon: Trophy },
+  { to: "/expenses", label: ["Expenses", "Matumizi"], hint: ["How the money is spent", "Jinsi pesa zinavyotumika"], icon: Receipt },
+  { to: "/trends", label: ["Trends", "Mwenendo"], hint: ["Giving day by day", "Michango siku kwa siku"], icon: TrendingUp },
+  { to: "/check", label: ["Check my contribution", "Hakiki mchango wangu"], hint: ["Confirm yours was received", "Hakikisha mchango wako umepokelewa"], icon: SearchCheck },
 ];
+
+/** Where to go for directions to the burial, when the settings have a map link. */
+function directionsTo(page: PublicPage): string | null {
+  const { map_url } = page.fundraiser.funeral;
+  const coords = coordinatesIn(map_url);
+  return coords ? directionsLink(coords) : map_url;
+}
 
 /**
  * The pinned announcement (such as the burial date) across the top of every
@@ -172,9 +183,10 @@ function PublicSite() {
 }
 
 /**
- * The site navigation: transparent over the memorial header, frosted plum glass
- * once you scroll. Desktop shows the pages in a capsule with a sliding
- * highlight; phones get a menu sheet with large links.
+ * The site navigation: transparent over the memorial and programme headers,
+ * frosted plum glass once you scroll. Desktop shows four entries in a capsule
+ * with a sliding highlight, two of them opening menus; phones get a menu sheet
+ * that opens on the two programme days.
  */
 function PublicNav({ page }: { page: PublicPage }) {
   const tr = useTr();
@@ -187,8 +199,10 @@ function PublicNav({ page }: { page: PublicPage }) {
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
   const f = page.fundraiser;
   const name = f.memorial_name ?? f.name;
-  const links = LINKS.filter((link) => link.to !== "/challenges" || (page.challenges?.length ?? 0) > 0);
-  const overHero = pathname === "/" && !scrolled && !open;
+  const money = MONEY_LINKS.filter((link) => link.to !== "/challenges" || (page.challenges?.length ?? 0) > 0);
+  const inProgramme = pathname.startsWith("/programme");
+  const inMoney = money.some((link) => pathname.startsWith(link.to));
+  const overHero = (pathname === "/" || inProgramme) && !scrolled && !open;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -197,13 +211,22 @@ function PublicNav({ page }: { page: PublicPage }) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
   useEffect(() => setOpen(false), [pathname]);
+  // The open sheet is the whole screen on a phone: the page behind it stays put.
+  useEffect(() => {
+    if (!open) return;
+    const before = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = before;
+    };
+  }, [open]);
 
-  // The highlight slides to the current page; it re-measures when fonts load or the window resizes.
+  // The highlight slides to the current entry; it re-measures when fonts load or the window resizes.
   useLayoutEffect(() => {
     const box = capsule.current;
     if (!box) return;
     const measure = () => {
-      const active = box.querySelector<HTMLElement>('[aria-current="page"]');
+      const active = box.querySelector<HTMLElement>(':scope > [aria-current="page"], :scope > [data-active="true"]');
       setIndicator(active ? { left: active.offsetLeft, width: active.offsetWidth } : null);
     };
     measure();
@@ -243,29 +266,22 @@ function PublicNav({ page }: { page: PublicPage }) {
                 style={{ left: indicator.left, width: indicator.width }}
               />
             )}
-            {links.map((link) => (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                end={link.end}
-                className={({ isActive }) =>
-                  clsx(
-                    "relative z-10 rounded-full px-2.5 py-1.5 text-[15px] whitespace-nowrap no-underline transition-colors hover:no-underline lg:px-3.5",
-                    "focus-visible:outline-2 focus-visible:outline-[#ffd086]",
-                    isActive ? "text-white" : "text-[#f6efe4]/75 hover:text-white",
-                  )
-                }
-              >
-                {link.short ? (
-                  <>
-                    <span className="lg:hidden">{tr(link.short[0], link.short[1])}</span>
-                    <span className="hidden lg:inline">{tr(link.label[0], link.label[1])}</span>
-                  </>
-                ) : (
-                  tr(link.label[0], link.label[1])
-                )}
-              </NavLink>
-            ))}
+            <NavLink to="/" end className={({ isActive }) => capsuleLink(isActive)}>
+              {tr("Home", "Nyumbani")}
+            </NavLink>
+            <NavMenu id="menu-programme" label={tr("Programme", "Ratiba")} active={inProgramme} width="w-[23rem]">
+              <ProgrammeMenu page={page} />
+            </NavMenu>
+            <NavLink to="/updates" className={({ isActive }) => capsuleLink(isActive)}>
+              {tr("Updates", "Taarifa")}
+            </NavLink>
+            <NavMenu id="menu-money" label={tr("Contributions", "Michango")} active={inMoney} width="w-[22rem]">
+              <div className="space-y-0.5">
+                {money.map((link) => (
+                  <MenuLink key={link.to} to={link.to} icon={link.icon} label={tr(link.label[0], link.label[1])} hint={tr(link.hint[0], link.hint[1])} />
+                ))}
+              </div>
+            </NavMenu>
           </div>
         </nav>
 
@@ -308,26 +324,40 @@ function PublicNav({ page }: { page: PublicPage }) {
       </div>
 
       {open && (
-        <div id="public-menu" className="sheet-in border-t border-white/10 px-4 pt-2 pb-5 md:hidden">
-          <nav aria-label={tr("Fundraiser pages", "Kurasa za mchango")} className="flex flex-col">
-            {links.map((link) => (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                end={link.end}
-                className={({ isActive }) =>
-                  clsx(
-                    "flex min-h-13 items-center justify-between rounded-xl px-3 text-[17px] no-underline hover:no-underline",
-                    isActive ? "bg-white/10 font-semibold text-white" : "text-[#f6efe4]/85 active:bg-white/5",
-                  )
-                }
-              >
-                {tr(link.label[0], link.label[1])}
-                <ChevronRight className="size-5 opacity-50" aria-hidden />
-              </NavLink>
-            ))}
+        <div id="public-menu" className="sheet-in max-h-[calc(100dvh-3.5rem)] overflow-y-auto overscroll-contain border-t border-white/10 px-4 pt-4 pb-6 md:hidden">
+          <SheetHeading>{tr("Funeral programme", "Ratiba ya mazishi")}</SheetHeading>
+          <SheetProgramme page={page} />
+
+          <nav aria-label={tr("Fundraiser pages", "Kurasa za mchango")} className="mt-5">
+            <div className="flex flex-col">
+              <SheetLink to="/" end icon={House} label={tr("Home", "Nyumbani")} />
+              <SheetLink to="/updates" icon={Megaphone} label={tr("Updates", "Taarifa")} />
+            </div>
+            <SheetHeading className="mt-5">{tr("Contributions", "Michango")}</SheetHeading>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {money.map((link) => {
+                const Icon = link.icon;
+                return (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    className={({ isActive }) =>
+                      clsx(
+                        "press flex min-h-[4.25rem] flex-col justify-between gap-1.5 rounded-xl p-3 text-[15px] leading-tight font-semibold no-underline hover:no-underline",
+                        isActive ? "bg-white/[0.14] text-white ring-1 ring-[#e8c27a]/50" : "bg-white/[0.06] text-[#f6efe4]/90 ring-1 ring-white/10 active:bg-white/10",
+                        link.to === "/check" && money.length % 2 === 1 && "col-span-2",
+                      )
+                    }
+                  >
+                    <Icon className="size-5 text-[#e8c27a]" aria-hidden />
+                    {tr(link.label[0], link.label[1])}
+                  </NavLink>
+                );
+              })}
+            </div>
           </nav>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+
+          <div className="mt-5 grid grid-cols-2 gap-2">
             {f.giving && (
               <button
                 type="button"
@@ -358,47 +388,286 @@ function PublicNav({ page }: { page: PublicPage }) {
   );
 }
 
-/** Phones: giving and sharing stay in reach once the M-Pesa card scrolls away. */
-function ActionBar({ page }: { page: PublicPage }) {
-  const tr = useTr();
-  const lang = useLang();
-  const navigate = useNavigate();
-  const contribute = () => navigate("/contribute");
+const capsuleLink = (active: boolean) =>
+  clsx(
+    "relative z-10 inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[15px] whitespace-nowrap no-underline transition-colors hover:no-underline lg:px-4",
+    "focus-visible:outline-2 focus-visible:outline-[#ffd086]",
+    active ? "text-white" : "text-[#f6efe4]/75 hover:text-white",
+  );
+
+/**
+ * A capsule entry that opens a menu: on click, or on hover with a mouse. It
+ * closes on Escape (back to the button), a click outside, leaving it, or moving on.
+ */
+function NavMenu({ id, label, active, width, children }: { id: string; label: string; active: boolean; width: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const closing = useRef<number | undefined>(undefined);
+  // A mouse opens the menu on hover; the click that usually follows must not close it again.
+  const hovered = useRef(false);
+  const { pathname } = useLocation();
+  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        button.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  useEffect(() => () => window.clearTimeout(closing.current), []);
+  const hover = (show: boolean) => (e: ReactPointerEvent) => {
+    if (e.pointerType !== "mouse") return;
+    window.clearTimeout(closing.current);
+    if (show) {
+      hovered.current = true;
+      setOpen(true);
+    } else closing.current = window.setTimeout(() => setOpen(false), 180);
+  };
+  // Decided from the hover marker, not `open`: a quick click can arrive before the hover's render.
+  function toggle() {
+    if (hovered.current) {
+      hovered.current = false;
+      setOpen(true);
+      return;
+    }
+    setOpen((o) => !o);
+  }
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 flex gap-3 border-t border-stone-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
-      {page.fundraiser.giving && (
-        <BarButton primary onClick={contribute} icon={<HandCoins className="size-5" aria-hidden />}>
-          {tr("How to contribute", "Jinsi ya kuchangia")}
-        </BarButton>
+    <div
+      ref={wrap}
+      data-active={active}
+      className="relative z-10"
+      onPointerEnter={hover(true)}
+      onPointerLeave={hover(false)}
+      onBlur={(e) => {
+        if (!wrap.current?.contains(e.relatedTarget as Node)) setOpen(false);
+      }}
+    >
+      <button ref={button} type="button" aria-expanded={open} aria-controls={id} onClick={toggle} className={clsx(capsuleLink(active), "cursor-pointer")}>
+        {label}
+        <ChevronDown className={clsx("size-4 opacity-70 transition-transform duration-200", open && "rotate-180")} aria-hidden />
+      </button>
+      {open && (
+        <div
+          id={id}
+          className={clsx(
+            "menu-in absolute top-full left-1/2 mt-3 -translate-x-1/2 rounded-2xl bg-[#1e1625] p-2 text-left shadow-[0_28px_60px_-24px_rgb(0_0_0/0.75)] ring-1 ring-white/10 backdrop-blur-xl",
+            width,
+          )}
+        >
+          {children}
+        </div>
       )}
-      <BarButton grow={!page.fundraiser.giving} onClick={() => void sharePage(page, lang)} icon={<Share2 className="size-5" aria-hidden />}>
-        {tr("Share", "Shiriki")}
-      </BarButton>
     </div>
   );
 }
 
-function BarButton({
-  primary,
-  grow,
-  onClick,
-  icon,
-  children,
-}: {
-  primary?: boolean;
-  grow?: boolean;
-  onClick: () => void;
-  icon: ReactNode;
-  children: ReactNode;
-}) {
+function MenuLink({ to, icon: Icon, label, hint }: { to: string; icon: LucideIcon; label: string; hint: string }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        clsx(
+          "group flex items-center gap-3 rounded-xl px-3 py-2.5 no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-[#ffd086]",
+          isActive ? "bg-white/[0.1]" : "hover:bg-white/[0.06]",
+        )
+      }
+    >
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/[0.07] text-[#e8c27a] ring-1 ring-white/10">
+        <Icon className="size-[18px]" aria-hidden />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[15px] leading-tight font-semibold text-white">{label}</span>
+        <span className="mt-0.5 block text-[13.5px] leading-snug text-[#f6efe4]/60 group-hover:text-[#f6efe4]/75">{hint}</span>
+      </span>
+    </NavLink>
+  );
+}
+
+/** The programme menu on desktop: the two days (with what is on today) and directions. */
+function ProgrammeMenu({ page }: { page: PublicPage }) {
+  const tr = useTr();
+  const lang = useLang();
+  const now = useNow();
+  const directions = directionsTo(page);
+  return (
+    <div>
+      <p className="px-3 pt-2 pb-1.5 text-[11.5px] font-semibold tracking-[0.26em] text-[#e2c88f] uppercase">{tr("Funeral programme", "Ratiba ya mazishi")}</p>
+      <div className="space-y-0.5">
+        {PROGRAMME.map((day) => {
+          const status = dayStatus(day, now);
+          return (
+            <NavLink
+              key={day.id}
+              to={`/programme/${day.id}`}
+              className={({ isActive }) =>
+                clsx(
+                  "flex items-center gap-3 rounded-xl px-2.5 py-2.5 no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-[#ffd086]",
+                  isActive ? "bg-white/[0.1]" : "hover:bg-white/[0.06]",
+                )
+              }
+            >
+              <DayBadge day={day} lang={lang} dark />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2 text-[15px] leading-tight font-bold text-white">
+                  {pick(day.weekday, lang)}, {pick(day.dateLong, lang).replace(/ \d{4}$/, "")}
+                  {isToday(day, now) && status.kind !== "ended" && <TodayPill live={status.kind === "now"} />}
+                </span>
+                <span className="mt-0.5 block text-[13.5px] leading-snug text-[#f6efe4]/65">{pick(day.title, lang)}</span>
+              </span>
+            </NavLink>
+          );
+        })}
+      </div>
+      {directions && page.fundraiser.funeral.place && (
+        <a
+          href={directions}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 flex items-center gap-3 rounded-xl border-t border-white/10 px-3 pt-3 pb-2.5 text-[14px] font-semibold text-[#f6efe4]/85 no-underline hover:bg-white/[0.06] hover:text-white hover:no-underline"
+        >
+          <Navigation className="size-4 text-[#e2c88f]" aria-hidden />
+          {tr(`Directions to ${page.fundraiser.funeral.place}`, `Maelekezo ya kufika ${page.fundraiser.funeral.place}`)}
+        </a>
+      )}
+    </div>
+  );
+}
+
+function SheetHeading({ children, className }: { children: ReactNode; className?: string }) {
+  return <p className={clsx("px-1 text-[12px] font-semibold tracking-[0.24em] text-[#e8c27a] uppercase", className)}>{children}</p>;
+}
+
+/** The phone menu opens on the two programme days, side by side. */
+function SheetProgramme({ page }: { page: PublicPage }) {
+  const tr = useTr();
+  const lang = useLang();
+  const now = useNow();
+  const directions = directionsTo(page);
+  return (
+    <div className="mt-2">
+      <div className="grid grid-cols-2 gap-2">
+        {PROGRAMME.map((day) => {
+          const status = dayStatus(day, now);
+          return (
+            <NavLink
+              key={day.id}
+              to={`/programme/${day.id}`}
+              className={({ isActive }) =>
+                clsx(
+                  "press relative flex min-h-[7.5rem] flex-col justify-between overflow-hidden rounded-2xl p-3 no-underline hover:no-underline",
+                  isActive ? "bg-[#e2c88f] text-[#14152b]" : "bg-white/[0.07] text-white ring-1 ring-white/12",
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span className="flex items-start justify-between gap-2">
+                    <DayBadge day={day} lang={lang} dark={!isActive} className={clsx("w-11", isActive && "ring-[#14152b]/20")} />
+                    {isToday(day, now) && status.kind !== "ended" && <TodayPill live={status.kind === "now"} inverted={isActive} />}
+                  </span>
+                  <span>
+                    <span className="block text-[16px] leading-tight font-bold">{pick(day.weekday, lang)}</span>
+                    <span className={clsx("mt-0.5 block text-[13px] leading-snug", isActive ? "text-[#14152b]/75" : "text-white/65")}>{pick(day.summary, lang)}</span>
+                  </span>
+                </>
+              )}
+            </NavLink>
+          );
+        })}
+      </div>
+      {directions && page.fundraiser.funeral.place && (
+        <a
+          href={directions}
+          target="_blank"
+          rel="noreferrer"
+          className="press mt-2 flex min-h-12 items-center gap-3 rounded-xl px-3 text-[15px] font-semibold text-[#f6efe4]/90 no-underline ring-1 ring-white/10 hover:no-underline active:bg-white/5"
+        >
+          <Navigation className="size-[18px] text-[#e2c88f]" aria-hidden />
+          <span className="flex-1">{tr(`Directions to ${page.fundraiser.funeral.place}`, `Maelekezo ya kufika ${page.fundraiser.funeral.place}`)}</span>
+          <ChevronRight className="size-5 opacity-50" aria-hidden />
+        </a>
+      )}
+    </div>
+  );
+}
+
+function SheetLink({ to, end, icon: Icon, label }: { to: string; end?: boolean; icon: LucideIcon; label: string }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        clsx(
+          "flex min-h-13 items-center gap-3 rounded-xl px-3 text-[17px] no-underline hover:no-underline",
+          isActive ? "bg-white/10 font-semibold text-white" : "text-[#f6efe4]/85 active:bg-white/5",
+        )
+      }
+    >
+      <Icon className="size-5 text-[#e8c27a]" aria-hidden />
+      <span className="flex-1">{label}</span>
+      <ChevronRight className="size-5 opacity-50" aria-hidden />
+    </NavLink>
+  );
+}
+
+/** Phones: the programme, giving and sharing stay in reach at the bottom of the screen. */
+function ActionBar({ page }: { page: PublicPage }) {
+  const tr = useTr();
+  const lang = useLang();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const inProgramme = pathname.startsWith("/programme");
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-30 flex gap-2.5 border-t border-stone-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
+      <Link
+        to="/programme"
+        aria-current={inProgramme ? "page" : undefined}
+        className={clsx(
+          "press flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-[16px] font-semibold no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
+          inProgramme ? "bg-[#0f1027] text-white" : "border border-stone-300 bg-white text-stone-900 active:bg-stone-100",
+        )}
+      >
+        <CalendarDays className="size-5" aria-hidden />
+        {tr("Programme", "Ratiba")}
+      </Link>
+      {page.fundraiser.giving && (
+        <BarButton primary onClick={() => navigate("/contribute")} icon={<HandCoins className="size-5" aria-hidden />}>
+          {tr("Contribute", "Changia")}
+        </BarButton>
+      )}
+      <button
+        type="button"
+        onClick={() => void sharePage(page, lang)}
+        aria-label={tr("Share this page", "Shiriki ukurasa huu")}
+        className="press grid size-12 shrink-0 place-items-center rounded-xl border border-stone-300 bg-white text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600 active:bg-stone-100"
+      >
+        <Share2 className="size-5" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function BarButton({ primary, onClick, icon, children }: { primary?: boolean; onClick: () => void; icon: ReactNode; children: ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={clsx(
-        "press flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 text-[16px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
-        primary ? "flex-1 bg-[#2e2338] text-white active:bg-[#1e1625]" : "border border-stone-300 bg-white text-stone-900 active:bg-stone-100",
-        !primary && (grow ? "flex-1" : "min-w-28"),
+        "press flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-[16px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
+        primary ? "bg-[#2e2338] text-white active:bg-[#1e1625]" : "border border-stone-300 bg-white text-stone-900 active:bg-stone-100",
       )}
     >
       {icon}

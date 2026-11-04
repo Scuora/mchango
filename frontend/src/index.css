@@ -560,3 +560,71 @@ html.booting .ribbon-in { animation-play-state: paused; }
   .ribbon-in, .ribbon-sheen, .flicker { animation: none; }
   .ribbon-sheen { display: none; }
 }
+
+/*
+ * The funeral programme (src/public/ProgrammePage.tsx and the programme menus):
+ * the printed programme's Montserrat, night navy, gold and ivory.
+ */
+.prog {
+  --p-night: #0f1027;
+  --p-ink: #14152b;
+  --p-gold: #c39a4e;
+  /* Gold text on ivory: the poster's gold is too light for small text there (WCAG AA). */
+  --p-gold-ink: #876628;
+  --p-gold-2: #e2c88f;
+  --p-ivory: #fbf9f5;
+  --p-line: #e7e1d6;
+  font-family: "Montserrat Variable", "Source Sans 3 Variable", system-ui, sans-serif;
+}
+/* A photo seen through a large numeral, with a fine gold outline set behind it. */
+.prog-numeral { position: relative; display: inline-block; line-height: 1; }
+.prog-numeral > span,
+.prog-numeral::before {
+  display: block;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  padding: 0 0.02em 0 0.007em;
+  margin: -0.113em 0 -0.133em;
+}
+.prog-numeral > span {
+  position: relative;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0.03em 0.06em rgb(20 21 43 / 0.16));
+}
+.prog-numeral::before {
+  content: attr(data-n);
+  position: absolute;
+  inset: 0 auto auto 0;
+  transform: translate(0.053em, 0.053em);
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--p-gold-2);
+}
+/* Duotone photos: black becomes night navy, white becomes ivory. Positioned by utilities (always absolute). */
+.prog-duo { overflow: hidden; isolation: isolate; background: #0f1027; }
+.prog-duo > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.08) brightness(1.03); }
+.prog-duo::before,
+.prog-duo::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.prog-duo::before { background: #0f1027; mix-blend-mode: lighten; }
+.prog-duo::after { background: #f4eee3; mix-blend-mode: darken; }
+/* "Happening now". */
+@keyframes prog-live {
+  0% { box-shadow: 0 0 0 0 rgb(226 200 143 / 0.65); }
+  70% { box-shadow: 0 0 0 10px rgb(226 200 143 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(226 200 143 / 0); }
+}
+.prog-live { animation: prog-live 2s ease-out infinite; }
+/* The navbar's menus. */
+/* Only a fade and a small drop: the menus are centred with the separate `translate` property. */
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.menu-in { animation: menu-in 0.18s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .prog-live, .menu-in { animation: none; }
+}

@@ -1,0 +1,435 @@
+import { clsx } from "clsx";
+import { ArrowRight, CalendarPlus, Check, Download, MapPin, Navigation, Share2 } from "lucide-react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import { Link, Navigate, NavLink, useLocation, useParams } from "react-router";
+import { coordinatesIn, directionsLink } from "@/lib/maps";
+import type { PublicPage } from "@/lib/types";
+import { localiseDates, useLang, useTr, type Lang } from "./i18n";
+import { usePublicPage } from "./PublicLayout";
+import { PROGRAMME, calendarFile, dayStatus, defaultDay, programmeDay, programmeShareText, type DayStatus, type NumeralPhoto, type ProgrammeDay, type ProgrammePart } from "./programme";
+import { DayBadge, TodayPill, isToday, pick, statusWords, useNow } from "./programmeParts";
+import { copyText, publicLink } from "./share";
+
+/** `/programme` opens the day that is on (Friday until Saturday comes). */
+export function ProgrammeIndex() {
+  const { search } = useLocation();
+  return <Navigate to={`/programme/${defaultDay(new Date())}${search}`} replace />;
+}
+
+/**
+ * A day of the funeral programme, after the printed programmes: Friday's parts
+ * with his photos seen through large numerals, Saturday's timed service beside a
+ * photo mosaic. It says what is on now, and offers directions, a calendar entry,
+ * sharing and the printed programme.
+ */
+export function ProgrammePage() {
+  const { day: id } = useParams();
+  const { search } = useLocation();
+  const page = usePublicPage();
+  const lang = useLang();
+  const now = useNow();
+  const day = programmeDay(id);
+  if (!day) return <Navigate to={`/programme${search}`} replace />;
+  const status = dayStatus(day, now);
+  const other = PROGRAMME.find((d) => d.id !== day.id)!;
+  return (
+    <div className="prog bg-[#fbf9f5] text-[#14152b]">
+      <Hero day={day} page={page} lang={lang} />
+      <DaySwitch current={day.id} now={now} lang={lang} />
+      <div className="mx-auto max-w-6xl px-4 pt-5 md:px-6 md:pt-8">
+        <StatusCard day={day} status={status} now={now} lang={lang} />
+        <Actions day={day} page={page} lang={lang} />
+      </div>
+      {day.id === "friday" ? <FridayParts day={day} status={status} lang={lang} /> : <SaturdayService day={day} status={status} lang={lang} />}
+      <OtherDay day={other} lang={lang} before={other.date < day.date} />
+      {page.fundraiser.memorial_tribute && (
+        <p className="px-4 pt-2 pb-4 text-center text-[1.35rem] font-semibold tracking-[-0.01em]">
+          <span className="italic text-[#876628]">{page.fundraiser.memorial_tribute}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Hero({ day, page, lang }: { day: ProgrammeDay; page: PublicPage; lang: Lang }) {
+  const tr = useTr();
+  const f = page.fundraiser;
+  return (
+    <header className="relative -mt-14 overflow-hidden bg-[#0f1027] pt-[5.25rem] pb-10 text-white md:-mt-16 md:pt-28 md:pb-16">
+      <div aria-hidden className="absolute inset-y-0 right-0 w-[86%] sm:w-[70%] md:w-[58%]">
+        <img src="/img/programme/portrait.jpg" alt="" className="h-full w-full object-cover object-[60%_32%] opacity-60 grayscale contrast-[1.08] md:opacity-95" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,#0f1027_0%,rgb(15_16_39/0.82)_32%,rgb(15_16_39/0.3)_72%,rgb(15_16_39/0.12)_100%),linear-gradient(0deg,#0f1027_0%,rgb(15_16_39/0)_42%),linear-gradient(180deg,rgb(15_16_39/0.92)_0%,rgb(15_16_39/0)_30%)]" />
+      </div>
+      <div className="relative mx-auto max-w-6xl px-4 md:px-6">
+        <p className="hero-line flex items-center gap-3 text-[12px] font-semibold tracking-[0.32em] text-[#e2c88f] uppercase md:text-[13px]">
+          {tr("Funeral programme", "Ratiba ya mazishi")}
+          <span className="h-px w-12 bg-[#e2c88f]/70" />
+        </p>
+        {f.memorial_name && (
+          <>
+            <p className="hero-line mt-6 text-[15px] text-white/70 italic md:mt-8" style={{ "--d": "100ms" } as CSSProperties}>
+              {tr("In loving memory of", "Kwa kumbukumbu ya")}
+            </p>
+            <p className="hero-line mt-1 max-w-[16ch] text-[2.1rem] leading-[1.05] font-bold tracking-[-0.015em] text-balance md:text-[3.4rem]" style={{ "--d": "180ms" } as CSSProperties}>
+              {f.memorial_name}
+            </p>
+          </>
+        )}
+        {f.memorial_dates && (
+          <p className="hero-line mt-3 text-[14px] tracking-[0.03em] text-white/75 md:text-[16px]" style={{ "--d": "260ms" } as CSSProperties}>
+            {localiseDates(f.memorial_dates, lang)}
+          </p>
+        )}
+        <span className="hero-line mt-7 block h-[3px] w-14 bg-[#c39a4e] md:mt-9" style={{ "--d": "320ms" } as CSSProperties} />
+        <h1 className="hero-line mt-5 text-[min(4.2rem,16vw)] leading-[0.9] font-extrabold tracking-[-0.04em] sm:text-[5.2rem] md:text-[7rem]" style={{ "--d": "380ms" } as CSSProperties}>
+          <span className="sr-only">{tr("Funeral programme: ", "Ratiba ya mazishi: ")}</span>
+          {pick(day.weekday, lang)}
+        </h1>
+        <p className="hero-line mt-3 text-[1.35rem] font-light tracking-[0.05em] text-[#e2c88f] md:text-[1.75rem]" style={{ "--d": "440ms" } as CSSProperties}>
+          {pick(day.dateLong, lang)}
+        </p>
+        <p className="hero-line mt-5 max-w-[30ch] text-[1.1rem] leading-snug font-semibold md:text-[1.35rem]" style={{ "--d": "500ms" } as CSSProperties}>
+          {pick(day.title, lang)}
+        </p>
+        {day.venue && (
+          <p className="hero-line mt-3 flex items-center gap-2 text-[15px] text-white/80" style={{ "--d": "560ms" } as CSSProperties}>
+            <MapPin className="size-4 shrink-0 text-[#e2c88f]" aria-hidden /> {pick(day.venue, lang)}
+          </p>
+        )}
+      </div>
+    </header>
+  );
+}
+
+/** Friday | Saturday, kept in reach below the navbar while scrolling. */
+function DaySwitch({ current, now, lang }: { current: string; now: Date; lang: Lang }) {
+  const tr = useTr();
+  return (
+    <div className="sticky top-14 z-30 border-b border-[#e7e1d6] bg-[#fbf9f5]/92 backdrop-blur-md md:top-16">
+      <nav aria-label={tr("Programme days", "Siku za ratiba")} className="mx-auto grid max-w-6xl grid-cols-2 gap-2 px-4 py-2.5 sm:flex md:px-6">
+        {PROGRAMME.map((d) => {
+          const status = dayStatus(d, now);
+          const today = isToday(d, now) && status.kind !== "ended";
+          return (
+            <NavLink
+              key={d.id}
+              to={`/programme/${d.id}`}
+              replace
+              className={({ isActive }) =>
+                clsx(
+                  "press flex min-h-14 items-center gap-3 rounded-2xl px-2.5 py-2 no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c39a4e] sm:min-w-64 sm:px-3",
+                  isActive ? "bg-[#0f1027] text-white shadow-[0_10px_24px_-14px_rgb(15_16_39/0.8)]" : "bg-white text-[#14152b] ring-1 ring-[#e7e1d6] hover:ring-[#c39a4e]/60",
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {/* The smallest phones keep the room for the day's name. */}
+                  <span className="hidden min-[360px]:block">
+                    <DayBadge day={d} lang={lang} dark={isActive} className="w-11 sm:w-12" />
+                  </span>
+                  <span className="min-w-0 flex-1 text-left">
+                    <span className="flex items-center gap-1.5 text-[15px] leading-tight font-bold">
+                      {pick(d.weekday, lang)}
+                      {current !== d.id && today && <TodayPill live={status.kind === "now"} className="hidden min-[400px]:inline-flex" />}
+                    </span>
+                    <span className={clsx("line-clamp-2 block text-[12.5px] leading-tight", isActive ? "text-white/70" : "text-[#5d5b66]")}>{pick(d.summary, lang)}</span>
+                  </span>
+                </>
+              )}
+            </NavLink>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+/** What is on now, what is next, or when the day begins. */
+function StatusCard({ day, status, now, lang }: { day: ProgrammeDay; status: DayStatus; now: Date; lang: Lang }) {
+  const tr = useTr();
+  const words = statusWords(day, status, now, lang);
+  if (words.tone === "ended") {
+    return <p className="flex items-center gap-2 text-[15px] text-[#5d5b66]"><Check className="size-4 text-[#876628]" aria-hidden /> {words.title}</p>;
+  }
+  const live = words.tone === "now";
+  return (
+    <div
+      role="status"
+      className={clsx(
+        "relative overflow-hidden rounded-2xl px-5 py-4 md:px-6",
+        live ? "bg-[#0f1027] text-white shadow-[0_18px_40px_-22px_rgb(15_16_39/0.8)]" : "bg-white ring-1 ring-[#e7e1d6]",
+      )}
+    >
+      <p className={clsx("flex items-center gap-2 text-[12px] font-bold tracking-[0.2em] uppercase", live ? "text-[#e2c88f]" : "text-[#876628]")}>
+        <span className={clsx("size-2 rounded-full", live ? "prog-live bg-[#e2c88f]" : "bg-[#c39a4e]")} aria-hidden />
+        {live ? tr("Happening now", "Kinaendelea sasa") : isToday(day, now) ? tr("Today", "Leo") : tr("Coming up", "Kinakuja")}
+      </p>
+      <p className="mt-1.5 text-[1.2rem] leading-snug font-semibold md:text-[1.35rem]">{words.title}</p>
+      {words.detail && <p className={clsx("mt-1 text-[15px] leading-snug", live ? "text-white/70" : "text-[#5d5b66]")}>{words.detail}</p>}
+      {status.kind === "now" && (
+        <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-white/10">
+          <span className="block h-full bg-[#e2c88f] transition-[width] duration-700" style={{ width: `${Math.round(status.progress * 100)}%` }} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Chip({ children, onClick, href, download, primary, external }: { children: ReactNode; onClick?: () => void; href?: string; download?: string; primary?: boolean; external?: boolean }) {
+  const className = clsx(
+    "press inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 text-[15px] font-semibold whitespace-nowrap no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c39a4e]",
+    primary ? "bg-[#0f1027] text-white hover:bg-[#1c1d3d]" : "bg-white text-[#14152b] ring-1 ring-[#e7e1d6] hover:ring-[#c39a4e]/70",
+  );
+  if (href) {
+    return (
+      <a href={href} download={download} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined} className={className}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} className={clsx(className, "cursor-pointer")}>
+      {children}
+    </button>
+  );
+}
+
+/** Directions, a calendar entry, sharing and the printed programme. Scrolls sideways on phones. */
+function Actions({ day, page, lang }: { day: ProgrammeDay; page: PublicPage; lang: Lang }) {
+  const tr = useTr();
+  const [copied, setCopied] = useState(false);
+  const { place, map_url } = page.fundraiser.funeral;
+  const coords = coordinatesIn(map_url);
+  const directions = day.venue ? (coords ? directionsLink(coords) : map_url) : null;
+  const url = publicLink(`/programme/${day.id}${lang === "sw" ? "?lang=sw" : ""}`);
+  const name = page.fundraiser.memorial_name ?? page.fundraiser.name;
+  const k = lang === "sw" ? 1 : 0;
+
+  function addToCalendar() {
+    const file = new Blob([calendarFile(day, name, publicLink(`/programme/${day.id}`), place)], { type: "text/calendar;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(file);
+    link.download = `${day.weekday[0]} programme - ${day.dateLong[0]}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+  }
+
+  async function share() {
+    const text = programmeShareText(day, page.fundraiser.memorial_name, url, lang);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `${tr("Funeral programme", "Ratiba ya mazishi")}: ${day.weekday[k]}`, text });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
+    if (await copyText(text)) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2500);
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+  }
+
+  return (
+    <div className="no-scrollbar -mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0">
+      {directions && (
+        <Chip href={directions} external primary>
+          <Navigation className="size-4" aria-hidden /> {tr("Directions", "Maelekezo")}
+        </Chip>
+      )}
+      <Chip onClick={addToCalendar} primary={!directions}>
+        <CalendarPlus className="size-4" aria-hidden /> {tr("Add to calendar", "Weka kwenye kalenda")}
+      </Chip>
+      <Chip onClick={() => void share()}>
+        {copied ? <Check className="size-4" aria-hidden /> : <Share2 className="size-4" aria-hidden />} {copied ? tr("Copied", "Imenakiliwa") : tr("Share", "Shiriki")}
+      </Chip>
+      <Chip href={day.poster} download={`Funeral programme - ${day.weekday[0]} ${day.dateLong[0]}.jpg`}>
+        <Download className="size-4" aria-hidden /> {tr("Printed programme", "Ratiba ya kuchapisha")}
+      </Chip>
+    </div>
+  );
+}
+
+/** A photo seen through a large numeral, with the fine gold outline behind it. */
+function Numeral({ n, photo, className }: { n: string; photo: NumeralPhoto; className?: string }) {
+  const style: CSSProperties = {
+    backgroundImage: `linear-gradient(180deg, rgb(20 21 43 / 0.3) 0%, rgb(20 21 43 / 0.1) 45%, rgb(20 21 43 / 0) 75%), url("${photo.src}")`,
+    backgroundSize: `100% 100%, ${photo.size}em auto`,
+    backgroundPosition: `0 0, ${photo.x}em ${photo.y}em`,
+  };
+  return (
+    <div aria-hidden className={clsx("prog-numeral", className)} data-n={n}>
+      <span style={style}>{n}</span>
+    </div>
+  );
+}
+
+const Now = () => <TodayPill live />;
+
+function FridayParts({ day, status, lang }: { day: ProgrammeDay; status: DayStatus; lang: Lang }) {
+  const current = status.kind === "now" ? status.part : status.kind === "between" ? status.next - 0.5 : -1;
+  return (
+    <div className="mx-auto max-w-6xl px-4 pt-6 md:px-6 md:pt-10">
+      {day.parts.map((part, i) => (
+        <FridayPart key={part.start} part={part} index={i} lang={lang} live={status.kind === "now" && status.part === i} done={current > i} />
+      ))}
+    </div>
+  );
+}
+
+function FridayPart({ part, index, lang, live, done }: { part: ProgrammePart; index: number; lang: Lang; live: boolean; done: boolean }) {
+  const flip = index % 2 === 1;
+  const n = String(index + 1).padStart(2, "0");
+  // No fallback to English: Kiswahili has no time-of-day labels (see programme.ts).
+  const label = part.label?.[lang === "sw" ? 1 : 0] ?? "";
+  return (
+    <section
+      data-reveal
+      aria-labelledby={`part-${n}`}
+      className={clsx(
+        "grid items-center gap-4 border-t border-[#e7e1d6] py-9 md:gap-12 md:py-14",
+        flip ? "md:grid-cols-[auto_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,1fr)_auto]",
+        done && "[&>*]:opacity-55",
+      )}
+    >
+      <div className={clsx("min-w-0", flip && "md:order-2")}>
+        <div className="flex min-h-6 flex-wrap items-center gap-3">
+          {label && <p className="text-[12.5px] font-semibold tracking-[0.3em] text-[#876628] uppercase">{label}</p>}
+          <p className="text-[12.5px] font-semibold tracking-[0.12em] text-[#5d5b66] uppercase">{pick(part.time, lang)}</p>
+          {live && <Now />}
+        </div>
+        <h2 id={`part-${n}`} className="mt-2 text-[1.85rem] leading-[1.1] font-semibold tracking-[-0.015em] text-balance md:text-[2.5rem]">
+          {pick(part.title, lang)}
+        </h2>
+        <span className="mt-4 block h-[3px] w-14 bg-[#c39a4e]" />
+        <ol className="relative mt-6 space-y-4 before:absolute before:top-3 before:bottom-3 before:left-[5px] before:w-px before:bg-gradient-to-b before:from-[#e2c88f] before:to-[#e2c88f]/20">
+          {part.items.map((item) => (
+            <li key={item.text[0]} className="relative pl-8">
+              <span className="absolute top-[0.45em] left-0 size-[11px] rounded-full border-2 border-[#c39a4e] bg-[#fbf9f5]" aria-hidden />
+              <span className="block text-[1.12rem] leading-snug font-medium text-[#24253a] md:text-[1.2rem]">{pick(item.text, lang)}</span>
+              {item.note && <span className="mt-1 block text-[12.5px] font-semibold tracking-[0.12em] text-[#876628] uppercase">{pick(item.note, lang)}</span>}
+            </li>
+          ))}
+        </ol>
+      </div>
+      {part.numeral && (
+        <Numeral
+          n={n}
+          photo={part.numeral}
+          className={clsx("order-first justify-self-start text-[11.5rem] min-[400px]:text-[12.5rem] sm:text-[13rem] md:text-[14rem] lg:text-[18rem]", !flip && "md:order-none md:justify-self-end")}
+        />
+      )}
+    </section>
+  );
+}
+
+// The Saturday mosaic, after the printed programme: [left, top, width, height] in % of a 750 x 790 frame,
+// and where to centre each photo (with how far to zoom in).
+const MOSAIC: { src: string; box: [number, number, number, number]; focus: [number, number]; zoom: number; strip?: boolean }[] = [
+  { src: "/img/programme/fez.jpg", box: [0, 0, 200, 790], focus: [0.415, 0.42], zoom: 1, strip: true },
+  { src: "/img/programme/road.jpg", box: [216, 0, 300, 570], focus: [0.63, 0.47], zoom: 1.12 },
+  { src: "/img/programme/portrait.jpg", box: [532, 0, 218, 218], focus: [0.55, 0.47], zoom: 1.25 },
+  { src: "/img/programme/home.jpg", box: [532, 234, 218, 336], focus: [0.55, 0.36], zoom: 1.25 },
+  { src: "/img/programme/desk.jpg", box: [216, 586, 534, 204], focus: [0.52, 0.215], zoom: 1 },
+];
+
+function Mosaic({ lang, className }: { lang: Lang; className?: string }) {
+  return (
+    <div aria-hidden className={clsx("@container relative aspect-[750/790] w-full", className)}>
+      {MOSAIC.map(({ src, box: [x, y, w, h], focus: [fx, fy], zoom, strip }) => (
+        <div
+          key={src}
+          className={clsx("prog-duo absolute", strip ? "rounded-none" : "rounded-[1.9cqw]")}
+          style={{ left: `${(x / 750) * 100}%`, top: `${(y / 790) * 100}%`, width: `${(w / 750) * 100}%`, height: `${(h / 790) * 100}%` }}
+        >
+          <img src={src} alt="" loading="lazy" style={{ objectPosition: `${fx * 100}% ${fy * 100}%`, transform: `scale(${zoom})`, transformOrigin: `${fx * 100}% ${fy * 100}%` }} />
+          {strip && (
+            <>
+              <span className="absolute inset-0 z-[2] bg-[linear-gradient(0deg,rgb(15_16_39/0.85)_0%,rgb(15_16_39/0.4)_26%,rgb(15_16_39/0)_46%)]" />
+              <span className="absolute inset-x-0 bottom-[4.5cqw] z-[3] text-center text-white">
+                <span className="block text-[21.6cqw] leading-[0.8] font-extralight tracking-[-0.05em]">07</span>
+                <span className="mt-[2cqw] block text-[1.75cqw] font-semibold tracking-[0.34em] text-[#e2c88f] uppercase">{lang === "sw" ? "Novemba" : "November"}</span>
+              </span>
+            </>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SaturdayService({ day, status, lang }: { day: ProgrammeDay; status: DayStatus; lang: Lang }) {
+  const tr = useTr();
+  const current = status.kind === "now" ? status.part : status.kind === "between" ? status.next - 0.5 : -1;
+  return (
+    <div className="mx-auto max-w-6xl px-4 pt-6 pb-4 md:px-6 md:pt-10 lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)] lg:gap-14">
+      <Mosaic lang={lang} className="lg:sticky lg:top-40 lg:self-start" />
+      <div className="mt-8 lg:mt-0">
+        <h2 className="text-[12.5px] font-semibold tracking-[0.3em] text-[#876628] uppercase">{tr("Order of service", "Mpangilio wa ibada")}</h2>
+        <ol className="mt-3">
+          {day.parts.map((part, i) => {
+            const live = status.kind === "now" && status.part === i;
+            return (
+              <li
+                key={part.start}
+                data-reveal
+                className={clsx(
+                  "relative flex items-end gap-4 border-t border-[#e7e1d6] py-5",
+                  live && "-mx-4 rounded-2xl border-transparent bg-[#0f1027] px-4 text-white shadow-[0_18px_40px_-22px_rgb(15_16_39/0.8)] md:-mx-5 md:px-5",
+                  current > i && "[&>*]:opacity-50",
+                )}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className={clsx("flex flex-wrap items-center gap-2 text-[12.5px] font-semibold tracking-[0.12em] uppercase", live ? "text-[#e2c88f]" : "text-[#876628]")}>
+                    {pick(part.time, lang)}
+                    {live && <Now />}
+                  </p>
+                  <p className="mt-1.5 text-[1.2rem] leading-snug font-medium text-balance md:text-[1.35rem]">{pick(part.title, lang)}</p>
+                  {live && status.kind === "now" && (
+                    <span aria-hidden className="mt-3 block h-1 overflow-hidden rounded-full bg-white/15">
+                      <span className="block h-full rounded-full bg-[#e2c88f]" style={{ width: `${Math.round(status.progress * 100)}%` }} />
+                    </span>
+                  )}
+                </div>
+                <span aria-hidden className={clsx("text-[2.6rem] leading-[0.8] font-extralight tracking-[-0.02em] md:text-[3rem]", live ? "text-[#e2c88f]" : "text-[#14152b]")}>
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </div>
+  );
+}
+
+/** The other day, as a large card with his photo. */
+function OtherDay({ day, lang, before }: { day: ProgrammeDay; lang: Lang; before: boolean }) {
+  const tr = useTr();
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-10 md:px-6 md:py-14">
+      <Link
+        to={`/programme/${day.id}`}
+        className="group lift relative block overflow-hidden rounded-3xl text-white no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#c39a4e]"
+      >
+        <span className="prog-duo absolute inset-0">
+          <img src={day.cover} alt="" loading="lazy" style={{ objectPosition: day.id === "friday" ? "62% 30%" : "42% 22%" }} className="transition-transform duration-700 group-hover:scale-[1.03]" />
+        </span>
+        <span aria-hidden className="absolute inset-0 z-[2] bg-[linear-gradient(90deg,rgb(15_16_39/0.96)_0%,rgb(15_16_39/0.8)_45%,rgb(15_16_39/0.25)_100%)]" />
+        <span className="relative z-[3] block px-6 py-8 md:px-10 md:py-12">
+          <span className="block text-[12px] font-semibold tracking-[0.3em] text-[#e2c88f] uppercase">{before ? tr("The day before", "Siku iliyotangulia") : tr("The next day", "Siku inayofuata")}</span>
+          <span className="mt-3 block text-[2.6rem] leading-none font-extrabold tracking-[-0.035em] md:text-[3.6rem]">{pick(day.weekday, lang)}</span>
+          <span className="mt-2 block text-[1.1rem] font-light tracking-[0.05em] text-[#e2c88f]">{pick(day.dateLong, lang)}</span>
+          <span className="mt-3 block max-w-[28ch] text-[1.05rem] leading-snug font-semibold md:text-[1.2rem]">{pick(day.title, lang)}</span>
+          <span className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#e2c88f] px-5 text-[15px] font-semibold text-[#14152b]">
+            {tr("See the programme", "Tazama ratiba")} <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+          </span>
+        </span>
+      </Link>
+    </div>
+  );
+}

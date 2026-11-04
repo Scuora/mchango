@@ -2,7 +2,7 @@
 // data only, so nothing private can appear.
 
 import { clsx } from "clsx";
-import { ArrowRight, Check, ChevronDown, Copy, FileText, HandCoins, MapPin, Megaphone, Phone, Share2 } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, ChevronDown, Copy, FileText, HandCoins, MapPin, Megaphone, Phone, Share2 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router";
 import { formatKesShort } from "@/lib/money";
@@ -136,16 +136,22 @@ export function Hero({ page }: { page: PublicPage }) {
               <span className="gold-sheen">{f.memorial_tribute}</span>
             </p>
           )}
-          {f.giving && (
-            <div className="hero-line pt-6" style={delay(850)}>
+          <div className="hero-line flex flex-wrap justify-center gap-3 pt-6 md:justify-start" style={delay(850)}>
+            {f.giving && (
               <Link
                 to="/contribute"
                 className="press glow-pulse inline-flex min-h-12 items-center gap-2 rounded-full bg-[#e8c27a] px-6 text-[17px] font-semibold text-[#1e1625] no-underline shadow-[0_10px_30px_-10px_rgb(232_194_122/0.8)] hover:bg-[#f0cf8e] hover:no-underline"
               >
                 <HandCoins className="size-5" aria-hidden /> {tr("How do I contribute?", "Nitachangiaje?")}
               </Link>
-            </div>
-          )}
+            )}
+            <Link
+              to="/programme"
+              className="press inline-flex min-h-12 items-center gap-2 rounded-full px-6 text-[17px] font-semibold text-[#f6efe4] no-underline ring-1 ring-[#e8c27a]/60 hover:bg-white/10 hover:text-white hover:no-underline"
+            >
+              <CalendarDays className="size-5 text-[#e8c27a]" aria-hidden /> {tr("Funeral programme", "Ratiba ya mazishi")}
+            </Link>
+          </div>
         </div>
       </div>
     </header>

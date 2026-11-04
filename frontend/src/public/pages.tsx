@@ -24,6 +24,7 @@ import {
   SpreadCard,
   kes,
 } from "./parts";
+import { ProgrammeCard } from "./programmeParts";
 import { usePublicPage } from "./PublicLayout";
 import { langPath, localiseName, useLang, useTr, type Lang } from "./i18n";
 import { Linked } from "./linked";
@@ -122,13 +123,17 @@ export function HomePage() {
       {hasAside ? (
         <div className="mx-auto max-w-6xl px-4 md:grid md:grid-cols-[minmax(320px,380px)_1fr] md:items-start md:gap-6 md:px-6">
           <aside className="relative z-10 -mt-12 space-y-4 md:sticky md:top-16 md:mt-6">
+            <ProgrammeCard />
             <GiveCard page={page} />
             <FuneralCard page={page} />
           </aside>
           <div className="mt-4 space-y-4 md:mt-6">{main}</div>
         </div>
       ) : (
-        <div className="relative z-10 mx-auto -mt-12 max-w-3xl space-y-4 px-4 md:mt-6 md:px-6">{main}</div>
+        <div className="relative z-10 mx-auto -mt-12 max-w-3xl space-y-4 px-4 md:mt-6 md:px-6">
+          <ProgrammeCard />
+          {main}
+        </div>
       )}
     </>
   );
