@@ -4,8 +4,8 @@
 
 import { familyOf, goalOf } from "./goal";
 import { formatKesShort } from "./money";
-import { formatNairobiDate, formatNairobiLongDate } from "./time";
-import type { PublicEntry, PublicPage } from "./types";
+import { formatNairobiDate, formatNairobiLongDate, toNairobiInputValue } from "./time";
+import type { PublicEntry, PublicPage, StatementReport } from "./types";
 
 export type Range = { kind: "all" } | { kind: "since"; date: string };
 
@@ -43,8 +43,8 @@ function sum(entries: PublicEntry[]): number | null {
   return entries.reduce((total, e) => total + (e.amount_minor ?? 0), 0);
 }
 
-export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, today: Date = new Date()): string {
-  const { fundraiser, totals } = page;
+function masthead(page: PublicPage, today: Date): string[] {
+  const { fundraiser } = page;
   const lines: string[] = [];
   if (fundraiser.memorial_name) {
     lines.push(`*In loving memory of ${fundraiser.memorial_name}*`);
@@ -56,6 +56,40 @@ export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, tod
     lines.push(`*${fundraiser.name}*`);
   }
   lines.push(`_As of ${formatNairobiLongDate(today)}_`);
+  return lines;
+}
+
+/** The fundraiser's goal: the target, the family's share, and what is still needed. */
+function goalLines(page: PublicPage): string[] {
+  const { fundraiser, totals } = page;
+  const goal = goalOf(fundraiser.target_minor, fundraiser.pledges, totals.contributions_minor);
+  if (!goal) return [];
+  const lines = [""];
+  if (goal.target !== null) lines.push(`*The goal: ${formatKesShort(goal.target)}*`);
+  if (goal.familyPledged > 0) {
+    lines.push(`Received from ${familyOf(fundraiser.memorial_name)}: ${formatKesShort(goal.familyPledged)}`);
+    const share = goal.othersShare !== null ? ` of ${formatKesShort(goal.othersShare)}` : "";
+    lines.push(`From family, friends and well-wishers: ${formatKesShort(goal.othersReceived)}${share}`);
+  }
+  if (goal.othersOutstanding > 0) lines.push(`Pledged by family, friends and well-wishers, not yet received: ${formatKesShort(goal.othersOutstanding)}`);
+  if (goal.stillNeeded !== null) lines.push(goal.stillNeeded > 0 ? `*Still needed: ${formatKesShort(goal.stillNeeded)}*` : "*The target has been reached. Thank you.*");
+  return lines;
+}
+
+function closing(options: ShareOptions): string[] {
+  const lines: string[] = [];
+  if (options.link) {
+    lines.push("");
+    lines.push(`Full record of contributions and expenses: ${options.link}`);
+  }
+  lines.push("");
+  lines.push("Thank you for standing with the family.");
+  return lines;
+}
+
+export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, today: Date = new Date()): string {
+  const { totals } = page;
+  const lines = masthead(page, today);
   lines.push("");
 
   const contributions = page.contributions.filter((e) => inRange(e, options.range));
@@ -95,25 +129,98 @@ export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, tod
     if (refunds !== 0) lines.push(`Refunds (net): ${formatKesShort(refunds)}`);
     if (totals.opening_funds_minor > 0) lines.push(`Opening funds: ${formatKesShort(totals.opening_funds_minor)}`);
     lines.push(`*Funds remaining: ${formatKesShort(totals.remaining_minor)}*`);
-    const goal = goalOf(fundraiser.target_minor, fundraiser.pledges, totals.contributions_minor);
-    if (goal) {
-      lines.push("");
-      if (goal.target !== null) lines.push(`*The goal: ${formatKesShort(goal.target)}*`);
-      if (goal.familyPledged > 0) {
-        lines.push(`Received from ${familyOf(fundraiser.memorial_name)}: ${formatKesShort(goal.familyPledged)}`);
-        const share = goal.othersShare !== null ? ` of ${formatKesShort(goal.othersShare)}` : "";
-        lines.push(`From family, friends and well-wishers: ${formatKesShort(goal.othersReceived)}${share}`);
-      }
-      if (goal.othersOutstanding > 0) lines.push(`Pledged by family, friends and well-wishers, not yet received: ${formatKesShort(goal.othersOutstanding)}`);
-      if (goal.stillNeeded !== null) lines.push(goal.stillNeeded > 0 ? `*Still needed: ${formatKesShort(goal.stillNeeded)}*` : "*The target has been reached. Thank you.*");
-    }
+    lines.push(...goalLines(page));
   }
 
-  if (options.link) {
+  lines.push(...closing(options));
+  return lines.join("\n");
+}
+
+/**
+ * One account's statement, as far as a shared message uses it: public names (or the
+ * anonymous label), amounts and balances. M-Pesa names and codes are never read.
+ */
+export type AccountStatement = Pick<StatementReport, "account" | "entries" | "totals" | "brought_forward_minor" | "closing_minor">;
+
+export interface AccountShareOptions extends ShareOptions {
+  /** Every account is in the message, so the fundraiser's goal adds up with it. */
+  allAccounts: boolean;
+}
+
+const plural = (count: number) => `${count} contribution${count === 1 ? "" : "s"}`;
+
+/**
+ * The update account by account, for reporting each kitty on its own: each account's
+ * contributions (and expenses), what it received and what it holds, then, for more
+ * than one account, a summary that adds them up. `statements` cover all time; the
+ * range picks which entries are listed.
+ */
+export function buildAccountsUpdate(page: PublicPage, statements: AccountStatement[], options: AccountShareOptions, today: Date = new Date()): string {
+  const showAmounts = page.fundraiser.show_contribution_amounts;
+  const published = new Set((page.challenges ?? []).map((c) => c.name));
+  const since = options.range.kind === "since" ? options.range.date : null;
+  const listed = (e: AccountStatement["entries"][number]) => since === null || toNairobiInputValue(e.at).slice(0, 10) >= since;
+  const several = statements.length > 1;
+  const name = (s: AccountStatement) => s.account?.name ?? "All accounts";
+  const total = (entries: AccountStatement["entries"]) => entries.reduce((sum, e) => sum + e.amount_minor, 0);
+  const received = (s: AccountStatement) => s.entries.filter((e) => e.kind === "contribution" && listed(e));
+  const when = since ? ` since ${formatNairobiDate(since)}` : "";
+  const list = (entries: AccountStatement["entries"], amounts: boolean) =>
+    oldestFirst(entries).map((e, i) => `${i + 1}. ${e.label}${amounts ? ` – ${formatKesShort(e.amount_minor)}` : ""}`);
+
+  const lines = masthead(page, today);
+  lines.push(several ? `_By account: ${statements.length} accounts_` : `_Account: ${name(statements[0])}_`);
+
+  statements.forEach((s, index) => {
+    const t = s.totals;
+    const challenge = s.account?.challenge_name?.trim();
     lines.push("");
-    lines.push(`Full record of contributions and expenses: ${options.link}`);
+    if (several) lines.push(`*${index + 1}. ${name(s)}*`);
+    if (challenge && published.has(s.account?.challenge_name ?? "")) lines.push(`_${challenge}_`);
+
+    const got = received(s);
+    lines.push(several ? `_Contributions received${when}_` : `*Contributions received${when}*`);
+    if (got.length === 0) lines.push(since ? "No new contributions in this period." : "No contributions yet.");
+    else lines.push(...list(got, showAmounts), showAmounts ? `Received${when}: ${formatKesShort(total(got))} (${plural(got.length)})` : plural(got.length));
+
+    if (options.includeSpending) {
+      const spent = s.entries.filter((e) => e.kind === "expense" && listed(e));
+      lines.push("");
+      lines.push(several ? `_Funeral expenses${when}_` : `*Funeral expenses${when}*`);
+      if (spent.length === 0) lines.push("No spending in this period.");
+      else lines.push(...list(spent, true), `Spent${when}: ${formatKesShort(total(spent))}`);
+    }
+
+    if (options.includeTotals) {
+      lines.push("");
+      lines.push(several ? "_Totals so far_" : "*Totals so far*");
+      if (s.brought_forward_minor > 0) lines.push(`Opening funds: ${formatKesShort(s.brought_forward_minor)}`);
+      if (since) lines.push(`Received: ${formatKesShort(t.received_minor)} (${plural(t.received_count)})`);
+      lines.push(`Funeral expenses paid: ${formatKesShort(t.expenses_minor)}`);
+      if (t.charges_minor > 0) lines.push(`Charges: ${formatKesShort(t.charges_minor)}`);
+      const refunds = t.refunds_paid_minor - t.refunds_received_minor;
+      if (refunds !== 0) lines.push(`Refunds (net): ${formatKesShort(refunds)}`);
+      if (t.transfers_in_minor > 0) lines.push(`Moved in from other accounts: ${formatKesShort(t.transfers_in_minor)}`);
+      if (t.transfers_out_minor > 0) lines.push(`Moved to other accounts: ${formatKesShort(t.transfers_out_minor)}`);
+      lines.push(`*Held in ${name(s)}: ${formatKesShort(s.closing_minor)}*`);
+    }
+  });
+
+  if (several) {
+    lines.push("");
+    lines.push(`*Summary${when}*`);
+    statements.forEach((s, index) => {
+      const got = received(s);
+      lines.push(`${index + 1}. ${name(s)}: ${showAmounts ? `${formatKesShort(total(got))} (${plural(got.length)})` : plural(got.length)}`);
+    });
+    const all = statements.flatMap(received);
+    lines.push(showAmounts ? `*Total received${when}: ${formatKesShort(total(all))} (${plural(all.length)})*` : `*${plural(all.length)}${when}*`);
+    if (options.includeTotals) lines.push(`*Held across these accounts: ${formatKesShort(statements.reduce((sum, s) => sum + s.closing_minor, 0))}*`);
   }
-  lines.push("");
-  lines.push("Thank you for standing with the family.");
+
+  // The goal is the whole fundraiser's, so it adds up only when every account is in the message.
+  if (options.includeTotals && options.allAccounts) lines.push(...goalLines(page));
+
+  lines.push(...closing(options));
   return lines.join("\n");
 }
