@@ -29,7 +29,7 @@ export function SharePage() {
   const [statementError, setStatementError] = useState<unknown>(null);
   const [range, setRange] = useState<RangeChoice>("all");
   const [since, setSince] = useState(daysAgoNairobi(14));
-  const [includeSpending, setIncludeSpending] = useState(false);
+  const [includeSpending, setIncludeSpending] = useState(true);
   const [includeTotals, setIncludeTotals] = useState(true);
   const [includeLink, setIncludeLink] = useState(true);
   const [text, setText] = useState("");
@@ -189,7 +189,7 @@ export function SharePage() {
           )}
           <div>
             <Checkbox checked={includeTotals} onChange={(e) => (setIncludeTotals(e.target.checked), setEdited(false))} label="Totals, balance and target progress" />
-            <Checkbox checked={includeSpending} onChange={(e) => (setIncludeSpending(e.target.checked), setEdited(false))} label="Spending list" />
+            <Checkbox checked={includeSpending} onChange={(e) => (setIncludeSpending(e.target.checked), setEdited(false))} label="Breakdown of expenses" hint="Each expense and its amount, the transaction costs, and the total spent" />
             {data.public_url ? (
               <Checkbox checked={includeLink} onChange={(e) => (setIncludeLink(e.target.checked), setEdited(false))} label={`Link to the public page (${data.public_url})`} />
             ) : (

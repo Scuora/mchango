@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { PublicPage, StatementReport } from "./types";
-import { buildAccountsUpdate, type AccountStatement } from "./whatsapp";
+import type { PublicEntry, PublicPage, StatementReport } from "./types";
+import { buildAccountsUpdate, buildWhatsAppUpdate, type AccountStatement } from "./whatsapp";
 
 type Entry = StatementReport["entries"][number];
 const entry = (at: string, kind: Entry["kind"], direction: Entry["direction"], amount: number, label: string): Entry => ({
@@ -84,5 +84,91 @@ describe("WhatsApp update account by account", () => {
     expect(text).toContain("*Held in M-Pesa: KES 1,300*");
     expect(text).not.toContain("*Summary");
     expect(text).not.toContain("The goal");
+  });
+});
+
+const publicEntry = (at: string, kind: PublicEntry["kind"], amount: number, label: string): PublicEntry => ({
+  date: at.slice(0, 10),
+  at,
+  kind,
+  direction: "out",
+  amount_minor: amount,
+  label,
+  reference_hint: null,
+  matched_to_statement: false,
+  receipts: [],
+});
+
+// Three expenses, each sent with its M-Pesa charge, recorded newest first as the public page lists them.
+const spendingPage = {
+  ...page,
+  totals: {
+    contributions_minor: 89_550_00,
+    contributions_count: 96,
+    expenses_minor: 44_200_00,
+    charges_minor: 267_00,
+    refunds_paid_minor: 0,
+    refunds_received_minor: 0,
+    reversals_in_minor: 0,
+    reversals_out_minor: 0,
+    opening_funds_minor: 0,
+    remaining_minor: 45_083_00,
+  },
+  contributions: [],
+  spending: [
+    publicEntry("2026-11-04T12:00:00Z", "expense", 5_000_00, "Building sand"),
+    publicEntry("2026-11-04T10:00:00Z", "expense", 19_200_00, "Tiles for the grave"),
+    publicEntry("2026-11-02T09:00:00Z", "expense", 20_000_00, "Coffin Deposit"),
+  ],
+  charges: [
+    publicEntry("2026-11-04T12:00:00Z", "charge", 57_00, "M-Pesa transaction charge"),
+    publicEntry("2026-11-04T10:00:00Z", "charge", 105_00, "M-Pesa transaction charge"),
+    publicEntry("2026-11-02T09:00:00Z", "charge", 105_00, "M-Pesa transaction charge"),
+  ],
+} as unknown as PublicPage;
+
+describe("WhatsApp update: breakdown of expenses", () => {
+  const options = { range: { kind: "all" } as const, includeSpending: true, includeTotals: true, link: null };
+
+  it("itemises each expense oldest first, adds the transaction costs as one item, and totals them", () => {
+    const text = buildWhatsAppUpdate(spendingPage, options, new Date("2026-11-04T15:00:00Z"));
+    expect(text).toContain(
+      "*Funeral expenses*\n1. Coffin Deposit – KES 20,000\n2. Tiles for the grave – KES 19,200\n3. Building sand – KES 5,000\n4. Transaction costs on 3 payments – KES 267\n*Total spent: KES 44,467*",
+    );
+    // The breakdown adds up to the spending in the totals.
+    expect(text).toContain("Funeral expenses paid: KES 44,467 (incl. KES 267 transaction costs)");
+    expect(text).not.toContain("M-Pesa transaction charge");
+  });
+
+  it("breaks down only the period's spending", () => {
+    const text = buildWhatsAppUpdate(spendingPage, { ...options, range: { kind: "since", date: "2026-11-03" } });
+    expect(text).toContain(
+      "*Funeral expenses since 3 Nov 2026*\n1. Tiles for the grave – KES 19,200\n2. Building sand – KES 5,000\n3. Transaction costs on 2 payments – KES 162\n*Total spent since 3 Nov 2026: KES 24,362*",
+    );
+    expect(text).not.toContain("Coffin Deposit");
+  });
+
+  it("says so when nothing was spent in the period, and leaves the breakdown out when not asked for", () => {
+    const quiet = buildWhatsAppUpdate(spendingPage, { ...options, range: { kind: "since", date: "2026-11-05" } });
+    expect(quiet).toContain("*Funeral expenses since 5 Nov 2026*\nNo spending in this period.");
+    expect(quiet).not.toContain("Total spent");
+    expect(buildWhatsAppUpdate(spendingPage, { ...options, includeSpending: false })).not.toContain("*Funeral expenses*");
+  });
+
+  it("breaks down each account's spending on its own", () => {
+    const account: AccountStatement = {
+      account: { id: 1, name: "M-Pesa", kind: "mpesa", challenge_name: null },
+      entries: [
+        entry("2026-11-02T08:00:00Z", "contribution", "in", 50_000_00, "Edward Chai"),
+        entry("2026-11-02T09:00:00Z", "expense", "out", 20_000_00, "Coffin Deposit"),
+        entry("2026-11-02T09:00:00Z", "charge", "out", 105_00, "M-Pesa transaction charge"),
+      ],
+      totals: totals(50_000_00, 1, { expenses_minor: 20_000_00, expenses_count: 1, charges_minor: 105_00 }),
+      brought_forward_minor: 0,
+      closing_minor: 29_895_00,
+    };
+    const text = buildAccountsUpdate(page, [account], { ...options, allAccounts: false });
+    expect(text).toContain("*Funeral expenses*\n1. Coffin Deposit – KES 20,000\n2. Transaction costs on 1 payment – KES 105\nSpent: KES 20,105");
+    expect(text).toContain("*Held in M-Pesa: KES 29,895*");
   });
 });

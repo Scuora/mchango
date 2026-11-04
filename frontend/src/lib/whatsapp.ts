@@ -93,6 +93,21 @@ function spentLine(expensesMinor: number, chargesMinor: number): string {
   const costs = chargesMinor > 0 ? ` (incl. ${formatKesShort(chargesMinor)} transaction costs)` : "";
   return `Funeral expenses paid: ${formatKesShort(expensesMinor + chargesMinor)}${costs}`;
 }
+
+type Spent = { at: string; label: string; amount_minor: number | null };
+
+/**
+ * The expense breakdown: each expense with its amount (oldest first), then the
+ * transaction costs on them as one last item, so the items add up to `total`.
+ * Expense amounts are always public; only contribution amounts can be hidden.
+ */
+function breakdown(expenses: Spent[], charges: Spent[]): { items: string[]; total: number } {
+  const sumOf = (list: Spent[]) => list.reduce((total, e) => total + (e.amount_minor ?? 0), 0);
+  const items = oldestFirst(expenses).map((e, i) => `${i + 1}. ${e.label} – ${formatKesShort(e.amount_minor ?? 0)}`);
+  const costs = sumOf(charges);
+  if (charges.length > 0) items.push(`${items.length + 1}. Transaction costs on ${charges.length} payment${charges.length === 1 ? "" : "s"} – ${formatKesShort(costs)}`);
+  return { items, total: sumOf(expenses) + costs };
+}
 export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, today: Date = new Date()): string {
   const { totals } = page;
   const lines = masthead(page, today);
@@ -115,15 +130,15 @@ export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, tod
   }
 
   if (options.includeSpending) {
-    // Transaction costs are listed with the spending they belong to (numbered oldest first).
-    const spending = [...page.spending, ...page.charges].filter((e) => inRange(e, options.range));
+    const when = options.range.kind === "all" ? "" : ` since ${formatNairobiDate(options.range.date)}`;
+    const spent = breakdown(
+      page.spending.filter((e) => inRange(e, options.range)),
+      page.charges.filter((e) => inRange(e, options.range)),
+    );
     lines.push("");
-    lines.push(options.range.kind === "all" ? "*Funeral expenses*" : `*Funeral expenses since ${formatNairobiDate(options.range.date)}*`);
-    if (spending.length === 0) {
-      lines.push("No spending in this period.");
-    } else {
-      lines.push(...numbered(spending));
-    }
+    lines.push(`*Funeral expenses${when}*`);
+    if (spent.items.length === 0) lines.push("No spending in this period.");
+    else lines.push(...spent.items, `*Total spent${when}: ${formatKesShort(spent.total)}*`);
   }
 
   if (options.includeTotals) {
@@ -190,11 +205,14 @@ export function buildAccountsUpdate(page: PublicPage, statements: AccountStateme
     else lines.push(...list(got, showAmounts), showAmounts ? `Received${when}: ${formatKesShort(total(got))} (${plural(got.length)})` : plural(got.length));
 
     if (options.includeSpending) {
-      const spent = s.entries.filter((e) => (e.kind === "expense" || e.kind === "charge") && listed(e));
+      const spent = breakdown(
+        s.entries.filter((e) => e.kind === "expense" && listed(e)),
+        s.entries.filter((e) => e.kind === "charge" && listed(e)),
+      );
       lines.push("");
       lines.push(several ? `_Funeral expenses${when}_` : `*Funeral expenses${when}*`);
-      if (spent.length === 0) lines.push("No spending in this period.");
-      else lines.push(...list(spent, true), `Spent${when}: ${formatKesShort(total(spent))}`);
+      if (spent.items.length === 0) lines.push("No spending in this period.");
+      else lines.push(...spent.items, `Spent${when}: ${formatKesShort(spent.total)}`);
     }
 
     if (options.includeTotals) {
