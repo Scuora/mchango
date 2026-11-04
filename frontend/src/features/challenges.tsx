@@ -354,10 +354,11 @@ export function UpdatedChallengeMessage({ transactionId }: { transactionId: numb
   const records = useResource<ListResponse>(challengeId ? `/api/manage/transactions?challenge_id=${challengeId}&limit=500` : null);
   const share = useShareContext();
   const [copied, setCopied] = useState(false);
+  // Every hook comes before the early return, or React sees a different count once the data arrives.
+  const [mode, setMode] = useState<ShareMode>(ownMode(0));
   if (!challengeId || !summary.data || !records.data) return null;
   const c = summary.data;
   const entries = publicEntries(records.data.items, share.settings);
-  const [mode, setMode] = useState<ShareMode>(ownMode(0));
   const chosen: ShareMode = c.messages.length ? (isOwnMode(mode) ? mode : ownMode(0)) : "en";
   const text = shareText(c, share, { lang: chosen, entries, includeList: true });
   return (
