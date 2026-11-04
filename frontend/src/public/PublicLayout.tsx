@@ -165,8 +165,10 @@ function PublicSite() {
         </p>
       )}
       <PublicNav page={page} />
-      {/* Keyed by language too, so a switch redraws every date and label. */}
-      <div key={`${pathname}-${lang}`} className="page-enter">
+      {/* Keyed by language too, so a switch redraws every date and label. Pages that open with a
+          dark header under the transparent navbar appear at once: fading them in would leave the
+          navbar over a pale page for a moment, a blink. Their header text still animates in. */}
+      <div key={`${pathname}-${lang}`} className={pathname === "/" || pathname.startsWith("/programme") ? undefined : "page-enter"}>
         <Outlet context={{ page } satisfies PublicContext} />
       </div>
       <footer className="mx-auto max-w-3xl space-y-2 px-4 pt-10 pb-12 text-center">
