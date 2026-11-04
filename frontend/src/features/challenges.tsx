@@ -187,19 +187,24 @@ function MessagesField({ value, onChange, error }: { value: ChallengeMessage[]; 
           {error}
         </p>
       )}
-      <div className="flex flex-wrap gap-2">
-        {value.length < 10 && (
-          <Button type="button" variant="secondary" size="sm" icon={<Plus className="size-4" aria-hidden />} onClick={() => onChange([...value, { title: "", body: "" }])}>
-            {value.length ? "Add another message" : "Add a message"}
-          </Button>
-        )}
-        {value.length < 10 &&
-          unused.map((s) => (
-            <Button key={s.title} type="button" variant="ghost" size="sm" onClick={() => onChange([...value, s])}>
-              Add the example &ldquo;{s.title}&rdquo;
-            </Button>
-          ))}
-      </div>
+      {value.length < 10 && (
+        <Button type="button" variant="secondary" size="sm" icon={<Plus className="size-4" aria-hidden />} onClick={() => onChange([...value, { title: "", body: "" }])}>
+          {value.length ? "Add another message" : "Add a message"}
+        </Button>
+      )}
+      {value.length < 10 && unused.length > 0 && (
+        <div>
+          <p className="text-sm font-medium text-stone-700">Or start from a ready-made message</p>
+          <p className="text-sm text-stone-600">They suit any challenge: a line whose figure the challenge does not have, such as a target, is left out.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {unused.map((s) => (
+              <Button key={s.title} type="button" variant="ghost" size="sm" icon={<Plus className="size-4" aria-hidden />} onClick={() => onChange([...value, s])}>
+                {s.title}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
     </fieldset>
   );
 }

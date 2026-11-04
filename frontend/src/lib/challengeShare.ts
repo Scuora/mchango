@@ -67,11 +67,12 @@ function nairobi(now: Date) {
     date: `${day} ${month} ${parts.year}`,
     dateSw: `${day} ${MONTHS_SW[Number(parts.month) - 1]} ${parts.year}`,
     time: `${clock} ${hour < 12 ? "am" : "pm"}`,
-    timeSw: `saa ${clock}`,
+    // The 24-hour clock: "saa 2:30" would read as Swahili hours (8:30 am).
+    timeSw: `saa ${hour}:${parts.minute}`,
   };
 }
 
-/** "3 November 2026, 11:00 am" or, in Kiswahili, "3 Novemba 2026, saa 11:00" (clock time, as on the clock). */
+/** "3 November 2026, 11:00 am" or, in Kiswahili, "3 Novemba 2026, saa 11:00" (clock time; "saa 14:30" after noon). */
 export function asAt(now: Date, lang: ShareLang): string {
   const n = nairobi(now);
   return lang === "sw" ? `${n.dateSw}, ${n.timeSw}` : `${n.date}, ${n.time}`;
@@ -100,6 +101,8 @@ export const TEMPLATE_GROUPS: { label: string; fields: [string, string][] }[] = 
       ["handed_over", "handed over to the main fund"],
       ["number", "the number to send to"],
       ["giving_name", "the name M-Pesa shows"],
+      ["give", "how to give: “M-Pesa, Send Money: 0706 608 654 (Samuel Isaac)”"],
+      ["give_sw", "the same in Kiswahili: “M-Pesa, Tuma Pesa: …”"],
       ["link", "the challenges page"],
     ],
   },
@@ -131,7 +134,7 @@ export const TEMPLATE_GROUPS: { label: string; fields: [string, string][] }[] = 
       ["date", "e.g. 3 November 2026"],
       ["date_sw", "e.g. 3 Novemba 2026"],
       ["time", "e.g. 11:00 am"],
-      ["time_sw", "e.g. saa 11:00"],
+      ["time_sw", "e.g. saa 11:00, or saa 14:30 after noon"],
     ],
   },
 ];
@@ -155,6 +158,8 @@ export function fillTemplate(template: string, input: Omit<ChallengeShareInput, 
     handed_over: bare(t.handed_over_minor ?? 0),
     number: input.giving?.number ?? "",
     giving_name: input.giving?.name ?? "",
+    give: input.giving ? howToGive(input.giving, "en").replace(/\*/g, "") : "",
+    give_sw: input.giving ? howToGive(input.giving, "sw").replace(/\*/g, "") : "",
     date: n.date,
     date_sw: n.dateSw,
     time: n.time,
@@ -162,13 +167,19 @@ export function fillTemplate(template: string, input: Omit<ChallengeShareInput, 
     today: formatNairobiLongDate(input.now ?? new Date()),
     link: input.publicUrl ? `${input.publicUrl}/challenges` : "",
     site: input.publicUrl ?? "",
+    memorial_name: input.memorialName ?? "",
     ...fundraiserValues(input.fundraiser ?? null),
   };
-  // A placeholder with nothing to show (such as {list} before any contributions)
-  // takes its line with it, so the message never has a gap of blank lines.
+  // A line whose figures are all empty (such as {list} before any contributions, or
+  // "Lengo: KSh {target}" for a challenge without a target) is left out, so the same
+  // message suits every challenge and never has a gap of blank lines.
+  const known = (line: string) => [...line.matchAll(/\{([a-z_]+)\}/g)].map((m) => m[1]).filter((key) => key in values);
   return template
     .split("\n")
-    .filter((line) => !/^\s*(\{[a-z_]+\}\s*)+$/.test(line) || line.replace(/\{([a-z_]+)\}/g, (whole, key: string) => values[key] ?? whole).trim() !== "")
+    .filter((line) => {
+      const keys = known(line);
+      return keys.length === 0 || keys.some((key) => values[key].trim() !== "");
+    })
     .join("\n")
     .replace(/\{([a-z_]+)\}/g, (whole, key: string) => values[key] ?? whole)
     .replace(/\n{3,}/g, "\n\n");
@@ -245,6 +256,89 @@ export const STARTER_TEMPLATE = `{name}
 👤 Jina: {giving_name}
 
 🕊️ TUKUMBUKE WEMA WAKE, TUENDELEZE UPENDO WAKE. ❤️`;
+
+// Ready-made messages for any challenge. Lines whose figures a challenge does not have
+// (a target, a number to send to) drop out, so none of them needs editing to fit.
+
+/** The English update, in Kiswahili. */
+export const SWAHILI_UPDATE_TEMPLATE = `Kwa kumbukumbu ya {memorial_name}
+{memorial_dates}
+{tribute}
+
+*{name}*
+Taarifa ya michango
+Hadi {date_sw}, {time_sw}
+
+Michango iliyopokelewa
+{list}
+
+Jumla hadi sasa
+Iliyopatikana: KSh {raised} (michango {count})
+
+Lengo: KSh {target}
+Salio: KSh {remaining}
+
+Rekodi kamili ya michango na matumizi: {site}
+
+Asanteni kwa kusimama pamoja na familia.`;
+
+/** Asking people to give: what the challenge is, where it stands and how to take part. */
+export const INVITATION_TEMPLATE = `*{name}*
+
+{description}
+
+In loving memory of {memorial_name}
+
+🎯 Target: KES {target}
+✅ Raised so far: KES {raised} ({count} contributions)
+
+💳 *How to contribute*
+{give}
+
+Follow the contributions: {link}
+
+Every shilling counts. Thank you. ❤️`;
+
+export const SWAHILI_INVITATION_TEMPLATE = `*{name}*
+
+{description}
+
+Kwa kumbukumbu ya {memorial_name}
+
+🎯 Lengo: KSh {target}
+✅ Iliyopatikana hadi sasa: KSh {raised} (michango {count})
+
+💳 *Jinsi ya kuchangia*
+{give_sw}
+
+Fuatilia michango: {link}
+
+Kila shilingi ina maana. Asanteni. ❤️`;
+
+/** Closing a challenge: the total, everyone who gave, and thanks. */
+export const THANKS_TEMPLATE = `🙏 *Thank you!*
+
+*{name}*
+
+Together we raised *KES {raised}* from {count} contributions, in loving memory of {memorial_name}.
+
+{list_kes}
+
+Every contribution is recorded: {link}
+
+Thank you for your love and generosity. ❤️`;
+
+export const SWAHILI_THANKS_TEMPLATE = `🙏 *Asanteni sana!*
+
+*{name}*
+
+Kwa pamoja tumechangia *KSh {raised}* kupitia michango {count}, kwa kumbukumbu ya {memorial_name}.
+
+{list}
+
+Kila mchango umerekodiwa: {link}
+
+Asanteni kwa upendo na ukarimu wenu. ❤️`;
 
 function spaced(number: string): string {
   const digits = number.replace(/\D/g, "");
@@ -339,4 +433,9 @@ export function buildChallengeUpdate(input: ChallengeShareInput): string {
 export const STARTERS: { title: string; body: string }[] = [
   { title: "Challenge message", body: STARTER_TEMPLATE },
   { title: "Update in English", body: ENGLISH_TEMPLATE },
+  { title: "Taarifa kwa Kiswahili", body: SWAHILI_UPDATE_TEMPLATE },
+  { title: "Invitation to give", body: INVITATION_TEMPLATE },
+  { title: "Mwaliko wa kuchangia", body: SWAHILI_INVITATION_TEMPLATE },
+  { title: "Thank you", body: THANKS_TEMPLATE },
+  { title: "Shukrani", body: SWAHILI_THANKS_TEMPLATE },
 ];

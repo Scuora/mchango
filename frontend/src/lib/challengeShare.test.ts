@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENGLISH_TEMPLATE, STARTER_TEMPLATE, buildChallengeUpdate, fillTemplate } from "./challengeShare";
+import { ENGLISH_TEMPLATE, STARTER_TEMPLATE, SWAHILI_INVITATION_TEMPLATE, buildChallengeUpdate, fillTemplate } from "./challengeShare";
 import type { PublicPage } from "./types";
 
 const challenge = {
@@ -63,6 +63,16 @@ describe("challenge update", () => {
     expect(text).toContain("📱 0706608654");
     expect(text).toContain("👤 Jina: Samuel Isaac");
     expect(fillTemplate("Hadi {date_sw}, {time_sw} {unknown}", { ...base, entries })).toBe("Hadi 3 Novemba 2026, saa 11:00 {unknown}");
+  });
+
+  it("fits a ready-made message to a challenge without a target, with the clock time after noon", () => {
+    const jeneza = { ...challenge, name: "Jeneza", target_minor: null };
+    const giving = { method: "phone" as const, number: "0706608654", account: null, name: "Samuel Isaac" };
+    const afternoon = new Date("2026-11-04T11:30:00Z"); // 14:30 in Nairobi
+    const text = fillTemplate(SWAHILI_INVITATION_TEMPLATE, { ...base, challenge: jeneza, giving, now: afternoon });
+    expect(text).toContain("✅ Iliyopatikana hadi sasa: KSh 12,000 (michango 3)\n\n💳 *Jinsi ya kuchangia*\nM-Pesa, Tuma Pesa: 0706 608 654 (Samuel Isaac)");
+    expect(text).not.toContain("Lengo");
+    expect(fillTemplate("Hadi {time_sw}", { ...base, now: afternoon })).toBe("Hadi saa 14:30");
   });
 
   it("leaves no gap when a placeholder is empty", () => {
