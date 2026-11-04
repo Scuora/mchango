@@ -400,9 +400,9 @@ export function FundsCard({ page }: { page: PublicPage }) {
   const t = page.totals;
   const available = t.opening_funds_minor + t.contributions_minor + t.refunds_received_minor + t.reversals_in_minor;
   const otherOut = t.refunds_paid_minor + t.reversals_out_minor;
+  // M-Pesa transaction costs are part of the spending, so they are counted in it.
   const parts = [
-    { key: "spent", label: tr("Spent", "Imetumika"), value: t.expenses_minor, color: "var(--color-data-out)" },
-    { key: "charges", label: tr("Charges", "Gharama"), value: t.charges_minor, color: "var(--color-data-charge)" },
+    { key: "spent", label: tr("Spent", "Imetumika"), value: t.expenses_minor + t.charges_minor, color: "var(--color-data-out)" },
     ...(otherOut > 0 ? [{ key: "refunds", label: tr("Refunds", "Marejesho"), value: otherOut, color: "var(--color-stone-500)" }] : []),
   ];
   const latest = page.statement_checks.reconciled_periods[0];
@@ -439,6 +439,11 @@ export function FundsCard({ page }: { page: PublicPage }) {
                   {p.label}
                 </dt>
                 <dd className="text-[1.05rem] font-semibold tabular-nums">{kes(p.value).replace("KES ", "")}</dd>
+                {p.key === "spent" && t.charges_minor > 0 && (
+                  <dd className="text-[13px] leading-snug text-stone-500">
+                    {tr(`incl. ${kes(t.charges_minor)} transaction costs`, `pamoja na gharama za miamala ${kes(t.charges_minor)}`)}
+                  </dd>
+                )}
               </div>
             ))}
             <div>

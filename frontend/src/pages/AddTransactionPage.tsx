@@ -19,7 +19,8 @@ import {
 import { PresentationFields, emptyPresentation, presentationFromSender, toPresentation, type PresentationDraft } from "@/features/presentationFields";
 import { ApiError, api, fieldError, useResource } from "@/lib/api";
 import { movesMoney } from "@/lib/labels";
-import { parseKes, toInput } from "@/lib/money";
+import { formatKesShort, parseKes, toInput } from "@/lib/money";
+import { TARIFF_DATE, paidByFromFormat, suggestedCost, type PaidBy } from "@/lib/mpesaTariff";
 import { nowNairobiInput, toNairobiInputValue } from "@/lib/time";
 import type { Account, ChallengeSummary, Created, CreateRequest, Fundraiser, ListResponse, ParseResponse } from "@/lib/types";
 
@@ -40,6 +41,8 @@ export function AddTransactionPage() {
   const [chargeNote, setChargeNote] = useState<string | undefined>();
   const [errors, setErrors] = useState<DraftErrors>({});
   const [chargeError, setChargeError] = useState<string | undefined>();
+  // How money paid out of M-Pesa left it, for the suggested transaction cost; null until known or chosen.
+  const [paidBy, setPaidBy] = useState<PaidBy | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<unknown>(null);
   const [formKey, setFormKey] = useState(newFormKey);
@@ -85,6 +88,10 @@ export function AddTransactionPage() {
     return <LoadState loading={accounts.loading} error={accounts.error} onRetry={accounts.reload} />;
   }
   const accountList = accounts.data;
+  /** Expenses, transfers and refunds paid out of an M-Pesa account carry an M-Pesa charge. */
+  const paysOutOfMpesa = (d: MovementDraft) =>
+    accountList.find((a) => String(a.id) === d.accountId)?.kind === "mpesa" &&
+    (d.kind === "expense" || d.kind === "transfer" || (d.kind === "refund" && d.direction === "out"));
   const duplicate = saveError instanceof ApiError && saveError.code === "possible_duplicate" ? saveError : null;
 
   function reset() {
@@ -97,6 +104,7 @@ export function AddTransactionPage() {
     setChargeNote(undefined);
     setErrors({});
     setChargeError(undefined);
+    setPaidBy(null);
     setSaveError(null);
     setReadError(null);
     setChallenge(challengeFor ?? "");
@@ -148,6 +156,7 @@ export function AddTransactionPage() {
       setUncertain(notes);
       setCharge(toInput(p.charge_minor.value));
       setChargeNote(p.charge_minor.certain ? undefined : (p.charge_minor.note ?? "Check the charge."));
+      setPaidBy(paidByFromFormat(p.format));
       setPresentation(presentationFromSender(p.counterparty_name));
       setFormKey(newFormKey());
       setStep({ name: "confirm", parse: response, message });
@@ -168,6 +177,7 @@ export function AddTransactionPage() {
     setUncertain({});
     setCharge("");
     setChargeNote(undefined);
+    setPaidBy(null);
     setPresentation(emptyPresentation());
     setFormKey(newFormKey());
     setStep({ name: "confirm", parse: null, message: null });
@@ -184,7 +194,10 @@ export function AddTransactionPage() {
     const built = buildMovement(draft);
     let chargeMinor: number | null = null;
     let chargeProblem: string | undefined;
-    if (charge.trim() && movesMoney(draft.kind) && draft.kind !== "charge") {
+    // Money paid out of M-Pesa always has its cost recorded: it is part of the spending. 0 means none.
+    if (paysOutOfMpesa(draft) && !charge.trim()) {
+      chargeProblem = "Enter the transaction cost from the M-Pesa message, or 0 if there was none.";
+    } else if (charge.trim() && !/^0+(\.0+)?$/.test(charge.trim()) && movesMoney(draft.kind) && draft.kind !== "charge") {
       const parsed = parseKes(charge);
       if (parsed.ok) chargeMinor = parsed.minor;
       else chargeProblem = parsed.error;
@@ -295,6 +308,11 @@ export function AddTransactionPage() {
 
   const parse = step.parse;
   const showCharge = movesMoney(draft.kind) && draft.kind !== "charge" && draft.kind !== "";
+  const costRequired = paysOutOfMpesa(draft);
+  const toCash = accountList.find((a) => String(a.id) === draft.toAccountId)?.kind === "cash";
+  const how: PaidBy = paidBy ?? (draft.kind === "transfer" && toCash ? "withdraw" : "send");
+  const amount = parseKes(draft.amount);
+  const suggestion = costRequired && amount.ok ? suggestedCost(amount.minor, how) : null;
 
   return (
     <form onSubmit={save} className="mx-auto max-w-2xl space-y-4" noValidate>
@@ -340,16 +358,36 @@ export function AddTransactionPage() {
             idPrefix="add"
             afterAmount={
               showCharge ? (
-                <Field
-                  label="Charge (transaction cost, KES)"
-                  htmlFor="add-charge"
-                  optional
-                  error={chargeError}
-                  uncertain={chargeNote}
-                  hint={charge.trim() ? "Saved as a separate charge line so it is counted once." : "Leave empty if there was no charge."}
-                >
-                  <Input id="add-charge" inputMode="decimal" value={charge} tone={chargeError ? "invalid" : chargeNote ? "uncertain" : "normal"} onChange={(e) => setCharge(e.target.value)} />
-                </Field>
+                <>
+                  <Field
+                    label="Transaction cost (KES)"
+                    htmlFor="add-charge"
+                    optional={!costRequired}
+                    error={chargeError}
+                    uncertain={chargeNote}
+                    hint={
+                      costRequired
+                        ? "Part of the spending: it counts in the totals as money spent. Enter 0 if there was none."
+                        : charge.trim()
+                          ? "Saved as a separate charge line so it is counted once."
+                          : "Leave empty if there was no charge."
+                    }
+                  >
+                    <Input id="add-charge" inputMode="decimal" value={charge} tone={chargeError ? "invalid" : chargeNote ? "uncertain" : "normal"} onChange={(e) => setCharge(e.target.value)} />
+                  </Field>
+                  {costRequired && (
+                    <TariffHelper
+                      paidBy={how}
+                      onPaidBy={setPaidBy}
+                      suggestion={suggestion}
+                      current={charge}
+                      onUse={(minor) => {
+                        setCharge(toInput(minor) || "0");
+                        setChargeError(undefined);
+                      }}
+                    />
+                  )}
+                </>
               ) : null
             }
           />
@@ -453,6 +491,59 @@ export function AddTransactionPage() {
         </Button>
       </div>
     </form>
+  );
+}
+
+const PAID_BY: { value: PaidBy; label: string }[] = [
+  { value: "send", label: "Send Money" },
+  { value: "paybill", label: "Pay Bill" },
+  { value: "till", label: "Buy Goods (till)" },
+  { value: "withdraw", label: "Agent withdrawal" },
+];
+
+/** How the money left M-Pesa, and Safaricom's usual charge for it, one tap to use. */
+function TariffHelper({ paidBy, onPaidBy, suggestion, current, onUse }: { paidBy: PaidBy; onPaidBy: (p: PaidBy) => void; suggestion: number | null; current: string; onUse: (minor: number) => void }) {
+  const entered = parseKes(current);
+  const using = suggestion !== null && (entered.ok ? entered.minor === suggestion : suggestion === 0 && /^0+(\.0+)?$/.test(current.trim()));
+  return (
+    <div className="space-y-2 rounded-xl bg-stone-50 p-3 sm:col-span-2">
+      <p className="text-sm font-medium text-stone-800">How was it paid?</p>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="How was it paid?">
+        {PAID_BY.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            role="radio"
+            aria-checked={paidBy === p.value}
+            onClick={() => onPaidBy(p.value)}
+            className={
+              paidBy === p.value
+                ? "min-h-9 cursor-pointer rounded-full bg-plum-700 px-3 text-sm font-medium text-white"
+                : "min-h-9 cursor-pointer rounded-full bg-white px-3 text-sm text-stone-700 ring-1 ring-stone-300 hover:bg-stone-100"
+            }
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      {suggestion !== null ? (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-stone-700">
+          <span>
+            Usual M-Pesa charge: <strong>{suggestion === 0 ? "none" : formatKesShort(suggestion)}</strong>
+          </span>
+          {!using && (
+            <Button type="button" size="sm" variant="secondary" onClick={() => onUse(suggestion)}>
+              Use {suggestion === 0 ? "0" : formatKesShort(suggestion)}
+            </Button>
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-stone-600">
+          {paidBy === "paybill" ? "Pay Bill charges depend on the business: take the cost from the M-Pesa message." : "Enter the amount first to see the usual charge."}
+        </p>
+      )}
+      <p className="text-xs text-stone-500">Safaricom's tariff as of {TARIFF_DATE}. The M-Pesa message shows the actual cost.</p>
+    </div>
   );
 }
 

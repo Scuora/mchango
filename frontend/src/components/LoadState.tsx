@@ -1,5 +1,6 @@
-import { RotateCw } from "lucide-react";
+import { RefreshCw, RotateCw } from "lucide-react";
 import { errorMessage } from "@/lib/api";
+import { isStaleBuildError } from "@/lib/lazyPages";
 import { Button } from "./ui/button";
 import { Notice } from "./ui/misc";
 
@@ -29,5 +30,16 @@ export function LoadState({ loading, error, onRetry, label }: { loading: boolean
 /** A failed save, shown above a form's buttons. */
 export function SaveError({ error }: { error: unknown }) {
   if (!error) return null;
+  // A file this action needs is gone because the site was updated while the tab was open.
+  if (isStaleBuildError(error)) {
+    return (
+      <Notice tone="warning" title="This page has been updated">
+        <p>A newer version of the site was published while this tab was open. Load it, then try again; anything already saved is safe.</p>
+        <Button variant="secondary" size="sm" className="mt-2" icon={<RefreshCw className="size-4" aria-hidden />} onClick={() => window.location.reload()}>
+          Load the latest version
+        </Button>
+      </Notice>
+    );
+  }
   return <Notice tone="danger">{errorMessage(error)}</Notice>;
 }

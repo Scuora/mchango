@@ -664,7 +664,7 @@ export function TrendsPage() {
           <StatTile
             label={tr("Spent", "Zilizotumika")}
             value={kes(spent)}
-            note={t.charges_minor > 0 ? tr(`incl. ${kes(t.charges_minor)} charges`, `pamoja na gharama ${kes(t.charges_minor)}`) : undefined}
+            note={t.charges_minor > 0 ? tr(`incl. ${kes(t.charges_minor)} transaction costs`, `pamoja na gharama za miamala ${kes(t.charges_minor)}`) : undefined}
           />
           <StatTile label={tr("Remaining", "Iliyobaki")} value={kes(t.remaining_minor)} />
           {goal?.stillNeeded != null ? (

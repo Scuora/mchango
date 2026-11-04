@@ -87,6 +87,12 @@ function closing(options: ShareOptions): string[] {
   return lines;
 }
 
+
+/** Money spent, with the M-Pesa transaction costs counted in it. */
+function spentLine(expensesMinor: number, chargesMinor: number): string {
+  const costs = chargesMinor > 0 ? ` (incl. ${formatKesShort(chargesMinor)} transaction costs)` : "";
+  return `Funeral expenses paid: ${formatKesShort(expensesMinor + chargesMinor)}${costs}`;
+}
 export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, today: Date = new Date()): string {
   const { totals } = page;
   const lines = masthead(page, today);
@@ -109,7 +115,8 @@ export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, tod
   }
 
   if (options.includeSpending) {
-    const spending = page.spending.filter((e) => inRange(e, options.range));
+    // Transaction costs are listed with the spending they belong to (numbered oldest first).
+    const spending = [...page.spending, ...page.charges].filter((e) => inRange(e, options.range));
     lines.push("");
     lines.push(options.range.kind === "all" ? "*Funeral expenses*" : `*Funeral expenses since ${formatNairobiDate(options.range.date)}*`);
     if (spending.length === 0) {
@@ -123,8 +130,7 @@ export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, tod
     lines.push("");
     lines.push("*Totals so far*");
     lines.push(`Received: ${formatKesShort(totals.contributions_minor)} (${totals.contributions_count} contributions)`);
-    lines.push(`Funeral expenses paid: ${formatKesShort(totals.expenses_minor)}`);
-    if (totals.charges_minor > 0) lines.push(`Charges: ${formatKesShort(totals.charges_minor)}`);
+    lines.push(spentLine(totals.expenses_minor, totals.charges_minor));
     const refunds = totals.refunds_paid_minor - totals.refunds_received_minor;
     if (refunds !== 0) lines.push(`Refunds (net): ${formatKesShort(refunds)}`);
     if (totals.opening_funds_minor > 0) lines.push(`Opening funds: ${formatKesShort(totals.opening_funds_minor)}`);
@@ -184,7 +190,7 @@ export function buildAccountsUpdate(page: PublicPage, statements: AccountStateme
     else lines.push(...list(got, showAmounts), showAmounts ? `Received${when}: ${formatKesShort(total(got))} (${plural(got.length)})` : plural(got.length));
 
     if (options.includeSpending) {
-      const spent = s.entries.filter((e) => e.kind === "expense" && listed(e));
+      const spent = s.entries.filter((e) => (e.kind === "expense" || e.kind === "charge") && listed(e));
       lines.push("");
       lines.push(several ? `_Funeral expenses${when}_` : `*Funeral expenses${when}*`);
       if (spent.length === 0) lines.push("No spending in this period.");
@@ -196,8 +202,7 @@ export function buildAccountsUpdate(page: PublicPage, statements: AccountStateme
       lines.push(several ? "_Totals so far_" : "*Totals so far*");
       if (s.brought_forward_minor > 0) lines.push(`Opening funds: ${formatKesShort(s.brought_forward_minor)}`);
       if (since) lines.push(`Received: ${formatKesShort(t.received_minor)} (${plural(t.received_count)})`);
-      lines.push(`Funeral expenses paid: ${formatKesShort(t.expenses_minor)}`);
-      if (t.charges_minor > 0) lines.push(`Charges: ${formatKesShort(t.charges_minor)}`);
+      lines.push(spentLine(t.expenses_minor, t.charges_minor));
       const refunds = t.refunds_paid_minor - t.refunds_received_minor;
       if (refunds !== 0) lines.push(`Refunds (net): ${formatKesShort(refunds)}`);
       if (t.transfers_in_minor > 0) lines.push(`Moved in from other accounts: ${formatKesShort(t.transfers_in_minor)}`);

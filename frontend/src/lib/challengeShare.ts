@@ -115,7 +115,7 @@ export const TEMPLATE_GROUPS: { label: string; fields: [string, string][] }[] = 
       ["all_list", "every contribution, numbered: “1. Edward Chai – KES 1,000”"],
       ["total_received", "all money received"],
       ["total_count", "how many contributions"],
-      ["expenses", "funeral expenses paid"],
+      ["expenses", "funeral expenses paid, M-Pesa transaction costs included"],
       ["funds_remaining", "funds remaining"],
       ["goal", "the fundraiser's target"],
       ["family", "e.g. the family of Karisa Gonzi"],
@@ -202,7 +202,7 @@ function fundraiserValues(page: PublicPage | null): Record<string, string> {
       .join("\n"),
     total_received: bare(t.contributions_minor),
     total_count: String(t.contributions_count),
-    expenses: bare(t.expenses_minor),
+    expenses: bare(t.expenses_minor + (t.charges_minor ?? 0)), // transaction costs count as spending
     funds_remaining: bare(t.remaining_minor),
     goal: maybe(goal?.target),
     family: familyOf(f.memorial_name),

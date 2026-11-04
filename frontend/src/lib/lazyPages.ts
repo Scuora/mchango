@@ -26,6 +26,10 @@ const loaders = {
   ReportsPage: () => import("@/pages/ReportsPage"),
 };
 
+// Loaded inside pages only when used (the statement PDF, the share preview). They are fetched
+// in the background too, or a tab opened before a deploy would find them gone at that moment.
+const features = [() => import("@/features/statementPdf"), () => import("@/features/sharePreview")];
+
 type Name = keyof typeof loaders;
 
 /** The page component exported under `name` by its module, loaded on first use. */
@@ -40,7 +44,7 @@ export function prefetchManagement(): void {
   if (prefetched) return;
   prefetched = true;
   const run = () => {
-    for (const load of Object.values(loaders)) void load().catch(() => undefined);
+    for (const load of [...Object.values(loaders), ...features]) void load().catch(() => undefined);
   };
   if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(run, { timeout: 4000 });
   else setTimeout(run, 1500);

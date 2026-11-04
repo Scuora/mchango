@@ -235,7 +235,7 @@ function Actions({ day, page, lang }: { day: ProgrammeDay; page: PublicPage; lan
   }
 
   return (
-    <div className="no-scrollbar -mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0">
+    <div className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 py-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
       {directions && (
         <Chip href={directions} external primary>
           <Navigation className="size-4" aria-hidden /> {tr("Directions", "Maelekezo")}

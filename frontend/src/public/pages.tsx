@@ -238,10 +238,10 @@ export function ExpensesPage() {
     <>
       <PageHeader title={tr("Expenses", "Matumizi")}>
         {tr(
-          `Every shilling spent, with receipts where they have been published. ${kes(t.expenses_minor)} spent so far`,
-          `Kila shilingi iliyotumika, pamoja na risiti zilipochapishwa. ${kes(t.expenses_minor)} zimetumika hadi sasa`,
+          `Every shilling spent, with receipts where they have been published. ${kes(t.expenses_minor + t.charges_minor)} spent so far`,
+          `Kila shilingi iliyotumika, pamoja na risiti zilipochapishwa. ${kes(t.expenses_minor + t.charges_minor)} zimetumika hadi sasa`,
         )}
-        {t.charges_minor > 0 && tr(`, plus ${kes(t.charges_minor)} in M-Pesa charges`, `, pamoja na ${kes(t.charges_minor)} za gharama za M-Pesa`)}.
+        {t.charges_minor > 0 && tr(`, including ${kes(t.charges_minor)} in M-Pesa transaction costs`, `, zikiwemo ${kes(t.charges_minor)} za gharama za miamala ya M-Pesa`)}.
       </PageHeader>
       <div className="mx-auto max-w-3xl space-y-4 px-4 pt-4 md:px-6">
         <PublicCard>
@@ -254,7 +254,10 @@ export function ExpensesPage() {
         </PublicCard>
         {page.charges.length > 0 && (
           <PublicCard>
-            <CardTitle>{tr("M-Pesa charges", "Gharama za M-Pesa")}</CardTitle>
+            <CardTitle>{tr("M-Pesa transaction costs", "Gharama za miamala ya M-Pesa")}</CardTitle>
+            <p className="-mt-1 mb-2 text-[15px] text-stone-600">
+              {tr("What M-Pesa charged to send the money above. They count as spending.", "Kile M-Pesa ilitoza kutuma pesa zilizo hapo juu. Zinahesabiwa kama matumizi.")}
+            </p>
             <EntryRows entries={page.charges} showTime={false} />
           </PublicCard>
         )}

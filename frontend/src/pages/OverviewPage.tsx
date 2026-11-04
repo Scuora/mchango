@@ -86,7 +86,7 @@ export function OverviewPage() {
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="Contributions received" value={formatKes(totals.contributions_minor)} amount={totals.contributions_minor} note={`${totals.contributions_count} contributions`} />
         <Stat label="Expenses paid" value={formatKes(totals.expenses_minor)} amount={totals.expenses_minor} note={`${totals.expenses_count} payments`} />
-        <Stat label="Charges" value={formatKes(totals.charges_minor)} amount={totals.charges_minor} />
+        <Stat label="Transaction costs" value={formatKes(totals.charges_minor)} amount={totals.charges_minor} />
         <Stat
           label="Refunds"
           value={formatKes(refundsNet)} amount={refundsNet}
