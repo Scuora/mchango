@@ -631,20 +631,20 @@ function ActionBar({ page }: { page: PublicPage }) {
   const { pathname } = useLocation();
   const inProgramme = pathname.startsWith("/programme");
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 flex gap-2.5 border-t border-stone-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-30 flex gap-2 border-t border-stone-200 bg-white/95 px-4 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
       <Link
         to="/programme"
         aria-current={inProgramme ? "page" : undefined}
         className={clsx(
-          "press flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-[16px] font-semibold no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
+          "press flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-[15px] font-semibold no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
           inProgramme ? "bg-[#0f1027] text-white" : "border border-stone-300 bg-white text-stone-900 active:bg-stone-100",
         )}
       >
-        <CalendarDays className="size-5" aria-hidden />
+        <CalendarDays className="size-[18px]" aria-hidden />
         {tr("Programme", "Ratiba")}
       </Link>
       {page.fundraiser.giving && (
-        <BarButton primary onClick={() => navigate("/contribute")} icon={<HandCoins className="size-5" aria-hidden />}>
+        <BarButton primary onClick={() => navigate("/contribute")} icon={<HandCoins className="size-[18px]" aria-hidden />}>
           {tr("Contribute", "Changia")}
         </BarButton>
       )}
@@ -652,7 +652,7 @@ function ActionBar({ page }: { page: PublicPage }) {
         type="button"
         onClick={() => void sharePage(page, lang)}
         aria-label={tr("Share this page", "Shiriki ukurasa huu")}
-        className="press grid size-12 shrink-0 place-items-center rounded-xl border border-stone-300 bg-white text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600 active:bg-stone-100"
+        className="press grid size-11 shrink-0 place-items-center rounded-xl border border-stone-300 bg-white text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600 active:bg-stone-100"
       >
         <Share2 className="size-5" aria-hidden />
       </button>
@@ -666,7 +666,7 @@ function BarButton({ primary, onClick, icon, children }: { primary?: boolean; on
       type="button"
       onClick={onClick}
       className={clsx(
-        "press flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-[16px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
+        "press flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-[15px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
         primary ? "bg-[#2e2338] text-white active:bg-[#1e1625]" : "border border-stone-300 bg-white text-stone-900 active:bg-stone-100",
       )}
     >
