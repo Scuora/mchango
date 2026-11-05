@@ -100,8 +100,10 @@ export const PROGRAMME: readonly ProgrammeDay[] = [
         numeral: { src: `${IMG}/desk.jpg`, size: 1.8667, x: -0.1333, y: -0.2 },
         items: [
           { text: ["Arrival in Bamba", "Kuwasili Bamba"], note: ["Expected between 11:00 a.m. and noon", "Inatarajiwa kati ya saa 11:00 na 12:00"] },
-          { text: ["Procession through Mgandamwani", "Msafara kupitia Mgandamwani"], note: ["30 minutes", "Dakika 30"] },
+          { text: ["Procession to the Old Hospital Building", "Msafara hadi Old Hospital Building"], note: ["30 minutes", "Dakika 30"] },
           { text: ["Procession to Bamba Maternity and Nursing Home", "Msafara hadi Bamba Maternity and Nursing Home"], note: ["30 minutes", "Dakika 30"] },
+          { text: ["Procession through Mgandamwani", "Msafara kupitia Mgandamwani"], note: ["30 minutes", "Dakika 30"] },
+          { text: ["Procession home to Bamba, Kibomu Ni Mvula", "Msafara kuelekea nyumbani, Bamba, Kibomu Ni Mvula"] },
         ],
       },
       {
