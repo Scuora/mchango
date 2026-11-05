@@ -100,7 +100,7 @@ export function ContributePage() {
         )}
       </PageHeader>
       <div className="mx-auto max-w-3xl space-y-4 px-4 pt-4 md:px-6">
-        <PublicCard className="relative overflow-hidden border-ochre-200 shadow-lg">
+        <PublicCard className="relative overflow-hidden">
           <div aria-hidden className="card-glow pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-ochre-200/45 blur-3xl" />
           <div className="relative space-y-3">
             <p className="text-[13px] font-semibold tracking-[0.14em] text-ochre-800 uppercase">
@@ -190,7 +190,7 @@ export function ContributePage() {
         {goal?.stillNeeded ? (
           <Link
             to="/"
-            className="group lift flex items-center justify-between gap-4 rounded-2xl border border-stone-200 bg-white px-5 py-4 text-stone-900 no-underline shadow-sm hover:no-underline"
+            className="group flex items-center justify-between gap-4 rounded-[20px] border border-[rgb(27_25_23/0.09)] bg-white px-5 py-4 text-stone-900 no-underline hover:no-underline"
           >
             <span>
               <span className="block text-[15px] text-stone-600">{tr("Still needed", "Bado kinahitajika")}</span>

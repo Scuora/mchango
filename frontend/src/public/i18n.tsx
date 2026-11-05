@@ -128,10 +128,10 @@ export function LangToggle({ className, dark = true, full = false, compact = fal
             compact ? "min-h-8 px-2.5 text-[12px]" : "min-h-8 px-3",
             lang === value
               ? dark
-                ? "bg-[#e8c27a] text-[#1e1625]"
+                ? "bg-[#f7f3ea] text-[#0b0a09]"
                 : "bg-white text-stone-900 shadow-sm"
               : dark
-                ? "text-[#f6efe4]/75 hover:text-white"
+                ? "text-[#f7f3ea]/75 hover:text-white"
                 : "text-stone-600 hover:text-stone-900",
           )}
         >

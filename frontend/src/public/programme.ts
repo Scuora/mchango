@@ -1,7 +1,7 @@
 // The funeral programme for Friday and Saturday, in English and Kiswahili, with
 // the clock times that let the pages say what is happening now and what is next.
 //
-// Times are Nairobi clock times ("HH:MM"; "24:00" is the end of the day). In
+// Times are Nairobi clock times ("HH:MM"; past "24:00" runs into the next day). In
 // Kiswahili the time is written as the clock shows it ("saa 9:00", "saa 14:00"),
 // never in Swahili hours and never beside asubuhi/mchana/jioni, which would turn
 // it into Swahili hours.
@@ -73,7 +73,7 @@ export const PROGRAMME: readonly ProgrammeDay[] = [
     summary: ["Procession and night vigil", "Msafara na mkesha"],
     begins: ["6:00 a.m.", "saa 6:00"],
     poster: `${IMG}/friday-programme.jpg`,
-    cover: `${IMG}/road.jpg`,
+    cover: `${IMG}/friday.jpg`,
     parts: [
       {
         start: "06:00",
@@ -106,7 +106,8 @@ export const PROGRAMME: readonly ProgrammeDay[] = [
       },
       {
         start: "16:00",
-        end: "24:00",
+        // The night vigil runs through to Saturday morning.
+        end: "30:00",
         label: ["Afternoon & Evening", ""],
         title: ["At the Family Home", "Nyumbani kwa Familia"],
         time: ["From 4:00 p.m.", "Kuanzia saa 16:00"],
@@ -133,7 +134,7 @@ export const PROGRAMME: readonly ProgrammeDay[] = [
     begins: ["9:00 a.m.", "saa 9:00"],
     venue: ["At his homestead, Kibomu Ni Mvula", "Boma la mwendazake, Kibomu Ni Mvula"],
     poster: `${IMG}/saturday-programme.jpg`,
-    cover: `${IMG}/fez.jpg`,
+    cover: `${IMG}/saturday.jpg`,
     parts: [
       { start: "09:00", end: "10:00", title: ["Family, friends and the community gather to receive Daktari", "Familia, marafiki na jamii wanakusanyika kumpokea Daktari"], time: ["9:00 a.m. – 10:00 a.m.", "Saa 9:00 – 10:00"], items: [] },
       { start: "10:00", end: "10:30", title: ["Opening prayer and worship", "Maombi ya ufunguzi na kuabudu"], time: ["10:00 a.m. – 10:30 a.m.", "Saa 10:00 – 10:30"], items: [] },

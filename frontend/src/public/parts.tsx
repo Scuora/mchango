@@ -2,8 +2,8 @@
 // data only, so nothing private can appear.
 
 import { clsx } from "clsx";
-import { ArrowRight, CalendarDays, Check, ChevronDown, Copy, FileText, HandCoins, MapPin, Megaphone, Phone, Share2 } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { ArrowRight, Check, ChevronDown, Copy, FileText, MapPin, Megaphone, Phone, Share2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { formatKesShort } from "@/lib/money";
 import { CountUp } from "@/components/CountUp";
@@ -16,7 +16,7 @@ import { copyText, sharePage } from "./share";
 
 export function PublicCard({ children, className, id }: { children: ReactNode; className?: string; id?: string }) {
   return (
-    <section id={id} data-reveal className={clsx("lift rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6", className)}>
+    <section id={id} data-reveal className={clsx("rounded-[20px] border border-[rgb(27_25_23/0.09)] bg-white p-5 sm:p-6", className)}>
       {children}
     </section>
   );
@@ -33,130 +33,6 @@ export function CardTitle({ children, eyebrow }: { children: ReactNode; eyebrow?
 
 /** Whole shillings where possible: `KES 184,500`. */
 export const kes = formatKesShort;
-
-const delay = (ms: number) => ({ "--d": `${ms}ms` }) as CSSProperties;
-
-/** The circular, candle-lit portrait. */
-export function MemorialPortrait({ src, alt, large }: { src: string; alt: string; large?: boolean }) {
-  return (
-    <div className={clsx("memorial-frame", large && "memorial-frame--lg")}>
-      <div className="memorial-glow" aria-hidden />
-      <div className="memorial-photo">
-        <img src={src} alt={alt} />
-        <span className="memorial-light" aria-hidden />
-      </div>
-      <div className="memorial-candle" aria-hidden>
-        <span className="flame" />
-        <span className="wax" />
-      </div>
-    </div>
-  );
-}
-
-// Embers rising from the candle: fixed positions, so every visit looks the same.
-const EMBERS = [
-  { x: 46, s: 4, t: 6.2, delay: 0, drift: -14 },
-  { x: 52, s: 3, t: 7.4, delay: 1.1, drift: 18 },
-  { x: 49, s: 5, t: 5.6, delay: 2.3, drift: 6 },
-  { x: 55, s: 3, t: 8.1, delay: 0.6, drift: 26 },
-  { x: 43, s: 4, t: 6.9, delay: 3.2, drift: -24 },
-  { x: 50, s: 2, t: 7.7, delay: 4.1, drift: -4 },
-  { x: 58, s: 3, t: 6.4, delay: 2.8, drift: 30 },
-  { x: 40, s: 2, t: 7.2, delay: 1.7, drift: -30 },
-  { x: 51, s: 4, t: 5.9, delay: 5.0, drift: 12 },
-  { x: 47, s: 3, t: 8.4, delay: 3.8, drift: -10 },
-];
-
-function Embers() {
-  return (
-    <div className="embers" aria-hidden>
-      {EMBERS.map((e, i) => (
-        <span
-          key={i}
-          style={{ "--x": `${e.x}%`, "--s": `${e.s}px`, "--t": `${e.t}s`, "--delay": `${e.delay}s`, "--drift": `${e.drift}px` } as CSSProperties}
-        />
-      ))}
-    </div>
-  );
-}
-
-/** The portrait drifts a little slower than the page as you scroll. */
-function useParallax<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    let frame = 0;
-    const onScroll = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        if (ref.current) ref.current.style.translate = `0 ${Math.min(window.scrollY * 0.18, 80)}px`;
-      });
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", onScroll);
-    };
-  }, []);
-  return ref;
-}
-
-/** The memorial header: compact, portrait beside the name on larger screens. */
-export function Hero({ page }: { page: PublicPage }) {
-  const tr = useTr();
-  const lang = useLang();
-  const f = page.fundraiser;
-  const name = f.memorial_name ?? f.name;
-  const portrait = useParallax<HTMLDivElement>();
-  return (
-    <header className="hero-breathe bg-[radial-gradient(120%_100%_at_50%_20%,#3b2c47_0%,#241a2d_55%,#140f18_100%)] -mt-14 px-4 pt-[5.5rem] pb-20 text-[#f6efe4] md:-mt-16 md:pt-[6.5rem] md:pb-16">
-      <div className="mx-auto flex max-w-4xl flex-col items-center gap-x-12 gap-y-14 text-center md:flex-row md:justify-center md:text-left">
-        {f.photo_url && (
-          <div ref={portrait} className="hero-portrait relative">
-            <MemorialPortrait src={f.photo_url} alt={tr(`Portrait of ${name}`, `Picha ya ${name}`)} large />
-            <Embers />
-          </div>
-        )}
-        <div className="space-y-1.5 md:pb-6">
-          {f.memorial_name && (
-            <p className="hero-line text-[13px] font-semibold tracking-[0.28em] text-[#f6efe4]/75 uppercase" style={delay(150)}>
-              {tr("In loving memory of", "Kwa kumbukumbu ya")}
-            </p>
-          )}
-          <h1 className="hero-line font-display text-[2.4rem] leading-[1.08] font-semibold md:text-[3.2rem]" style={delay(300)}>
-            {name}
-          </h1>
-          {f.memorial_dates && (
-            <p className="hero-line font-display text-xl text-[#f6efe4]/85 md:text-2xl" style={delay(450)}>
-              {localiseDates(f.memorial_dates, lang)}
-            </p>
-          )}
-          {f.memorial_tribute && (
-            <p className="hero-line pt-1 font-display text-xl italic md:text-2xl" style={delay(650)}>
-              <span className="gold-sheen">{f.memorial_tribute}</span>
-            </p>
-          )}
-          <div className="hero-line flex flex-wrap justify-center gap-3 pt-6 md:justify-start" style={delay(850)}>
-            {f.giving && (
-              <Link
-                to="/contribute"
-                className="press glow-pulse inline-flex min-h-12 items-center gap-2 rounded-full bg-[#e8c27a] px-6 text-[17px] font-semibold text-[#1e1625] no-underline shadow-[0_10px_30px_-10px_rgb(232_194_122/0.8)] hover:bg-[#f0cf8e] hover:no-underline"
-              >
-                <HandCoins className="size-5" aria-hidden /> {tr("How do I contribute?", "Nitachangiaje?")}
-              </Link>
-            )}
-            <Link
-              to="/programme"
-              className="press inline-flex min-h-12 items-center gap-2 rounded-full px-6 text-[17px] font-semibold text-[#f6efe4] no-underline ring-1 ring-[#e8c27a]/60 hover:bg-white/10 hover:text-white hover:no-underline"
-            >
-              <CalendarDays className="size-5 text-[#e8c27a]" aria-hidden /> {tr("Funeral programme", "Ratiba ya mazishi")}
-            </Link>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
-}
 
 /** `display` is shown (e.g. 0711 672 840); `value` is what is copied (0711672840). */
 export function CopyRow({ label, value, display }: { label: string; value: string; display?: string }) {
@@ -207,7 +83,7 @@ export function GiveCard({ page }: { page: PublicPage }) {
         ? [open, tr("Choose Lipa na M-PESA, then Buy Goods and Services.", "Chagua Lipa na M-PESA, kisha Buy Goods and Services."), tr(`Enter till number ${g.number}.`, `Weka namba ya till ${g.number}.`), amount]
         : [open, tr("Choose Send Money.", "Chagua Tuma Pesa."), tr(`Enter the number ${g.number}.`, `Weka namba ${g.number}.`), amount];
   return (
-    <PublicCard id="give" className="scroll-mt-16 shadow-lg">
+    <PublicCard id="give" className="scroll-mt-16">
       <CardTitle>{tr("Contribute through M-Pesa", "Changia kupitia M-Pesa")}</CardTitle>
       {page.fundraiser.description && (
         <p className="-mt-1 mb-4 text-[15px] leading-relaxed text-stone-600">{tr(page.fundraiser.description, page.fundraiser.description_sw || page.fundraiser.description)}</p>
@@ -221,7 +97,7 @@ export function GiveCard({ page }: { page: PublicPage }) {
         <strong className="font-semibold">{g.name}</strong>
       </p>
       <details className="group mt-3">
-        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-center gap-2 rounded-xl border border-stone-300 px-4 text-[16px] font-semibold text-stone-900 hover:bg-stone-50 [&::-webkit-details-marker]:hidden">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-center gap-2 rounded-full border border-stone-300 px-4 text-[16px] font-semibold text-stone-900 hover:bg-stone-50 [&::-webkit-details-marker]:hidden">
           {tr("How to send, step by step", "Jinsi ya kutuma, hatua kwa hatua")}
           <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden />
         </summary>
@@ -289,7 +165,7 @@ export function FuneralCard({ page }: { page: PublicPage }) {
           href={map}
           target="_blank"
           rel="noreferrer"
-          className="mt-3 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-stone-300 text-[16px] font-semibold text-stone-900 no-underline hover:bg-stone-50 hover:no-underline"
+          className="mt-3 flex min-h-12 items-center justify-center gap-2 rounded-full border border-stone-300 text-[16px] font-semibold text-stone-900 no-underline hover:bg-stone-50 hover:no-underline"
         >
           <MapPin className="size-4" aria-hidden /> {tr("Open in Maps", "Fungua kwenye ramani")}
         </a>
@@ -306,7 +182,7 @@ export function LatestUpdate({ page }: { page: PublicPage }) {
   const title = tr(latest.title, latest.title_sw || latest.title);
   const body = tr(latest.body, latest.body_sw || latest.body);
   return (
-    <PublicCard className={clsx("border-ochre-200 bg-[#fffaf0]", latest.pinned && "glow-pulse")}>
+    <PublicCard>
       <p className="mb-1 flex items-center gap-2 text-[13px] font-semibold tracking-[0.14em] text-ochre-800 uppercase">
         <Megaphone className="size-4" aria-hidden />
         {latest.pinned ? tr("Important", "Muhimu") : tr("Latest update", "Taarifa mpya")} · {formatShortDate(latest.published_at)}
@@ -565,7 +441,7 @@ export function LedgerCard({ page }: { page: PublicPage }) {
       {list.length > shown.length && (
         <Link
           to={tab === "in" ? "/contributions" : "/expenses"}
-          className="mt-1 mb-2 flex min-h-12 items-center justify-center rounded-xl border border-stone-300 text-[16px] font-semibold text-stone-900 no-underline hover:bg-stone-50 hover:no-underline"
+          className="mt-1 mb-2 flex min-h-12 items-center justify-center rounded-full border border-stone-300 text-[16px] font-semibold text-stone-900 no-underline hover:bg-stone-50 hover:no-underline"
         >
           {tr(`See all ${list.length}`, `Tazama zote ${list.length}`)}
         </Link>
@@ -609,7 +485,7 @@ export function ShareButton({ page, className, label }: { page: PublicPage; clas
       type="button"
       onClick={() => void sharePage(page, lang)}
       className={clsx(
-        "press flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2e2338] px-4 text-[16px] font-semibold text-white hover:bg-[#1e1625] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
+        "press flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#0b0a09] px-4 text-[16px] font-semibold text-white hover:bg-[#2a2724] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
         className,
       )}
     >

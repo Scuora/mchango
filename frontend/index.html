@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#241a2d" />
+    <meta name="theme-color" content="#0b0a09" />
     <!-- The memorial theme is designed light; "only light" stops phones in dark mode from inverting it. -->
     <meta name="color-scheme" content="only light" />
     <meta name="referrer" content="same-origin" />
@@ -12,16 +12,18 @@
     <style>
       /* Opening screen, shown instantly while the app loads (no script needed). */
       .boot{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;
-        background:radial-gradient(120% 90% at 50% 36%,#3b2c47 0%,#241a2d 48%,#140f18 100%);color:#f6efe4;text-align:center;
+        background:radial-gradient(120% 90% at 50% 36%,#1f1c19 0%,#0b0a09 58%);color:#f7f3ea;text-align:center;
         transition:opacity .9s ease,visibility .9s;cursor:default}
       .boot.is-leaving{opacity:0;visibility:hidden}
       .boot-stage{position:relative;width:min(54vw,212px);aspect-ratio:1;animation:boot-rise 1.4s ease-out both}
       .boot-halo{position:absolute;inset:-50%;border-radius:50%;
         background:radial-gradient(circle at 50% 54%,rgba(255,200,115,.5) 0%,rgba(244,156,72,.2) 36%,rgba(244,156,72,0) 68%);
         animation:boot-glow 3.1s ease-in-out infinite}
-      .boot-portrait{position:absolute;inset:0;border-radius:50%;
-        background:#2e2338 url(/api/public/memorial-photo) 55% 45%/cover no-repeat;
+      .boot-portrait{position:absolute;inset:0;border-radius:50%;background:#1b1917;
         animation:boot-rim 2.6s ease-in-out infinite}
+      /* His photograph in black and white, as on the page; the candle light stays warm. */
+      .boot-portrait::before{content:"";position:absolute;inset:0;border-radius:inherit;
+        background:url(/api/public/memorial-photo) 55% 45%/cover no-repeat;filter:grayscale(1) contrast(1.05)}
       .boot-light{position:absolute;inset:0;border-radius:inherit;
         background:radial-gradient(ellipse at 50% 115%,rgba(255,176,88,.5),rgba(255,176,88,.14) 45%,rgba(255,176,88,0) 68%);
         mix-blend-mode:screen;animation:boot-light 1.9s ease-in-out infinite}
@@ -33,17 +35,17 @@
         background:radial-gradient(ellipse at 50% 76%,#fffbe8 0%,#ffd56b 34%,#f39a3d 70%,rgba(243,154,61,0) 100%);
         box-shadow:0 0 14px 4px rgba(255,190,90,.5);transform-origin:50% 92%;animation:boot-flame 1.7s ease-in-out infinite}
       .boot-overline{margin:24px 0 0;font:600 12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.28em;
-        text-transform:uppercase;color:rgba(246,239,228,.72);animation:boot-fade 1.6s .45s ease-out both}
-      .boot-name{margin:10px 0 0;max-width:20ch;font:600 clamp(28px,7vw,42px)/1.15 "Cormorant Garamond",Georgia,serif;
+        text-transform:uppercase;color:rgba(247,243,234,.72);animation:boot-fade 1.6s .45s ease-out both}
+      .boot-name{margin:10px 0 0;max-width:20ch;font:500 clamp(28px,7vw,42px)/1.15 "Cormorant Garamond",Georgia,serif;
         opacity:0;transform:translateY(6px);transition:opacity .9s ease,transform .9s ease}
-      .boot-dates{margin:6px 0 0;font:400 20px/1.3 "Cormorant Garamond",Georgia,serif;color:rgba(246,239,228,.8);
+      .boot-dates{margin:6px 0 0;font:500 20px/1.3 "Cormorant Garamond",Georgia,serif;color:#cfc8bc;
         opacity:0;transition:opacity .9s .2s ease}
-      .boot-tribute{margin:10px 0 0;max-width:28ch;font:italic 400 19px/1.35 "Cormorant Garamond",Georgia,serif;color:rgba(255,208,134,.9);
+      .boot-tribute{margin:10px 0 0;max-width:28ch;font:italic 500 19px/1.35 "Cormorant Garamond",Georgia,serif;color:#e6bd72;
         opacity:0;transition:opacity 1s .45s ease}
       .boot-tribute:empty{display:none}
       .boot.has-name .boot-name,.boot.has-name .boot-dates,.boot.has-name .boot-tribute{opacity:1;transform:none}
       .boot-hint{position:absolute;bottom:max(20px,env(safe-area-inset-bottom));font:13px system-ui,sans-serif;
-        color:rgba(246,239,228,.45);animation:boot-fade 1s 2.4s both}
+        color:rgba(247,243,234,.45);animation:boot-fade 1s 2.4s both}
       .boot-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
       @keyframes boot-rim{
         0%,100%{border-radius:50%;box-shadow:0 0 0 1.5px rgba(255,214,150,.8),0 0 22px 5px rgba(255,180,90,.55),0 0 60px 16px rgba(240,150,70,.22),0 22px 50px rgba(0,0,0,.5)}

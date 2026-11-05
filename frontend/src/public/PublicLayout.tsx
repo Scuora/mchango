@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { CalendarDays, ChevronDown, ChevronRight, Flame, Flower2, HandCoins, House, ListOrdered, Megaphone, Menu, Navigation, Receipt, SearchCheck, Share2, TrendingUp, Trophy, X, type LucideIcon } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronRight, Flower2, HandCoins, House, ListOrdered, Megaphone, Menu, Navigation, Receipt, SearchCheck, Share2, TrendingUp, Trophy, X, type LucideIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from "react-router";
 import { LoadState } from "@/components/LoadState";
@@ -10,6 +10,7 @@ import { useReveal } from "@/lib/reveal";
 import { coordinatesIn, directionsLink } from "@/lib/maps";
 import { formatNairobi } from "@/lib/time";
 import type { PublicPage } from "@/lib/types";
+import { DayPreview } from "./dayPreview";
 import { LangProvider, LangToggle, useLang, useTr } from "./i18n";
 import { PROGRAMME, dayStatus } from "./programme";
 import { DayBadge, TodayPill, isToday, pick, useNow } from "./programmeParts";
@@ -40,45 +41,6 @@ function directionsTo(page: PublicPage): string | null {
   const { map_url } = page.fundraiser.funeral;
   const coords = coordinatesIn(map_url);
   return coords ? directionsLink(coords) : map_url;
-}
-
-/**
- * The pinned announcement (such as the burial date) across the top of every
- * page, on every visit. It can be hidden, but only until the next visit.
- */
-function Ribbon({ page }: { page: PublicPage }) {
-  const tr = useTr();
-  const pinned = page.announcements.find((a) => a.pinned);
-  const [hidden, setHidden] = useState(false);
-  if (!pinned || hidden) return null;
-  const { place, map_url } = page.fundraiser.funeral;
-  const to = `/updates/${pinned.id}`;
-  return (
-    <div role="region" aria-label={tr("Important announcement", "Tangazo muhimu")} className="ribbon-in relative overflow-hidden bg-plum-950 text-[#f6efe4]">
-      <div aria-hidden className="ribbon-sheen pointer-events-none absolute inset-0" />
-      <div className="relative mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5 md:px-6">
-        <Flame className="flicker size-5 shrink-0 text-ochre-300" aria-hidden />
-        <Link to={to} className="min-w-0 flex-1 font-display text-[17px] leading-snug text-[#f6efe4] no-underline hover:text-white hover:no-underline sm:text-[18px]">
-          {tr(pinned.title, pinned.title_sw || pinned.title)}
-        </Link>
-        <Link
-          to={to}
-          className="press inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full bg-ochre-300 px-3.5 text-[14px] font-semibold text-plum-950 no-underline hover:bg-ochre-200 hover:no-underline"
-        >
-          {place || map_url ? tr("Directions", "Maelekezo") : tr("Details", "Maelezo")}
-          <ChevronRight className="size-4" aria-hidden />
-        </Link>
-        <button
-          type="button"
-          aria-label={tr("Hide until your next visit", "Ficha hadi utakaporudi")}
-          onClick={() => setHidden(true)}
-          className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full text-[#f6efe4]/70 hover:bg-white/10 hover:text-white"
-        >
-          <X className="size-4" aria-hidden />
-        </button>
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -158,7 +120,6 @@ function PublicSite() {
 
   return (
     <div className="min-h-dvh overflow-x-clip bg-stone-50 pb-24 text-[17px] text-stone-900 md:pb-0">
-      <Ribbon page={page} />
       {page.is_demo && (
         <p className="bg-ochre-100 px-4 py-1.5 text-center text-[14px] text-ochre-900">
           {tr("Demo: every name and record on this page is fictional.", "Maonyesho: kila jina na rekodi kwenye ukurasa huu ni ya kubuni.")}
@@ -180,13 +141,14 @@ function PublicSite() {
         )}
       </footer>
       <ActionBar page={page} />
+      <DayPreview />
     </div>
   );
 }
 
 /**
  * The site navigation: transparent over the memorial and programme headers,
- * frosted plum glass once you scroll. Desktop shows four entries in a capsule
+ * translucent warm black once you scroll. Desktop shows four entries in a capsule
  * with a sliding highlight, two of them opening menus; phones get a menu sheet
  * that opens on the two programme days.
  */
@@ -245,22 +207,22 @@ function PublicNav({ page }: { page: PublicPage }) {
   return (
     <header
       className={clsx(
-        "sticky top-0 z-40 text-[#f6efe4] transition-[background-color,box-shadow] duration-300",
-        overHero ? "bg-transparent" : "bg-[#1e1625]/85 shadow-[0_10px_30px_-14px_rgb(0_0_0/0.55)] backdrop-blur-xl",
+        "sticky top-0 z-40 text-[#f7f3ea] transition-[background-color] duration-300",
+        overHero ? "bg-transparent" : open ? "bg-[#0b0a09]" : "bg-[rgb(11_10_9/0.86)] backdrop-blur-[18px] backdrop-saturate-[1.6]",
       )}
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 md:h-16 md:px-6">
-        <Link to="/" className="flex min-w-0 items-center gap-2.5 rounded-full py-1 pr-2 text-[#f6efe4] no-underline hover:no-underline">
+        <Link to="/" className="flex min-w-0 items-center gap-2.5 rounded-full py-1 pr-2 text-[#f7f3ea] no-underline hover:no-underline">
           {f.photo_url ? (
-            <img src={f.photo_url} alt="" className="size-8 shrink-0 rounded-full object-cover ring-1 ring-[#ffd086]/70 md:size-9" />
+            <img src={f.photo_url} alt="" className="size-8 shrink-0 rounded-full object-cover ring-1 ring-[#e6bd72]/70 md:size-9" />
           ) : (
-            <Flower2 className="size-6 shrink-0 text-[#ffd086]" strokeWidth={1.4} aria-hidden />
+            <Flower2 className="size-6 shrink-0 text-[#e6bd72]" strokeWidth={1.4} aria-hidden />
           )}
           <span className="truncate font-display text-lg leading-none md:text-xl">{name}</span>
         </Link>
 
         <nav aria-label={tr("Fundraiser pages", "Kurasa za mchango")} className="ml-auto hidden md:block">
-          <div ref={capsule} className="relative flex items-center rounded-full bg-white/[0.07] p-1 ring-1 ring-white/10">
+          <div ref={capsule} className="relative flex items-center rounded-full p-1">
             {indicator && (
               <span
                 aria-hidden
@@ -292,7 +254,7 @@ function PublicNav({ page }: { page: PublicPage }) {
           <button
             type="button"
             onClick={() => void sharePage(page, lang)}
-            className="press flex size-10 items-center justify-center rounded-full text-[#f6efe4]/85 ring-1 ring-white/15 hover:bg-white/10 hover:text-white"
+            className="press flex size-10 items-center justify-center rounded-full text-[#f7f3ea]/85 ring-1 ring-white/15 hover:bg-white/10 hover:text-white"
             aria-label={tr("Share this page", "Shiriki ukurasa huu")}
             title={tr("Share", "Shiriki")}
           >
@@ -302,7 +264,7 @@ function PublicNav({ page }: { page: PublicPage }) {
             <button
               type="button"
               onClick={contribute}
-              className="press flex h-10 items-center gap-2 rounded-full bg-[#e8c27a] px-4 text-[15px] font-semibold text-[#1e1625] shadow-[0_6px_20px_-8px_rgb(232_194_122/0.8)] hover:bg-[#f0cf8e]"
+              className="press flex h-10 items-center gap-2 rounded-full bg-[#f7f3ea] px-4 text-[15px] font-semibold text-[#0b0a09] hover:bg-white"
             >
               <HandCoins className="size-4" aria-hidden />
               {tr("Contribute", "Changia")}
@@ -346,12 +308,12 @@ function PublicNav({ page }: { page: PublicPage }) {
                     className={({ isActive }) =>
                       clsx(
                         "press flex min-h-[4.25rem] flex-col justify-between gap-1.5 rounded-xl p-3 text-[15px] leading-tight font-semibold no-underline hover:no-underline",
-                        isActive ? "bg-white/[0.14] text-white ring-1 ring-[#e8c27a]/50" : "bg-white/[0.06] text-[#f6efe4]/90 ring-1 ring-white/10 active:bg-white/10",
+                        isActive ? "bg-white/[0.14] text-white ring-1 ring-[#e6bd72]/50" : "bg-white/[0.06] text-[#f7f3ea]/90 ring-1 ring-white/10 active:bg-white/10",
                         link.to === "/check" && money.length % 2 === 1 && "col-span-2",
                       )
                     }
                   >
-                    <Icon className="size-5 text-[#e8c27a]" aria-hidden />
+                    <Icon className="size-5 text-[#e6bd72]" aria-hidden />
                     {tr(link.label[0], link.label[1])}
                   </NavLink>
                 );
@@ -364,7 +326,7 @@ function PublicNav({ page }: { page: PublicPage }) {
               <button
                 type="button"
                 onClick={contribute}
-                className="press flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#e8c27a] font-semibold text-[#1e1625]"
+                className="press flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#f7f3ea] font-semibold text-[#0b0a09]"
               >
                 <HandCoins className="size-5" aria-hidden /> {tr("Contribute", "Changia")}
               </button>
@@ -373,7 +335,7 @@ function PublicNav({ page }: { page: PublicPage }) {
               type="button"
               onClick={() => void sharePage(page, lang)}
               className={clsx(
-                "press flex min-h-12 items-center justify-center gap-2 rounded-xl font-semibold text-white ring-1 ring-white/20",
+                "press flex min-h-12 items-center justify-center gap-2 rounded-full font-semibold text-white ring-1 ring-white/20",
                 !f.giving && "col-span-2",
               )}
             >
@@ -381,7 +343,7 @@ function PublicNav({ page }: { page: PublicPage }) {
             </button>
           </div>
           <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/10 pt-4">
-            <span className="text-[15px] text-[#f6efe4]/75">{tr("Language", "Lugha")}</span>
+            <span className="text-[15px] text-[#f7f3ea]/75">{tr("Language", "Lugha")}</span>
             <LangToggle full />
           </div>
         </div>
@@ -393,8 +355,8 @@ function PublicNav({ page }: { page: PublicPage }) {
 const capsuleLink = (active: boolean) =>
   clsx(
     "relative z-10 inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[15px] whitespace-nowrap no-underline transition-colors hover:no-underline lg:px-4",
-    "focus-visible:outline-2 focus-visible:outline-[#ffd086]",
-    active ? "text-white" : "text-[#f6efe4]/75 hover:text-white",
+    "focus-visible:outline-2 focus-visible:outline-[#e6bd72]",
+    active ? "text-white" : "text-[#f7f3ea]/75 hover:text-white",
   );
 
 /**
@@ -465,7 +427,7 @@ function NavMenu({ id, label, active, width, children }: { id: string; label: st
         <div
           id={id}
           className={clsx(
-            "menu-in absolute top-full left-1/2 mt-3 -translate-x-1/2 rounded-2xl bg-[#1e1625] p-2 text-left shadow-[0_28px_60px_-24px_rgb(0_0_0/0.75)] ring-1 ring-white/10 backdrop-blur-xl",
+            "menu-in absolute top-full left-1/2 mt-3 -translate-x-1/2 rounded-2xl bg-[#141210] p-2 text-left shadow-[0_28px_60px_-24px_rgb(0_0_0/0.75)] ring-1 ring-white/10 backdrop-blur-xl",
             width,
           )}
         >
@@ -482,17 +444,17 @@ function MenuLink({ to, icon: Icon, label, hint }: { to: string; icon: LucideIco
       to={to}
       className={({ isActive }) =>
         clsx(
-          "group flex items-center gap-3 rounded-xl px-3 py-2.5 no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-[#ffd086]",
+          "group flex items-center gap-3 rounded-xl px-3 py-2.5 no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-[#e6bd72]",
           isActive ? "bg-white/[0.1]" : "hover:bg-white/[0.06]",
         )
       }
     >
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/[0.07] text-[#e8c27a] ring-1 ring-white/10">
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/[0.07] text-[#e6bd72] ring-1 ring-white/10">
         <Icon className="size-[18px]" aria-hidden />
       </span>
       <span className="min-w-0">
         <span className="block text-[15px] leading-tight font-semibold text-white">{label}</span>
-        <span className="mt-0.5 block text-[13.5px] leading-snug text-[#f6efe4]/60 group-hover:text-[#f6efe4]/75">{hint}</span>
+        <span className="mt-0.5 block text-[13.5px] leading-snug text-[#f7f3ea]/60 group-hover:text-[#f7f3ea]/75">{hint}</span>
       </span>
     </NavLink>
   );
@@ -506,7 +468,7 @@ function ProgrammeMenu({ page }: { page: PublicPage }) {
   const directions = directionsTo(page);
   return (
     <div>
-      <p className="px-3 pt-2 pb-1.5 text-[11.5px] font-semibold tracking-[0.26em] text-[#e2c88f] uppercase">{tr("Funeral programme", "Ratiba ya mazishi")}</p>
+      <p className="px-3 pt-2 pb-1.5 text-[11.5px] font-semibold tracking-[0.26em] text-[#e6bd72] uppercase">{tr("Funeral programme", "Ratiba ya mazishi")}</p>
       <div className="space-y-0.5">
         {PROGRAMME.map((day) => {
           const status = dayStatus(day, now);
@@ -516,7 +478,7 @@ function ProgrammeMenu({ page }: { page: PublicPage }) {
               to={`/programme/${day.id}`}
               className={({ isActive }) =>
                 clsx(
-                  "flex items-center gap-3 rounded-xl px-2.5 py-2.5 no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-[#ffd086]",
+                  "flex items-center gap-3 rounded-xl px-2.5 py-2.5 no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-[#e6bd72]",
                   isActive ? "bg-white/[0.1]" : "hover:bg-white/[0.06]",
                 )
               }
@@ -527,7 +489,7 @@ function ProgrammeMenu({ page }: { page: PublicPage }) {
                   {pick(day.weekday, lang)}, {pick(day.dateLong, lang).replace(/ \d{4}$/, "")}
                   {isToday(day, now) && status.kind !== "ended" && <TodayPill live={status.kind === "now"} />}
                 </span>
-                <span className="mt-0.5 block text-[13.5px] leading-snug text-[#f6efe4]/65">{pick(day.title, lang)}</span>
+                <span className="mt-0.5 block text-[13.5px] leading-snug text-[#f7f3ea]/65">{pick(day.title, lang)}</span>
               </span>
             </NavLink>
           );
@@ -538,9 +500,9 @@ function ProgrammeMenu({ page }: { page: PublicPage }) {
           href={directions}
           target="_blank"
           rel="noreferrer"
-          className="mt-1 flex items-center gap-3 rounded-xl border-t border-white/10 px-3 pt-3 pb-2.5 text-[14px] font-semibold text-[#f6efe4]/85 no-underline hover:bg-white/[0.06] hover:text-white hover:no-underline"
+          className="mt-1 flex items-center gap-3 rounded-xl border-t border-white/10 px-3 pt-3 pb-2.5 text-[14px] font-semibold text-[#f7f3ea]/85 no-underline hover:bg-white/[0.06] hover:text-white hover:no-underline"
         >
-          <Navigation className="size-4 text-[#e2c88f]" aria-hidden />
+          <Navigation className="size-4 text-[#e6bd72]" aria-hidden />
           {tr(`Directions to ${page.fundraiser.funeral.place}`, `Maelekezo ya kufika ${page.fundraiser.funeral.place}`)}
         </a>
       )}
@@ -549,7 +511,7 @@ function ProgrammeMenu({ page }: { page: PublicPage }) {
 }
 
 function SheetHeading({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={clsx("px-1 text-[12px] font-semibold tracking-[0.24em] text-[#e8c27a] uppercase", className)}>{children}</p>;
+  return <p className={clsx("px-1 text-[12px] font-semibold tracking-[0.24em] text-[#e6bd72] uppercase", className)}>{children}</p>;
 }
 
 /** The phone menu opens on the two programme days, side by side. */
@@ -570,19 +532,19 @@ function SheetProgramme({ page }: { page: PublicPage }) {
               className={({ isActive }) =>
                 clsx(
                   "press relative flex min-h-[7.5rem] flex-col justify-between overflow-hidden rounded-2xl p-3 no-underline hover:no-underline",
-                  isActive ? "bg-[#e2c88f] text-[#14152b]" : "bg-white/[0.07] text-white ring-1 ring-white/12",
+                  isActive ? "bg-[#f7f3ea] text-[#0b0a09]" : "bg-white/[0.07] text-white ring-1 ring-white/12",
                 )
               }
             >
               {({ isActive }) => (
                 <>
                   <span className="flex items-start justify-between gap-2">
-                    <DayBadge day={day} lang={lang} dark={!isActive} className={clsx("w-11", isActive && "ring-[#14152b]/20")} />
+                    <DayBadge day={day} lang={lang} dark={!isActive} className={clsx("w-11", isActive && "ring-[#0b0a09]/20")} />
                     {isToday(day, now) && status.kind !== "ended" && <TodayPill live={status.kind === "now"} inverted={isActive} />}
                   </span>
                   <span>
                     <span className="block text-[16px] leading-tight font-bold">{pick(day.weekday, lang)}</span>
-                    <span className={clsx("mt-0.5 block text-[13px] leading-snug", isActive ? "text-[#14152b]/75" : "text-white/65")}>{pick(day.summary, lang)}</span>
+                    <span className={clsx("mt-0.5 block text-[13px] leading-snug", isActive ? "text-[#0b0a09]/75" : "text-white/65")}>{pick(day.summary, lang)}</span>
                   </span>
                 </>
               )}
@@ -595,9 +557,9 @@ function SheetProgramme({ page }: { page: PublicPage }) {
           href={directions}
           target="_blank"
           rel="noreferrer"
-          className="press mt-2 flex min-h-12 items-center gap-3 rounded-xl px-3 text-[15px] font-semibold text-[#f6efe4]/90 no-underline ring-1 ring-white/10 hover:no-underline active:bg-white/5"
+          className="press mt-2 flex min-h-12 items-center gap-3 rounded-xl px-3 text-[15px] font-semibold text-[#f7f3ea]/90 no-underline ring-1 ring-white/10 hover:no-underline active:bg-white/5"
         >
-          <Navigation className="size-[18px] text-[#e2c88f]" aria-hidden />
+          <Navigation className="size-[18px] text-[#e6bd72]" aria-hidden />
           <span className="flex-1">{tr(`Directions to ${page.fundraiser.funeral.place}`, `Maelekezo ya kufika ${page.fundraiser.funeral.place}`)}</span>
           <ChevronRight className="size-5 opacity-50" aria-hidden />
         </a>
@@ -614,11 +576,11 @@ function SheetLink({ to, end, icon: Icon, label }: { to: string; end?: boolean; 
       className={({ isActive }) =>
         clsx(
           "flex min-h-13 items-center gap-3 rounded-xl px-3 text-[17px] no-underline hover:no-underline",
-          isActive ? "bg-white/10 font-semibold text-white" : "text-[#f6efe4]/85 active:bg-white/5",
+          isActive ? "bg-white/10 font-semibold text-white" : "text-[#f7f3ea]/85 active:bg-white/5",
         )
       }
     >
-      <Icon className="size-5 text-[#e8c27a]" aria-hidden />
+      <Icon className="size-5 text-[#e6bd72]" aria-hidden />
       <span className="flex-1">{label}</span>
       <ChevronRight className="size-5 opacity-50" aria-hidden />
     </NavLink>
@@ -638,8 +600,8 @@ function ActionBar({ page }: { page: PublicPage }) {
         to="/programme"
         aria-current={inProgramme ? "page" : undefined}
         className={clsx(
-          "press flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-[15px] font-semibold no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
-          inProgramme ? "bg-[#0f1027] text-white" : "border border-stone-300 bg-white text-stone-900 active:bg-stone-100",
+          "press flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full px-3 text-[15px] font-semibold no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
+          inProgramme ? "bg-[#0b0a09] text-white" : "border border-stone-300 bg-white text-stone-900 active:bg-stone-100",
         )}
       >
         <CalendarDays className="size-[18px]" aria-hidden />
@@ -654,7 +616,7 @@ function ActionBar({ page }: { page: PublicPage }) {
         type="button"
         onClick={() => void sharePage(page, lang)}
         aria-label={tr("Share this page", "Shiriki ukurasa huu")}
-        className="press grid size-11 shrink-0 place-items-center rounded-xl border border-stone-300 bg-white text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600 active:bg-stone-100"
+        className="press grid size-12 shrink-0 place-items-center rounded-full border border-stone-300 bg-white text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600 active:bg-stone-100"
       >
         <Share2 className="size-5" aria-hidden />
       </button>
@@ -668,8 +630,8 @@ function BarButton({ primary, onClick, icon, children }: { primary?: boolean; on
       type="button"
       onClick={onClick}
       className={clsx(
-        "press flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-[15px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
-        primary ? "bg-[#2e2338] text-white active:bg-[#1e1625]" : "border border-stone-300 bg-white text-stone-900 active:bg-stone-100",
+        "press flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full px-3 text-[15px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600",
+        primary ? "bg-[#0b0a09] text-white active:bg-[#2a2724]" : "border border-stone-300 bg-white text-stone-900 active:bg-stone-100",
       )}
     >
       {icon}

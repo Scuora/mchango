@@ -2,10 +2,10 @@
 
 /*
  * A calm, dignified palette for a funeral fundraiser: warm ivory and stone
- * neutrals, deep muted plum for actions, and softened status colours that
+ * neutrals, warm near-black for actions, and softened status colours that
  * still meet WCAG AA contrast. Nothing bright or celebratory.
  *
- *   plum   primary actions, links, focus
+ *   plum   primary actions, links, focus (warm near-black; the name is historical)
  *   stone  text, borders, surfaces (warm greys; stone-50 is the ivory page)
  *   sage   money in, matched, success
  *   brick  money out, errors, removals
@@ -17,21 +17,23 @@
   --font-display: "Cormorant Garamond", Georgia, "Times New Roman", serif;
   --spacing-13: 3.25rem;
 
-  --color-plum-50: #f7f4f9;
-  --color-plum-100: #efe9f3;
-  --color-plum-200: #ddd1e5;
-  --color-plum-300: #c4b1d1;
-  --color-plum-400: #a48bb6;
-  --color-plum-500: #84699a;
-  --color-plum-600: #6a5180;
-  --color-plum-700: #4b3a5a;
-  --color-plum-800: #3c2e49;
-  --color-plum-900: #2e2338;
-  --color-plum-950: #1e1625;
+  /* "plum" is the action colour; it is now warm near-black, after the memorial
+     redesign (black-and-white photography, ivory and one candle gold). */
+  --color-plum-50: #f5f3ef;
+  --color-plum-100: #ebe8e2;
+  --color-plum-200: #d8d4cc;
+  --color-plum-300: #b9b3a9;
+  --color-plum-400: #9a948a;
+  --color-plum-500: #7b766d;
+  --color-plum-600: #5d5850;
+  --color-plum-700: #3f3b36;
+  --color-plum-800: #2a2724;
+  --color-plum-900: #1b1917;
+  --color-plum-950: #0b0a09;
 
-  --color-stone-50: #faf8f5;
+  --color-stone-50: #f6f4f0;
   --color-stone-100: #f3efea;
-  --color-stone-200: #e7e2dc;
+  --color-stone-200: #e6e2db;
   --color-stone-300: #d6cfc6;
   --color-stone-400: #a39b92;
   --color-stone-500: #6f685f;
@@ -65,9 +67,9 @@
   --color-brick-900: #5a2727;
   --color-brick-950: #321212;
 
-  --color-ochre-50: #fbf6ea;
-  --color-ochre-100: #f6ebcd;
-  --color-ochre-200: #ecd69e;
+  --color-ochre-50: #f8f5ee;
+  --color-ochre-100: #f0eadc;
+  --color-ochre-200: #e2d8c2;
   --color-ochre-300: #e0bc69;
   --color-ochre-400: #d3a142;
   --color-ochre-500: #b8862a;
@@ -80,9 +82,9 @@
   /* Chart and funds-bar colours, validated for colour-vision deficiency and
      contrast (dataviz validator, light surface): */
   --color-data-in: #b8862a; /* money received: candle gold */
-  --color-data-out: #6f4c94; /* money spent: plum */
+  --color-data-out: #3f3b36; /* money spent: warm near-black */
   --color-data-charge: #c0563a; /* charges: brick */
-  --color-data-track: #ece6f1; /* what remains: the unfilled track */
+  --color-data-track: #ebe8e2; /* what remains: the unfilled track */
 }
 
 @layer base {
@@ -134,131 +136,6 @@
   font-variant-numeric: lining-nums;
 }
 
-/* The memorial portrait: a circle lit by a burning candle. The warm glow, the
-   gold rim and the light falling across the photo flicker like a flame, and
-   the circle's outline wavers with it. */
-.memorial-frame {
-  --frame-w: 128px;
-  position: relative;
-  width: var(--frame-w);
-  aspect-ratio: 1;
-  flex-shrink: 0;
-}
-.memorial-frame--lg {
-  --frame-w: clamp(136px, 38vw, 176px);
-}
-.memorial-glow {
-  position: absolute;
-  inset: -48%;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 54%, rgb(255 200 115 / 0.5) 0%, rgb(244 156 72 / 0.2) 36%, transparent 68%);
-  animation: candle-glow 3.1s ease-in-out infinite;
-  pointer-events: none;
-}
-.memorial-photo {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  border-radius: 50%;
-  background: #2e2338;
-  animation: candle-rim 2.6s ease-in-out infinite;
-}
-.memorial-photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 55% 45%;
-}
-/* Candlelight falling across the photo from below. */
-.memorial-light {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at 50% 115%, rgb(255 176 88 / 0.5), rgb(255 176 88 / 0.14) 45%, transparent 68%);
-  mix-blend-mode: screen;
-  animation: candle-light 1.9s ease-in-out infinite;
-  pointer-events: none;
-}
-.memorial-candle {
-  position: absolute;
-  left: 50%;
-  bottom: -42px;
-  width: 11px;
-  height: 32px;
-  transform: translateX(-50%);
-}
-.memorial-candle .wax {
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 20px;
-  border-radius: 3px 3px 2px 2px;
-  background: linear-gradient(90deg, #d9cdbd, #f8f1e6 45%, #c9bdac);
-}
-.memorial-candle .flame {
-  position: absolute;
-  left: 50%;
-  bottom: 19px;
-  width: 9px;
-  height: 16px;
-  margin-left: -4.5px;
-  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
-  background: radial-gradient(ellipse at 50% 76%, #fffbe8 0%, #ffd56b 34%, #f39a3d 70%, transparent 100%);
-  box-shadow: 0 0 14px 5px rgb(255 190 90 / 0.5);
-  transform-origin: 50% 92%;
-  animation: candle-flame 1.7s ease-in-out infinite;
-}
-@keyframes candle-rim {
-  0%, 100% {
-    border-radius: 50%;
-    box-shadow: 0 0 0 1.5px rgb(255 214 150 / 0.8), 0 0 20px 4px rgb(255 180 90 / 0.5), 0 0 56px 14px rgb(240 150 70 / 0.2), 0 22px 50px rgb(0 0 0 / 0.5);
-  }
-  22% {
-    border-radius: 47% 53% 52% 48% / 55% 49% 51% 45%;
-    box-shadow: 0 0 0 1.5px rgb(255 222 160 / 0.95), 0 0 30px 7px rgb(255 186 96 / 0.7), 0 0 76px 20px rgb(244 156 72 / 0.3), 0 22px 50px rgb(0 0 0 / 0.5);
-  }
-  41% {
-    border-radius: 52% 48% 46% 54% / 47% 54% 46% 53%;
-    box-shadow: 0 0 0 1.5px rgb(255 206 140 / 0.7), 0 0 16px 3px rgb(255 176 86 / 0.4), 0 0 44px 10px rgb(240 150 70 / 0.16), 0 22px 50px rgb(0 0 0 / 0.5);
-  }
-  63% {
-    border-radius: 49% 51% 54% 46% / 53% 46% 54% 47%;
-    box-shadow: 0 0 0 1.5px rgb(255 220 156 / 0.9), 0 0 26px 6px rgb(255 184 94 / 0.62), 0 0 68px 18px rgb(244 154 70 / 0.26), 0 22px 50px rgb(0 0 0 / 0.5);
-  }
-  82% {
-    border-radius: 54% 46% 49% 51% / 48% 52% 47% 52%;
-    box-shadow: 0 0 0 1.5px rgb(255 210 146 / 0.78), 0 0 19px 4px rgb(255 178 88 / 0.46), 0 0 52px 12px rgb(240 150 70 / 0.2), 0 22px 50px rgb(0 0 0 / 0.5);
-  }
-}
-@keyframes candle-glow {
-  0%, 100% { opacity: 0.85; transform: scale(1); }
-  20% { opacity: 1; transform: scale(1.04); }
-  38% { opacity: 0.72; transform: scale(0.98); }
-  61% { opacity: 0.96; transform: scale(1.03); }
-  80% { opacity: 0.8; transform: scale(1); }
-}
-@keyframes candle-light {
-  0%, 100% { opacity: 0.8; }
-  25% { opacity: 1; }
-  45% { opacity: 0.62; }
-  70% { opacity: 0.92; }
-}
-@keyframes candle-flame {
-  0%, 100% { transform: rotate(-2deg) scale(1, 1); }
-  25% { transform: rotate(2.5deg) scale(0.95, 1.09); }
-  50% { transform: rotate(-1deg) scale(1.05, 0.94); }
-  75% { transform: rotate(1.5deg) scale(0.98, 1.06); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .memorial-glow,
-  .memorial-photo,
-  .memorial-light,
-  .memorial-candle .flame {
-    animation: none;
-  }
-  .memorial-photo {
-    box-shadow: 0 0 0 1.5px rgb(255 214 150 / 0.8), 0 0 24px 5px rgb(255 180 90 / 0.55), 0 22px 50px rgb(0 0 0 / 0.5);
-  }
-}
-
 /* ---------------------------------------------------------------------------
    Motion. Calm and unhurried; nothing bounces. While the opening screen is up
    (html.booting) page animations wait, so they play as it fades. Everything
@@ -288,14 +165,9 @@
   60% { transform: scale(1.15); opacity: 1; }
   100% { transform: scale(1); }
 }
-@keyframes portrait-in {
-  from { opacity: 0; transform: scale(0.94); }
-  to { opacity: 1; transform: none; }
-}
 
 .page-enter { animation: rise-in 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .hero-line { animation: rise-in 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
-.hero-portrait { animation: portrait-in 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .bar-grow { transform-origin: left; animation: grow-x 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) var(--d, 0.25s) both; }
 .col-grow { transform-box: fill-box; transform-origin: bottom; animation: grow-y 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
 .line-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw-line 1.8s ease-out 0.2s forwards; }
@@ -319,66 +191,19 @@
 [data-reveal].is-revealed { opacity: 1; transform: none; }
 
 html.booting .hero-line,
-html.booting .hero-portrait,
 html.booting .bar-grow,
 html.booting .page-enter {
   animation-play-state: paused;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .page-enter, .hero-line, .hero-portrait, .bar-grow, .col-grow, .pop, .stagger > * { animation: none; }
+  .page-enter, .hero-line, .bar-grow, .col-grow, .pop, .stagger > * { animation: none; }
   .line-draw { animation: none; stroke-dashoffset: 0; }
   [data-reveal] { opacity: 1; transform: none; transition: none; }
   .lift:hover { transform: none; }
 }
 
-/* ---- Going further: embers, breathing light, sheen, glow, shimmer. ---- */
-.embers {
-  position: absolute;
-  left: 50%;
-  bottom: -36px;
-  width: 220px;
-  height: 340px;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-.embers span {
-  position: absolute;
-  bottom: 0;
-  left: var(--x);
-  width: var(--s, 4px);
-  height: var(--s, 4px);
-  border-radius: 50%;
-  background: radial-gradient(circle, #fff1c4 0%, #ffc56b 45%, rgb(255 160 70 / 0) 70%);
-  opacity: 0;
-  animation: ember var(--t, 6s) linear var(--delay, 0s) infinite;
-}
-@keyframes ember {
-  0% { opacity: 0; transform: translate(0, 0) scale(1); }
-  12% { opacity: 0.95; }
-  70% { opacity: 0.45; }
-  100% { opacity: 0; transform: translate(var(--drift, 10px), -320px) scale(0.35); }
-}
-.hero-breathe {
-  background-size: 160% 160%;
-  animation: breathe 16s ease-in-out infinite alternate;
-}
-@keyframes breathe {
-  from { background-position: 40% 30%; }
-  to { background-position: 60% 55%; }
-}
-.gold-sheen {
-  background: linear-gradient(100deg, #ffd086 0%, #ffd086 40%, #fff6dc 50%, #ffd086 60%, #ffd086 100%);
-  background-size: 250% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: sheen 7s ease-in-out 2s infinite;
-}
-@keyframes sheen {
-  0% { background-position: 100% 0; }
-  45%, 100% { background-position: -50% 0; }
-}
+/* ---- Going further: glow and shimmer. ---- */
 .glow-pulse { animation: glow-pulse 4.5s ease-in-out infinite; }
 @keyframes glow-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgb(201 149 47 / 0); }
@@ -405,9 +230,7 @@ html.booting .page-enter {
 .press:active { transform: scale(0.97); }
 
 @media (prefers-reduced-motion: reduce) {
-  .embers { display: none; }
-  .hero-breathe, .glow-pulse, .skeleton { animation: none; }
-  .gold-sheen { animation: none; background: none; color: #ffd086; }
+  .glow-pulse, .skeleton { animation: none; }
   .draw-check circle, .draw-check path { animation: none; stroke-dashoffset: 0; }
   .press:active { transform: none; }
 }
@@ -538,43 +361,21 @@ html.booting .row-in {
   .row-in { animation: none; }
 }
 
-/* The announcement ribbon (src/public/PublicLayout.tsx). */
-@keyframes ribbon-in {
-  from { transform: translateY(-100%); opacity: 0; }
-  to { transform: none; opacity: 1; }
-}
-@keyframes flicker {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  30% { opacity: 0.8; transform: scale(0.95) rotate(-3deg); }
-  60% { opacity: 0.95; transform: scale(1.05) rotate(2deg); }
-}
-.ribbon-in { animation: ribbon-in 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-.ribbon-sheen {
-  background: linear-gradient(100deg, transparent 30%, rgb(224 188 105 / 0.16) 50%, transparent 70%);
-  transform: translateX(-120%);
-  animation: bar-sheen 7s ease-in-out 1.5s infinite;
-}
-.flicker { transform-origin: 50% 90%; animation: flicker 2.6s ease-in-out infinite; }
-html.booting .ribbon-in { animation-play-state: paused; }
-@media (prefers-reduced-motion: reduce) {
-  .ribbon-in, .ribbon-sheen, .flicker { animation: none; }
-  .ribbon-sheen { display: none; }
-}
-
 /*
  * The funeral programme (src/public/ProgrammePage.tsx and the programme menus):
- * the printed programme's Montserrat, night navy, gold and ivory.
+ * the memorial palette of warm black, ivory and candle gold; the day and his
+ * name in the display serif.
  */
 .prog {
-  --p-night: #0f1027;
-  --p-ink: #14152b;
-  --p-gold: #c39a4e;
-  /* Gold text on ivory: the poster's gold is too light for small text there (WCAG AA). */
-  --p-gold-ink: #876628;
-  --p-gold-2: #e2c88f;
-  --p-ivory: #fbf9f5;
-  --p-line: #e7e1d6;
-  font-family: "Montserrat Variable", "Source Sans 3 Variable", system-ui, sans-serif;
+  --p-night: #0b0a09;
+  --p-ink: #1b1917;
+  --p-gold: #c29f5d;
+  /* Gold text on paper: the candle gold is too light for small text there (WCAG AA). */
+  --p-gold-ink: #7c6128;
+  --p-gold-2: #e6bd72;
+  --p-ivory: #f6f4f0;
+  --p-line: #e6e2db;
+  font-variant-numeric: lining-nums;
 }
 /* A photo seen through a large numeral, with a fine gold outline set behind it. */
 .prog-numeral { position: relative; display: inline-block; line-height: 1; }
@@ -592,7 +393,7 @@ html.booting .ribbon-in { animation-play-state: paused; }
   -webkit-background-clip: text;
   background-clip: text;
   background-repeat: no-repeat;
-  filter: drop-shadow(0 0.03em 0.06em rgb(20 21 43 / 0.16));
+  filter: drop-shadow(0 0.03em 0.06em rgb(11 10 9 / 0.16));
 }
 .prog-numeral::before {
   content: attr(data-n);
@@ -602,18 +403,18 @@ html.booting .ribbon-in { animation-play-state: paused; }
   color: transparent;
   -webkit-text-stroke: 1.5px var(--p-gold-2);
 }
-/* Duotone photos: black becomes night navy, white becomes ivory. Positioned by utilities (always absolute). */
-.prog-duo { overflow: hidden; isolation: isolate; background: #0f1027; }
+/* Duotone photos: black becomes warm black, white becomes ivory. Positioned by utilities (always absolute). */
+.prog-duo { overflow: hidden; isolation: isolate; background: #0b0a09; }
 .prog-duo > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.08) brightness(1.03); }
 .prog-duo::before,
 .prog-duo::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; }
-.prog-duo::before { background: #0f1027; mix-blend-mode: lighten; }
-.prog-duo::after { background: #f4eee3; mix-blend-mode: darken; }
+.prog-duo::before { background: #0b0a09; mix-blend-mode: lighten; }
+.prog-duo::after { background: #f7f3ea; mix-blend-mode: darken; }
 /* "Happening now". */
 @keyframes prog-live {
-  0% { box-shadow: 0 0 0 0 rgb(226 200 143 / 0.65); }
-  70% { box-shadow: 0 0 0 10px rgb(226 200 143 / 0); }
-  100% { box-shadow: 0 0 0 0 rgb(226 200 143 / 0); }
+  0% { box-shadow: 0 0 0 0 rgb(230 189 114 / 0.65); }
+  70% { box-shadow: 0 0 0 10px rgb(230 189 114 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(230 189 114 / 0); }
 }
 .prog-live { animation: prog-live 2s ease-out infinite; }
 /* The navbar's menus. */
@@ -627,4 +428,189 @@ html.booting .ribbon-in { animation-play-state: paused; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .prog-live, .menu-in { animation: none; }
+}
+
+/*
+ * The home page's memorial (src/public/MemorialHero.tsx): one black-and-white
+ * photograph, and the light on it changes with the funeral days (data-phase,
+ * from memorialDay.ts). Warm black, ivory type and a single candle gold.
+ */
+.mh {
+  --mh-black: #0b0a09;
+  --mh-ivory: #f7f3ea;
+  --mh-soft: #cfc8bc;
+  --mh-flame: #e6bd72;
+  --mh-b: 1;
+  --mh-glow: none;
+  background: var(--mh-black);
+  color: var(--mh-ivory);
+  font-variant-numeric: lining-nums;
+}
+.mh[data-phase="eve"] { --mh-b: 0.78; --mh-glow: radial-gradient(60% 70% at 72% 78%, rgb(230 170 90 / 0.5), transparent 70%); }
+.mh[data-phase="fri"] { --mh-b: 1; --mh-glow: radial-gradient(80% 80% at 30% 0%, rgb(170 200 225 / 0.55), transparent 70%); }
+.mh[data-phase="vigil"] { --mh-b: 0.62; --mh-glow: radial-gradient(55% 65% at 70% 88%, rgb(240 170 80 / 0.75), transparent 70%); }
+.mh[data-phase="sat"] { --mh-b: 1.12; --mh-glow: radial-gradient(70% 80% at 95% 5%, rgb(255 226 170 / 0.6), transparent 70%); }
+.mh[data-phase="burial"] { --mh-b: 0.95; --mh-glow: linear-gradient(120deg, transparent 30%, rgb(235 150 60 / 0.6)); }
+.mh[data-phase="after"] { --mh-b: 0.92; }
+
+.mh-stage { position: relative; isolation: isolate; overflow: hidden; display: flex; align-items: flex-end; min-height: min(100svh, 920px); }
+/* Right-aligned, fading into the black on the left and at the bottom. */
+.mh-photo {
+  position: absolute; z-index: -2; top: 0; right: 0;
+  width: min(70%, 1100px); height: 100%;
+  object-fit: cover; object-position: 50% 20%;
+  filter: grayscale(1) contrast(1.07) brightness(var(--mh-b));
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 46%), linear-gradient(0deg, transparent 0, #000 34%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent 0, #000 46%), linear-gradient(0deg, transparent 0, #000 34%);
+  mask-composite: intersect;
+  transition: filter 1.6s ease;
+}
+.mh-light { position: absolute; z-index: -1; inset: 0; background: var(--mh-glow); mix-blend-mode: soft-light; pointer-events: none; }
+.mh[data-phase="eve"] .mh-light,
+.mh[data-phase="vigil"] .mh-light { animation: mh-flicker 7s ease-in-out infinite; }
+.mh-inner { width: 100%; max-width: 72rem; margin: 0 auto; padding: 7.5rem 1.5rem 3.5rem; }
+.mh-eye { color: var(--mh-soft); font: 500 1.0625rem/1.3 var(--font-sans); }
+.mh-name { margin-top: 0.55rem; color: var(--mh-ivory); font: 500 clamp(3.1rem, 7.6vw, 6.9rem)/0.97 var(--font-display); letter-spacing: -0.018em; text-wrap: initial; }
+.mh-dates { margin-top: 1.05rem; color: var(--mh-soft); font: 500 clamp(1.2rem, 1.9vw, 1.45rem)/1.25 var(--font-display); }
+.mh-epi { margin-top: 0.2rem; color: var(--mh-flame); font: italic 500 clamp(1.3rem, 2vw, 1.6rem)/1.25 var(--font-display); }
+.mh-eye, .mh-name, .mh-dates, .mh-epi { text-shadow: 0 1px 18px rgb(11 10 9 / 0.45); }
+/* What is on: a label, a main line and a supporting line, beside a small candle flame. */
+.mh-status {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 0.8rem;
+  max-width: 27rem; margin-top: 2.1rem; padding-top: 1.05rem;
+  border-top: 1px solid rgb(247 243 234 / 0.2);
+}
+.mh-status.no-flame { grid-template-columns: minmax(0, 1fr); }
+.mh-status > :not(.mh-flame) { grid-column: -2; }
+.mh-flame {
+  grid-row: span 3; width: 11px; height: 18px; margin: 0.15rem 0.1rem 0;
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  background: radial-gradient(60% 55% at 50% 72%, #fff3cf 0, #f2c66f 48%, #c9772a 100%);
+  box-shadow: 0 0 16px 4px rgb(236 170 80 / 0.42);
+  transform-origin: 50% 90%;
+  animation: mh-burn 3.4s ease-in-out infinite;
+}
+.mh-sl { color: var(--mh-flame); font: 600 0.9375rem/1.3 var(--font-sans); }
+.mh-sm { margin-top: 0.1rem; color: var(--mh-ivory); font: 600 1.3125rem/1.25 var(--font-sans); letter-spacing: -0.005em; }
+.mh-ss { margin-top: 0.2rem; color: var(--mh-soft); font: 400 1rem/1.35 var(--font-sans); }
+.mh-acts { display: flex; flex-wrap: wrap; gap: 0.625rem; margin-top: 1.5rem; }
+.mh-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 1.4rem;
+  border-radius: 999px; font: 600 1rem/1.15 var(--font-sans); text-align: center; text-decoration: none;
+  transition: transform 0.18s, background-color 0.18s;
+}
+.mh-btn:hover { text-decoration: none; }
+.mh-btn:active { transform: scale(0.97); }
+.mh-primary, .mh-primary:hover { color: var(--mh-black); }
+.mh-primary { background: var(--mh-ivory); }
+.mh-primary:hover { background: #fff; }
+.mh-secondary, .mh-secondary:hover { color: var(--mh-ivory); }
+.mh-secondary { background: rgb(247 243 234 / 0.13); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.mh-secondary:hover { background: rgb(247 243 234 / 0.22); }
+.mh a:focus-visible { outline: 2px solid var(--mh-flame); outline-offset: 3px; }
+
+/* The two days, as photo cards on the same black. */
+.mh-days { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; max-width: 72rem; margin: 0 auto; padding: 0 1.5rem 4rem; }
+.mh-card {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  min-height: clamp(540px, 50vw, 620px); padding: 1.6rem;
+  border-radius: 24px; background: #191715; color: var(--mh-ivory);
+}
+.mh-card > img {
+  position: absolute; z-index: -2; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: 50% 12%;
+  filter: grayscale(1) contrast(1.05);
+  transition: transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.mh-card::after {
+  content: ""; position: absolute; z-index: -1; inset: 0;
+  background: linear-gradient(0deg, rgb(11 10 9 / 0.97) 0, rgb(11 10 9 / 0.9) 48%, rgb(11 10 9 / 0.25) 76%, rgb(11 10 9 / 0.12) 100%);
+}
+.mh-card:hover > img { transform: scale(1.035); }
+/* An outline paints over the photo; an inset shadow would sit under it. */
+.mh-card.is-today { outline: 1.5px solid rgb(230 189 114 / 0.75); outline-offset: -1.5px; }
+.mh-card.is-past > img { filter: grayscale(1) brightness(0.7); }
+.mh-chip { position: absolute; top: 1.1rem; left: 1.1rem; padding: 0.42rem 0.72rem; border-radius: 99px; background: var(--mh-ivory); color: var(--mh-black); font: 600 0.8125rem/1 var(--font-sans); }
+.mh-cd { color: var(--mh-flame); font: 600 0.9375rem/1.3 var(--font-sans); }
+.mh-ct { margin-top: 0.25rem; font: 500 clamp(1.9rem, 3vw, 2.5rem)/1.05 var(--font-display); letter-spacing: -0.008em; }
+/* The whole card is the link's target. */
+.mh-link, .mh-link:hover { color: var(--mh-ivory); text-decoration: none; }
+.mh-link::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.mh .mh-link:focus-visible { outline: none; }
+.mh-link:focus-visible::after { box-shadow: inset 0 0 0 2px var(--mh-flame); }
+.mh-cw { margin-top: 0.4rem; color: var(--mh-soft); font: 400 1rem/1.35 var(--font-sans); }
+.mh-stops { margin-top: 0.95rem; padding-top: 0.75rem; border-top: 1px solid rgb(247 243 234 / 0.18); }
+.mh-stops li { display: grid; grid-template-columns: minmax(6.2rem, 38%) minmax(0, 1fr); gap: 0.75rem; padding: 0.26rem 0; font: 400 0.9375rem/1.3 var(--font-sans); }
+.mh-time { color: var(--mh-soft); font-variant-numeric: tabular-nums; }
+.mh-stops .is-now, .mh-stops .is-now .mh-time { color: var(--mh-flame); font-weight: 600; }
+.mh-stops .is-done { opacity: 0.55; }
+.mh-more { margin-top: 0.85rem; font: 600 0.9375rem/1 var(--font-sans); }
+.mh-more::after { content: " \2192"; transition: margin 0.2s; }
+.mh-card:hover .mh-more::after { margin-left: 0.2em; }
+
+@keyframes mh-burn {
+  0%, 100% { transform: scale(1) rotate(-1deg); }
+  40% { transform: scale(1.05, 1.1) rotate(1.5deg); }
+  70% { transform: scale(0.97, 1.03) rotate(-1.5deg); }
+}
+@keyframes mh-flicker {
+  0%, 100% { opacity: 1; }
+  35% { opacity: 0.82; }
+  62% { opacity: 0.96; }
+  80% { opacity: 0.76; }
+}
+@keyframes mh-settle {
+  from { opacity: 0; transform: scale(1.045); }
+  to { opacity: 1; transform: none; }
+}
+/* First visit only: the photo settles and the lines rise; later updates change text in place. */
+.mh-first .mh-photo { animation: mh-settle 1.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.mh-first .mh-inner > * { animation: rise-in 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.mh-first .mh-inner > :nth-child(2) { animation-delay: 0.08s; }
+.mh-first .mh-inner > :nth-child(3) { animation-delay: 0.16s; }
+.mh-first .mh-inner > :nth-child(4) { animation-delay: 0.2s; }
+.mh-first .mh-inner > :nth-child(5) { animation-delay: 0.28s; }
+.mh-first .mh-inner > :nth-child(6) { animation-delay: 0.34s; }
+html.booting .mh-first .mh-photo,
+html.booting .mh-first .mh-inner > * { animation-play-state: paused; }
+
+/* Phones: the photo on top, the name over its fade (never the face), the buttons side by side. */
+@media (max-width: 760px) {
+  .mh-stage { min-height: calc(100svh - 74px); }
+  .mh-photo, .mh-light { height: min(27.5rem, 60svh); bottom: auto; }
+  .mh-photo {
+    left: 0; width: 100%; object-position: 56% 18%;
+    -webkit-mask-image: linear-gradient(0deg, transparent 0, #000 42%);
+    -webkit-mask-composite: source-over;
+    mask-image: linear-gradient(0deg, transparent 0, #000 42%);
+    mask-composite: add;
+  }
+  .mh-light { -webkit-mask-image: linear-gradient(0deg, transparent 0, #000 42%); mask-image: linear-gradient(0deg, transparent 0, #000 42%); }
+  .mh-inner { padding: calc(min(27.5rem, 60svh) - 8rem) 1.25rem 2rem; }
+  .mh-name { font-size: clamp(2.85rem, 14.2vw, 3.7rem); }
+  .mh-status { margin-top: 1.4rem; padding-top: 0.9rem; }
+  .mh-sm { font-size: 1.2rem; }
+  .mh-acts { margin-top: 1.15rem; }
+  .mh-acts .mh-btn { flex: 1 1 auto; padding: 0 1rem; font-size: 0.9375rem; }
+  .mh-days { grid-template-columns: minmax(0, 1fr); padding: 0 1.25rem 2.5rem; }
+  /* The top of the card is left to the photo, so the text never covers his face. */
+  .mh-card { min-height: 0; padding: 15.5rem 1.35rem 1.35rem; }
+}
+/* Short phones: a smaller band of photo and tighter type, so the buttons stay above the bottom bar. */
+@media (max-width: 760px) and (max-height: 720px) {
+  .mh-photo, .mh-light { height: 48svh; }
+  .mh-inner { padding-top: calc(48svh - 7.5rem); padding-bottom: 1.25rem; }
+  .mh-eye { font-size: 1rem; }
+  .mh-name { font-size: clamp(2.5rem, 12.5vw, 3.1rem); }
+  .mh-dates { margin-top: 0.6rem; font-size: 1.1rem; }
+  .mh-epi { font-size: 1.2rem; }
+  .mh-status { margin-top: 1rem; padding-top: 0.75rem; }
+  .mh-sm { font-size: 1.1rem; }
+  .mh-ss { font-size: 0.9375rem; }
+  .mh-acts { margin-top: 0.9rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mh *, .mh *::before, .mh *::after { animation: none !important; transition: none !important; }
 }

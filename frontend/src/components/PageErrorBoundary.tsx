@@ -43,7 +43,7 @@ export class PageErrorBoundary extends Component<Props, { error: unknown }> {
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="mt-5 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg bg-[#2e2338] px-5 font-semibold text-white hover:bg-[#1e1625]"
+          className="mt-5 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg bg-[#1b1917] px-5 font-semibold text-white hover:bg-[#0b0a09]"
         >
           <RefreshCw className="size-4" aria-hidden />
           {stale ? "Load the latest version" : "Try again"}

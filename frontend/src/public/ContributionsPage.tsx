@@ -260,7 +260,7 @@ function PledgesView({ pledges, showAmounts, family }: { pledges: PublicPledge[]
         ))}
       </div>
 
-      <section aria-label={tr("Pledges", "Ahadi")} className="overflow-clip rounded-2xl border border-stone-200 bg-white shadow-sm">
+      <section aria-label={tr("Pledges", "Ahadi")} className="overflow-clip rounded-[20px] border border-[rgb(27_25_23/0.09)] bg-white">
         {groups.every((g) => g.rows.length === 0) ? (
           <p className="px-6 py-10 text-center text-stone-600">
             {status === "all"
@@ -578,7 +578,7 @@ export function ContributionsPage() {
           </div>
         </div>
 
-        <section ref={list} aria-label={tr("Contributions", "Michango")} className="page-enter mt-1 overflow-clip rounded-2xl border border-stone-200 bg-white shadow-sm">
+        <section ref={list} aria-label={tr("Contributions", "Michango")} className="page-enter mt-1 overflow-clip rounded-[20px] border border-[rgb(27_25_23/0.09)] bg-white">
           {sorted.length === 0 ? (
             <div className="px-6 py-12 text-center">
               <p className="font-display text-[1.4rem] font-semibold text-stone-900">

@@ -1,5 +1,5 @@
-// One announcement on its own page, linked from the ribbon at the top of every
-// page. A pinned update (such as the burial date) also shows the place of
+// One announcement on its own page, linked from the home page and the updates
+// list. A pinned update (such as the burial date) also shows the place of
 // burial, with the map pin and directions from where the visitor is.
 
 import { ArrowLeft, Calendar, Check, Copy, MapPin, Navigation } from "lucide-react";
@@ -22,7 +22,7 @@ export function BurialPlace({ when, place, mapUrl }: { when: string | null; plac
   const directions = coords ? directionsLink(coords) : null;
   const location = [place, mapUrl].filter(Boolean).join(" – ");
   return (
-    <PublicCard className="relative overflow-hidden border-ochre-200 bg-[#fffaf0]">
+    <PublicCard className="relative overflow-hidden">
       <div aria-hidden className="card-glow pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-ochre-200/50 blur-3xl" />
       <div className="relative">
         <p className="mb-1 flex items-center gap-2 text-[13px] font-semibold tracking-[0.14em] text-ochre-800 uppercase">

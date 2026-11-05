@@ -14,7 +14,6 @@ import {
   FundsCard,
   GiveCard,
   GoalCard,
-  Hero,
   LatestUpdate,
   LedgerCard,
   OrganisersCard,
@@ -24,7 +23,7 @@ import {
   SpreadCard,
   kes,
 } from "./parts";
-import { ProgrammeCard } from "./programmeParts";
+import { MemorialHero } from "./MemorialHero";
 import { usePublicPage } from "./PublicLayout";
 import { langPath, localiseName, useLang, useTr, type Lang } from "./i18n";
 import { Linked } from "./linked";
@@ -41,7 +40,7 @@ function TrendsLink({ page }: { page: PublicPage }) {
     <Link
       to="/trends"
       data-reveal
-      className="group lift flex items-center gap-4 rounded-2xl border border-stone-200 bg-white px-5 py-4 text-stone-900 no-underline shadow-sm hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600"
+      className="group flex items-center gap-4 rounded-[20px] border border-[rgb(27_25_23/0.09)] bg-white px-5 py-4 text-stone-900 no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600"
     >
       <span className="grid size-12 shrink-0 place-items-center rounded-full bg-ochre-100 text-ochre-800 transition-transform duration-300 group-hover:scale-105">
         <TrendingUp className="size-6" aria-hidden />
@@ -67,7 +66,7 @@ function ChallengesLink({ page }: { page: PublicPage }) {
     <Link
       to="/challenges"
       data-reveal
-      className="group lift flex items-center gap-4 rounded-2xl border border-ochre-200 bg-[#fffaf0] px-5 py-4 text-stone-900 no-underline shadow-sm hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600"
+      className="group flex items-center gap-4 rounded-[20px] border border-[rgb(27_25_23/0.09)] bg-white px-5 py-4 text-stone-900 no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-600"
     >
       <span className="grid size-12 shrink-0 place-items-center rounded-full bg-ochre-100 text-ochre-800 transition-transform duration-300 group-hover:scale-105">
         <Trophy className="size-6" aria-hidden />
@@ -84,7 +83,7 @@ function ChallengesLink({ page }: { page: PublicPage }) {
   );
 }
 
-/** Remember him, give, then see where the money went. */
+/** Remember him and the two funeral days, give, then see where the money went. */
 export function HomePage() {
   const page = usePublicPage();
   const { hash } = useLocation();
@@ -119,19 +118,17 @@ export function HomePage() {
 
   return (
     <>
-      <Hero page={page} />
+      <MemorialHero page={page} />
       {hasAside ? (
         <div className="mx-auto max-w-6xl px-4 md:grid md:grid-cols-[minmax(320px,380px)_1fr] md:items-start md:gap-6 md:px-6">
-          <aside className="relative z-10 -mt-12 space-y-4 md:sticky md:top-16 md:mt-6">
-            <ProgrammeCard />
+          <aside className="mt-6 space-y-4 md:sticky md:top-16">
             <GiveCard page={page} />
             <FuneralCard page={page} />
           </aside>
           <div className="mt-4 space-y-4 md:mt-6">{main}</div>
         </div>
       ) : (
-        <div className="relative z-10 mx-auto -mt-12 max-w-3xl space-y-4 px-4 md:mt-6 md:px-6">
-          <ProgrammeCard />
+        <div className="mx-auto mt-6 max-w-3xl space-y-4 px-4 md:px-6">
           {main}
         </div>
       )}
@@ -173,7 +170,7 @@ export function UpdatesPage() {
           const title = tr(a.title, a.title_sw || a.title);
           const body = tr(a.body, a.body_sw || a.body);
           return (
-          <PublicCard key={a.id} className={a.pinned ? "glow-pulse border-ochre-200 bg-[#fffaf0]" : undefined}>
+          <PublicCard key={a.id}>
             <p className="mb-1 text-[13px] font-semibold tracking-[0.14em] text-stone-500 uppercase">
               {a.pinned ? tr("Important · ", "Muhimu · ") : ""}
               {formatNairobiLongDate(a.published_at)}
@@ -357,7 +354,7 @@ export function CheckPage() {
             <button
               type="submit"
               disabled={busy || !code.trim()}
-              className="press flex min-h-12 w-full items-center justify-center rounded-xl bg-[#2e2338] px-4 text-[16px] font-semibold text-white hover:bg-[#1e1625] disabled:opacity-55 sm:w-auto"
+              className="press flex min-h-12 w-full items-center justify-center rounded-full bg-[#0b0a09] px-6 text-[16px] font-semibold text-white hover:bg-[#2a2724] disabled:opacity-55 sm:w-auto"
             >
               {busy ? tr("Checking…", "Inahakiki…") : tr("Check", "Hakiki")}
             </button>
