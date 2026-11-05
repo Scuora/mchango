@@ -16,6 +16,9 @@ import { PROGRAMME, dayStatus } from "./programme";
 import { DayBadge, TodayPill, isToday, pick, useNow } from "./programmeParts";
 import { sharePage } from "./share";
 
+/** Pages that open with a dark header under the navbar (the home page, the programme and the eulogy). */
+const opensDark = (pathname: string) => pathname === "/" || pathname.startsWith("/programme") || pathname === "/eulogy";
+
 interface PublicContext {
   page: PublicPage;
 }
@@ -129,7 +132,7 @@ function PublicSite() {
       {/* Keyed by language too, so a switch redraws every date and label. Pages that open with a
           dark header under the transparent navbar appear at once: fading them in would leave the
           navbar over a pale page for a moment, a blink. Their header text still animates in. */}
-      <div key={`${pathname}-${lang}`} className={pathname === "/" || pathname.startsWith("/programme") ? undefined : "page-enter"}>
+      <div key={`${pathname}-${lang}`} className={opensDark(pathname) ? undefined : "page-enter"}>
         <Outlet context={{ page } satisfies PublicContext} />
       </div>
       <footer className="mx-auto max-w-3xl space-y-2 px-4 pt-10 pb-12 text-center">
@@ -166,7 +169,7 @@ function PublicNav({ page }: { page: PublicPage }) {
   const money = MONEY_LINKS.filter((link) => link.to !== "/challenges" || (page.challenges?.length ?? 0) > 0);
   const inProgramme = pathname.startsWith("/programme");
   const inMoney = money.some((link) => pathname.startsWith(link.to));
-  const overHero = (pathname === "/" || inProgramme) && !scrolled && !open;
+  const overHero = opensDark(pathname) && !scrolled && !open;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
