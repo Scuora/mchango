@@ -117,6 +117,7 @@ async fn demo_flow() {
                 confirm_possible_duplicate: true,
                 challenge_id: None,
                 shares: None,
+                items: None,
             },
             "test",
         )
@@ -152,6 +153,7 @@ async fn demo_flow() {
             confirm_possible_duplicate: confirm,
             challenge_id: None,
             shares: None,
+            items: None,
         };
         let mut tx = db::begin_write(&pool).await.unwrap();
         let flagged = transactions::create(&mut tx, manual(false, None), "test").await;
@@ -421,6 +423,7 @@ fn record(kind: Kind, amount: i64, related: Option<i64>, challenge_id: Option<i6
         confirm_possible_duplicate: true,
         challenge_id,
         shares: None,
+        items: None,
     }
 }
 
@@ -697,5 +700,127 @@ async fn a_payment_can_be_shared_among_people() {
     let expected =
         format!("Restored together with transaction #{}: It was the fundraiser's tent after all", created.id);
     assert_eq!(activity.entries[0].reason.as_deref(), Some(expected.as_str()));
+    tx.rollback().await.unwrap();
+}
+
+/// A family that gave three times is listed once, every payment and message kept;
+/// a payment out can cover several things; a bill is paid in parts until paid.
+#[tokio::test]
+async fn merged_payments_itemised_spending_and_bills() {
+    let dir = temp_dir();
+    let pool = db::connect(&dir.join("test.sqlite")).await.unwrap();
+    let storage = Storage::open(&dir.join("uploads")).unwrap();
+    seed::run(&pool, &storage, &dir).await.unwrap();
+    let before = totals(&pool).await;
+    let mut tx = db::begin_write(&pool).await.unwrap();
+
+    // Three payments from one family, each with its own M-Pesa message.
+    let mut ids = Vec::new();
+    for (i, amount) in [1_000_00, 2_000_00, 500_00].into_iter().enumerate() {
+        let mut gift = record(Kind::Contribution, amount, None, None);
+        gift.movement.reference = Some(format!("TK1MERGE0{i}"));
+        gift.movement.occurred_at = format!("2026-09-0{}T10:00:00+03:00", i + 1);
+        gift.source_message = Some(format!("TK1MERGE0{i} Confirmed. You have received Ksh{amount} from KALUME"));
+        ids.push(transactions::create(&mut tx, gift, "test").await.unwrap().id);
+    }
+    let merge = |ids: &[i64], name: Option<&str>| transactions::MergeRequest {
+        transaction_ids: ids.to_vec(),
+        public_name: name.map(Into::into),
+    };
+    let group = transactions::merge(&mut tx, merge(&ids[..2], Some("Family of Kalume"))).await.unwrap();
+    // Merging into an entry brings the whole entry along.
+    assert_eq!(transactions::merge(&mut tx, merge(&[ids[1], ids[2]], None)).await.unwrap(), group);
+    assert!(transactions::merge(&mut tx, merge(&ids[..1], None)).await.is_ok(), "already merged: nothing to do");
+    let spent: i64 = sqlx::query_scalar(
+        "SELECT transaction_id FROM transaction_versions WHERE is_current = 1 AND kind = 'expense' LIMIT 1",
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    assert!(transactions::merge(&mut tx, merge(&[ids[0], spent], None)).await.is_err(), "only money received");
+
+    // The money counts in full, the family once; publicly one line under one name.
+    let t = Totals::from_records(&fundraiser_records(&mut tx).await.unwrap(), 12_000_00);
+    assert_eq!(t.contributions_minor, before.contributions_minor + 3_500_00);
+    assert_eq!(t.contributions_count, before.contributions_count + 1);
+    let page = publication::build(&mut tx).await.unwrap();
+    let family: Vec<_> = page.contributions.iter().filter(|e| e.label == "Family of Kalume").collect();
+    assert_eq!(family.len(), 1);
+    assert_eq!(family[0].amount_minor, Some(3_500_00));
+    let sum: i64 = page.contributions.iter().filter_map(|e| e.amount_minor).sum();
+    assert_eq!(sum, page.totals.contributions_minor, "the list still adds up to the total");
+    let checked = publication::check_contribution(&mut tx, "TK1MERGE01").await.unwrap();
+    assert_eq!(checked.contribution.unwrap().listed_as, "Family of Kalume");
+
+    // Every payment and message is kept, and management can list the entry once.
+    let detail = transactions::detail(&mut tx, ids[0]).await.unwrap();
+    let merged = detail.group.unwrap();
+    assert_eq!((merged.members.len(), merged.messages.len(), merged.total_minor), (3, 3, 3_500_00));
+    let query = |combine| transactions::ListQuery { q: Some("Kalume".into()), combine, ..Default::default() };
+    assert_eq!(transactions::list(&mut tx, query(false)).await.unwrap().total, 3);
+    let combined = transactions::list(&mut tx, query(true)).await.unwrap();
+    assert_eq!(combined.total, 1);
+    assert_eq!(combined.items[0].group.as_ref().map(|g| (g.count, g.total_minor)), Some((3, 3_500_00)));
+
+    // Taking payments out lists them on their own again; the last one left ends the entry.
+    transactions::separate(&mut tx, ids[2]).await.unwrap();
+    assert_eq!(transactions::detail(&mut tx, ids[0]).await.unwrap().group.unwrap().members.len(), 2);
+    transactions::separate(&mut tx, ids[1]).await.unwrap();
+    assert!(transactions::detail(&mut tx, ids[0]).await.unwrap().group.is_none());
+    let page = publication::build(&mut tx).await.unwrap();
+    assert!(page.contributions.iter().all(|e| e.label != "Family of Kalume"));
+
+    // One payment out for several things: each listed, the money counted once.
+    let items = |parts: &[(&str, i64)]| -> Vec<transactions::ExpenseItemInput> {
+        let list: Vec<_> = parts
+            .iter()
+            .map(|(what, amount)| serde_json::json!({ "description": what, "amount_minor": amount }))
+            .collect();
+        serde_json::from_value(serde_json::Value::Array(list)).unwrap()
+    };
+    let mut clothes = record(Kind::Expense, 10_000_00, None, None);
+    clothes.presentation.description = "Shoes and clothing".into();
+    clothes.items = Some(items(&[("Shoes", 4_000_00), ("Clothing", 5_000_00)]));
+    assert!(transactions::create(&mut tx, clothes, "test").await.is_err(), "items must add up to the payment");
+    let mut clothes = record(Kind::Expense, 10_000_00, None, None);
+    clothes.presentation.description = "Shoes and clothing".into();
+    clothes.items = Some(items(&[("Shoes", 4_000_00), ("Clothing", 6_000_00)]));
+    transactions::create(&mut tx, clothes, "test").await.unwrap();
+    let t = Totals::from_records(&fundraiser_records(&mut tx).await.unwrap(), 12_000_00);
+    assert_eq!(t.expenses_minor, before.expenses_minor + 10_000_00);
+    assert_eq!(t.expenses_count, before.expenses_count + 2);
+    let page = publication::build(&mut tx).await.unwrap();
+    let labels: Vec<_> = page.spending.iter().map(|e| e.label.as_str()).collect();
+    assert!(labels.contains(&"Shoes") && labels.contains(&"Clothing") && !labels.contains(&"Shoes and clothing"));
+    let statement = reports::statement(
+        &mut tx,
+        reports::StatementQuery { from: None, to: None, account_id: None },
+        "test".into(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(statement.entries.iter().any(|e| e.label == "Shoes" && e.amount_minor == 4_000_00));
+
+    // A bill paid in parts: part paid, then fully paid.
+    let mut coffin = record(Kind::Commitment, 30_000_00, None, None);
+    coffin.movement.account_id = None;
+    coffin.presentation.description = "Coffin".into();
+    let bill = transactions::create(&mut tx, coffin, "test").await.unwrap().id;
+    let status = |records: &[transactions::totals::FundraiserRecord]| {
+        let p = transactions::totals::bill_progress(records).into_iter().find(|b| b.id == bill).unwrap();
+        (p.status, p.paid_minor, p.balance_minor)
+    };
+    let mut deposit = record(Kind::Expense, 10_000_00, Some(bill), None);
+    deposit.presentation.description = "Coffin".into();
+    transactions::create(&mut tx, deposit, "test").await.unwrap();
+    let records = fundraiser_records(&mut tx).await.unwrap();
+    assert_eq!(status(&records), (transactions::totals::BillStatus::PartPaid, 10_000_00, 20_000_00));
+    let mut rest = record(Kind::Expense, 20_000_00, Some(bill), None);
+    rest.presentation.description = "Coffin".into();
+    rest.movement.occurred_at = "2026-09-06T10:00:00+03:00".into();
+    transactions::create(&mut tx, rest, "test").await.unwrap();
+    let records = fundraiser_records(&mut tx).await.unwrap();
+    assert_eq!(status(&records), (transactions::totals::BillStatus::FullyPaid, 30_000_00, 0));
     tx.rollback().await.unwrap();
 }

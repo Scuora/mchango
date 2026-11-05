@@ -4,9 +4,11 @@
 //! fields, and one or more versions (`transaction_versions`) holding financial
 //! values. Corrections add a version; only the current version counts.
 
+mod groups;
 mod store;
 pub mod totals;
 
+pub use groups::*;
 pub use store::*;
 
 use serde::{Deserialize, Serialize};
@@ -60,7 +62,7 @@ impl Kind {
             Kind::Transfer => "Transfer between accounts",
             Kind::Personal => "Personal",
             Kind::Pledge => "Pledge",
-            Kind::Commitment => "Unpaid bill",
+            Kind::Commitment => "Bill",
         }
     }
 }
@@ -180,7 +182,7 @@ impl MovementInput {
         let reference = match self.reference.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
             None => None,
             Some(_) if !kind.moves_money() => {
-                return Err(AppError::field("reference", "Pledges and unpaid bills have no transaction reference."));
+                return Err(AppError::field("reference", "Pledges and bills have no transaction reference."));
             }
             Some(r) => {
                 let r = r.to_ascii_uppercase();
@@ -271,6 +273,26 @@ pub struct ShareInput {
 
 /// Shares as stored with a record (a JSON array); empty when the payment is not shared.
 pub fn parse_shares(json: &str) -> Vec<Share> {
+    serde_json::from_str(json).unwrap_or_default()
+}
+
+/// One thing a payment out was for, when a payment covers several.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExpenseItem {
+    pub description: String,
+    pub amount_minor: i64,
+}
+
+/// An item as sent by the client.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExpenseItemInput {
+    #[serde(default)]
+    pub description: String,
+    pub amount_minor: Amount,
+}
+
+/// Items as stored with a record (a JSON array); empty when the payment is for one thing.
+pub fn parse_items(json: &str) -> Vec<ExpenseItem> {
     serde_json::from_str(json).unwrap_or_default()
 }
 

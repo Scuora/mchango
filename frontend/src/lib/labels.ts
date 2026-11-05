@@ -9,7 +9,7 @@ export const KIND_LABELS: Record<Kind, string> = {
   transfer: "Transfer between accounts",
   personal: "Personal",
   pledge: "Pledge",
-  commitment: "Unpaid bill",
+  commitment: "Bill",
 };
 
 /** Choices for a type picker, with a short explanation each. */
@@ -22,7 +22,7 @@ export const KIND_OPTIONS: { value: Kind; label: string }[] = [
   { value: "transfer", label: "Transfer between accounts (e.g. withdrawal to cash)" },
   { value: "personal", label: "Personal (not fundraiser money)" },
   { value: "pledge", label: "Pledge (promise, no money yet)" },
-  { value: "commitment", label: "Unpaid bill" },
+  { value: "commitment", label: "Bill" },
 ];
 
 export const RECONCILIATION_LABELS: Record<ReconciliationStatus, string> = {

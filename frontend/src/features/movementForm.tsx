@@ -6,6 +6,7 @@ import { fromNairobiInput, toNairobiInputValue } from "@/lib/time";
 import type { Account, Direction, Kind, ListItem, MovementInput } from "@/lib/types";
 import { Field, Input, RadioGroup } from "@/components/ui/form";
 import { Choice, DateTimeField } from "@/components/ui/pickers";
+import { BillPicker } from "./bills";
 import { PledgePicker } from "./pledgePicker";
 
 /** Editable financial details. Text fields hold exactly what the person typed. */
@@ -214,7 +215,7 @@ export function MovementFields({ draft, onChange, accounts, errors, uncertain = 
 
       {(kind === "refund" || kind === "reversal" || kind === "contribution" || kind === "expense" || kind === "charge") && (
         <Field
-          label={kind === "contribution" ? "Fulfils a pledge" : "Linked record number"}
+          label={kind === "contribution" ? "Fulfils a pledge" : kind === "expense" ? "Pays towards a bill" : "Linked record number"}
           htmlFor={id("related")}
           optional
           error={errors.relatedId}
@@ -222,7 +223,7 @@ export function MovementFields({ draft, onChange, accounts, errors, uncertain = 
             kind === "contribution"
               ? "If this person pledged, choose their pledge so it shows as received."
               : kind === "expense"
-                ? "The unpaid bill this payment settles."
+                ? "The bill this payment goes towards, when a bill is paid in parts or was recorded first."
                 : kind === "charge"
                   ? "The payment this charge was taken on."
                   : "The original movement being refunded or reversed."
@@ -230,6 +231,8 @@ export function MovementFields({ draft, onChange, accounts, errors, uncertain = 
         >
           {kind === "contribution" ? (
             <PledgePicker id={id("related")} value={draft.relatedId} onChange={(v) => set("relatedId", v)} senderName={draft.counterparty} />
+          ) : kind === "expense" ? (
+            <BillPicker id={id("related")} value={draft.relatedId} onChange={(v) => set("relatedId", v)} />
           ) : (
             <Input id={id("related")} inputMode="numeric" value={draft.relatedId} tone={errors.relatedId ? "invalid" : "normal"} onChange={(e) => set("relatedId", e.target.value)} />
           )}

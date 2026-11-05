@@ -7,6 +7,7 @@ import { Checkbox, Field, Input, Textarea } from "@/components/ui/form";
 import { Badge, Card, CardBody, CardHeader, Notice } from "@/components/ui/misc";
 import { ChallengePicker, UpdatedChallengeMessage, canJoinChallenge } from "@/features/challenges";
 import { SharesEditor, buildShares, type ShareDraft } from "@/features/shares";
+import { ItemsEditor, blankItems, buildItems, type ItemDraft } from "@/features/items";
 import {
   MovementFields,
   apiDraftErrors,
@@ -22,7 +23,7 @@ import { movesMoney } from "@/lib/labels";
 import { formatKesShort, parseKes, toInput } from "@/lib/money";
 import { TARIFF_DATE, paidByFromFormat, suggestedCost, type PaidBy } from "@/lib/mpesaTariff";
 import { nowNairobiInput, toNairobiInputValue } from "@/lib/time";
-import type { Account, ChallengeSummary, Created, CreateRequest, Fundraiser, ListResponse, ParseResponse } from "@/lib/types";
+import type { Account, BillsResponse, ChallengeSummary, Created, CreateRequest, Fundraiser, ListResponse, ParseResponse } from "@/lib/types";
 
 type Step = { name: "paste" } | { name: "confirm"; parse: ParseResponse | null; message: string | null } | { name: "done"; created: Created };
 
@@ -50,9 +51,18 @@ export function AddTransactionPage() {
   const [shared, setShared] = useState(false);
   const [shareRows, setShareRows] = useState<ShareDraft[]>([]);
   const [sharesError, setSharesError] = useState<string | undefined>();
+  // A payment out that covered several things: each thing with its part.
+  const [itemised, setItemised] = useState(false);
+  const [itemRows, setItemRows] = useState<ItemDraft[]>(blankItems);
+  const [itemsError, setItemsError] = useState<string | undefined>();
   // From the Pledges page: `?kind=pledge&by=family` starts a new pledge; `?pledge=12` records money for pledge 12.
   const [params] = useSearchParams();
   const pledgeFor = params.get("pledge");
+  // From a bill: `?bill=7` records a payment towards bill 7.
+  const billFor = params.get("bill");
+  const bills = useResource<BillsResponse>(billFor ? "/api/manage/bills" : null);
+  const bill = bills.data?.bills.find((b) => String(b.id) === billFor);
+  const billPresentation = (): PresentationDraft => ({ ...emptyPresentation(), description: bill?.description ?? "" });
   // From a challenge's page: `?challenge=3` records money that came in through challenge 3;
   // `?handover=3` records challenge 3 handing its money over to the main account.
   const challengeFor = params.get("challenge");
@@ -111,6 +121,9 @@ export function AddTransactionPage() {
     setShared(false);
     setShareRows([]);
     setSharesError(undefined);
+    setItemised(false);
+    setItemRows(blankItems());
+    setItemsError(undefined);
   }
 
   async function readMessage(event: FormEvent) {
@@ -145,6 +158,7 @@ export function AddTransactionPage() {
         if (original) next.relatedId = String(original.id);
       }
       if (pledgeFor && next.kind === "contribution") next.relatedId = pledgeFor;
+      if (billFor && next.kind === "expense") next.relatedId = billFor;
       if (owner?.account_id && next.kind === "contribution") next.accountId = String(owner.account_id);
       const notes: Uncertain = {};
       if (!p.suggested_kind) notes.kind = "The message does not say what this was. Choose the type.";
@@ -157,7 +171,7 @@ export function AddTransactionPage() {
       setCharge(toInput(p.charge_minor.value));
       setChargeNote(p.charge_minor.certain ? undefined : (p.charge_minor.note ?? "Check the charge."));
       setPaidBy(paidByFromFormat(p.format));
-      setPresentation(presentationFromSender(p.counterparty_name));
+      setPresentation(billFor && next.kind === "expense" ? billPresentation() : presentationFromSender(p.counterparty_name));
       setFormKey(newFormKey());
       setStep({ name: "confirm", parse: response, message });
     } catch (e) {
@@ -172,13 +186,14 @@ export function AddTransactionPage() {
       ...emptyDraft(accountList),
       occurredAt: nowNairobiInput(),
       ...(pledgeFor ? { kind: "contribution" as const, relatedId: pledgeFor } : {}),
+      ...(billFor ? { kind: "expense" as const, relatedId: billFor } : {}),
       ...(challengeFor ? { kind: "contribution" as const, ...(owner?.account_id ? { accountId: String(owner.account_id) } : {}) } : {}),
     });
     setUncertain({});
     setCharge("");
     setChargeNote(undefined);
     setPaidBy(null);
-    setPresentation(emptyPresentation());
+    setPresentation(billFor ? billPresentation() : emptyPresentation());
     setFormKey(newFormKey());
     setStep({ name: "confirm", parse: null, message: null });
   }
@@ -219,6 +234,17 @@ export function AddTransactionPage() {
       shares = builtShares.shares;
     }
     setSharesError(undefined);
+    let items = null;
+    if (itemised && draft.kind === "expense") {
+      const parsedTotal = parseKes(draft.amount);
+      const builtItems = buildItems(itemRows, parsedTotal.ok ? parsedTotal.minor : null);
+      if ("error" in builtItems) {
+        setItemsError(builtItems.error);
+        return;
+      }
+      items = builtItems.items;
+    }
+    setItemsError(undefined);
     setErrors({});
     const body: CreateRequest = {
       movement: built.movement,
@@ -229,6 +255,7 @@ export function AddTransactionPage() {
       confirm_possible_duplicate: confirmPossibleDuplicate,
       challenge_id: canJoinChallenge(draft.kind) && challenge ? Number(challenge) : null,
       shares,
+      items,
     };
     setSaving(true);
     try {
@@ -239,6 +266,7 @@ export function AddTransactionPage() {
       setErrors(apiDraftErrors(e));
       setChargeError(fieldError(e, "charge_minor"));
       setSharesError(fieldError(e, "shares"));
+      setItemsError(fieldError(e, "items"));
     } finally {
       setSaving(false);
     }
@@ -254,6 +282,11 @@ export function AddTransactionPage() {
           <ButtonLink to={`/manage/transactions/${step.created.id}`} variant="secondary">
             View transaction
           </ButtonLink>
+          {billFor && (
+            <ButtonLink to="/manage/bills" variant="secondary">
+              Back to bills
+            </ButtonLink>
+          )}
           {(challengeFor ?? handoverFor) && (
             <ButtonLink to={`/manage/challenges/${challengeFor ?? handoverFor}`} variant="secondary">
               Back to the challenge
@@ -272,6 +305,11 @@ export function AddTransactionPage() {
     return (
       <div className="mx-auto max-w-2xl space-y-4">
         <h1 className="page-title">Add transaction</h1>
+        {bill && (
+          <Notice tone="info" title={`A payment towards “${bill.description || `bill #${bill.id}`}”`}>
+            {formatKesShort(bill.paid_minor)} of {formatKesShort(bill.total_minor)} paid so far; {formatKesShort(bill.balance_minor)} left to pay.
+          </Notice>
+        )}
         <Card>
           <form onSubmit={readMessage}>
             <CardBody className="space-y-4">
@@ -322,6 +360,11 @@ export function AddTransactionPage() {
           Start again
         </Button>
       </div>
+        {bill && (
+          <Notice tone="info" title={`A payment towards “${bill.description || `bill #${bill.id}`}”`}>
+            {formatKesShort(bill.paid_minor)} of {formatKesShort(bill.total_minor)} paid so far; {formatKesShort(bill.balance_minor)} left to pay.
+          </Notice>
+        )}
 
       {parse && (
         <div className="space-y-3">
@@ -429,6 +472,27 @@ export function AddTransactionPage() {
                     anonymousLabel={settings.data?.anonymous_label}
                     error={sharesError}
                     idPrefix="add-sh"
+                  />
+                )}
+              </div>
+            )}
+            {draft.kind === "expense" && (
+              <div className="mt-4 space-y-3 rounded-xl border border-stone-200 p-4">
+                <Checkbox
+                  checked={itemised}
+                  onChange={(e) => setItemised(e.target.checked)}
+                  label="Covers several things"
+                  hint="One payment for several things, e.g. KES 10,000 for shoes and clothing. Each thing is listed on its own; the money counts once."
+                />
+                {itemised && (
+                  <ItemsEditor
+                    total={(() => {
+                      const parsed = parseKes(draft.amount);
+                      return parsed.ok ? parsed.minor : null;
+                    })()}
+                    value={itemRows}
+                    onChange={setItemRows}
+                    error={itemsError}
                   />
                 )}
               </div>

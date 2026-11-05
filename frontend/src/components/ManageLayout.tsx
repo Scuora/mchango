@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { ExternalLink, FileDown, FileText, HandCoins, History, Home, List, LogOut, Megaphone, Menu, PlusCircle, Settings, Share2, Trophy, Wallet, X, type LucideIcon } from "lucide-react";
+import { ExternalLink, FileDown, FileText, HandCoins, History, Home, List, LogOut, Megaphone, Menu, PlusCircle, Receipt, Settings, Share2, Trophy, Wallet, X, type LucideIcon } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { RequireAuth, useAuth } from "@/features/auth";
@@ -26,6 +26,7 @@ const NAV: NavItem[] = [
   { to: "/manage/add", label: "Add transaction", short: "Add", icon: PlusCircle },
   { to: "/manage/accounts", label: "Accounts", short: "Accounts", icon: Wallet },
   { to: "/manage/pledges", label: "Pledges", short: "Pledges", icon: HandCoins },
+  { to: "/manage/bills", label: "Bills", short: "Bills", icon: Receipt },
   { to: "/manage/challenges", label: "Challenges", short: "Challenges", icon: Trophy },
   { to: "/manage/statements", label: "Statements", short: "Statements", icon: FileText },
   { to: "/manage/announcements", label: "Announcements", short: "Updates", icon: Megaphone },
@@ -36,7 +37,7 @@ const NAV: NavItem[] = [
 ];
 
 /** Bottom tabs on phones: the four most used places, plus "More" for the rest. */
-const MORE = ["/manage/accounts", "/manage/pledges", "/manage/challenges", "/manage/activity", "/manage/share", "/manage/announcements", "/manage/reports", "/manage/settings"];
+const MORE = ["/manage/accounts", "/manage/pledges", "/manage/bills", "/manage/challenges", "/manage/activity", "/manage/share", "/manage/announcements", "/manage/reports", "/manage/settings"];
 const TABS = NAV.filter((item) => !MORE.includes(item.to));
 const inMore = (pathname: string) => MORE.some((to) => pathname === to || pathname.startsWith(`${to}/`));
 

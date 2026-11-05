@@ -162,6 +162,11 @@ struct Row {
     has_receipt: bool,
     /// Who a shared payment is from (JSON); one line per payment, naming them all.
     shares_json: String,
+    /// What a payment out covered (JSON); one line per item.
+    items_json: String,
+    /// The merged entry a payment is listed under publicly.
+    group_id: Option<i64>,
+    group_name: Option<String>,
 }
 
 /// Keeps a person's or business's name and drops numbers and masked digits.
@@ -253,9 +258,14 @@ pub async fn statement(
                 EXISTS (SELECT 1 FROM documents d WHERE d.transaction_id = t.id AND d.kind = 'receipt') AS has_receipt,
                 (SELECT json_group_array(json_object('public_name', s.public_name, 'amount_minor', s.amount_minor))
                    FROM (SELECT public_name, amount_minor FROM contribution_shares
-                          WHERE transaction_id = t.id ORDER BY position) s) AS shares_json
+                          WHERE transaction_id = t.id ORDER BY position) s) AS shares_json,
+                (SELECT json_group_array(json_object('description', x.description, 'amount_minor', x.amount_minor))
+                   FROM (SELECT description, amount_minor FROM expense_items
+                          WHERE transaction_id = t.id ORDER BY position) x) AS items_json,
+                t.group_id, g.public_name AS group_name
          FROM transactions t
          JOIN transaction_versions v ON v.transaction_id = t.id AND v.is_current = 1
+         LEFT JOIN contribution_groups g ON g.id = t.group_id
          WHERE v.removed = 0 AND v.kind NOT IN ('personal', 'pledge', 'commitment')
            AND v.occurred_at < ?1
            AND (?2 IS NULL OR v.account_id = ?2 OR v.to_account_id = ?2)
@@ -271,6 +281,7 @@ pub async fn statement(
         if only.is_none() || only == f.opening_funds_account_id { f.opening_funds_minor } else { 0 };
     let mut totals = PeriodTotals::default();
     let mut entries = Vec::new();
+    let mut merged_counted = std::collections::BTreeSet::new();
     for row in rows {
         let Some(amount) = signed(&row, only) else { continue };
         if start.as_deref().is_some_and(|s| row.occurred_at.as_str() < s) {
@@ -279,19 +290,26 @@ pub async fn statement(
         }
         let a = row.amount_minor;
         // A payment from several people is listed person by person, each with their part.
+        // So is a payment out that covered several things, item by item. Merged
+        // payments keep a line each (each has its own code), under the merged name.
         let shared = if row.kind == Kind::Contribution {
             crate::transactions::parse_shares(&row.shares_json)
         } else {
             Vec::new()
         };
+        let itemised =
+            if row.kind == Kind::Expense { crate::transactions::parse_items(&row.items_json) } else { Vec::new() };
         match (row.kind, row.direction) {
             (Kind::Contribution, _) => {
                 totals.received_minor += a;
-                totals.received_count += shared.len().max(1) as i64;
+                totals.received_count += match row.group_id {
+                    Some(group) => i64::from(merged_counted.insert(group)),
+                    None => shared.len().max(1) as i64,
+                };
             }
             (Kind::Expense, _) => {
                 totals.expenses_minor += a;
-                totals.expenses_count += 1;
+                totals.expenses_count += itemised.len().max(1) as i64;
             }
             (Kind::Charge, _) => totals.charges_minor += a,
             (Kind::Refund, Some(Direction::In)) => totals.refunds_received_minor += a,
@@ -306,6 +324,9 @@ pub async fn statement(
         let described =
             |fallback: &str| if row.description.is_empty() { fallback.to_string() } else { row.description.clone() };
         let label = match (row.kind, row.direction) {
+            (Kind::Contribution, _) if row.group_id.is_some() => {
+                row.group_name.clone().unwrap_or_else(|| f.anonymous_label.clone())
+            }
             (Kind::Contribution, _) => row.public_name.clone().unwrap_or_else(|| f.anonymous_label.clone()),
             (Kind::Expense, _) => described("Purpose to be confirmed"),
             (Kind::Charge, _) => described("M-Pesa charge"),
@@ -332,12 +353,16 @@ pub async fn statement(
             matched: row.matched,
             has_receipt: row.has_receipt,
         };
-        if shared.is_empty() {
-            entries.push(entry(label, a));
-        } else {
+        if !shared.is_empty() {
             for s in &shared {
                 entries.push(entry(s.public_name.clone().unwrap_or_else(|| f.anonymous_label.clone()), s.amount_minor));
             }
+        } else if !itemised.is_empty() {
+            for i in &itemised {
+                entries.push(entry(i.description.clone(), i.amount_minor));
+            }
+        } else {
+            entries.push(entry(label, a));
         }
     }
     let period_net =

@@ -6,9 +6,9 @@
 
 use serde::Serialize;
 use sqlx::SqliteConnection;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use super::{Direction, Kind, PledgedBy, Share, parse_shares};
+use super::{Direction, ExpenseItem, Kind, PledgedBy, Share, parse_items, parse_shares};
 use crate::error::AppResult;
 
 /// A current fundraiser record (everything except personal activity).
@@ -33,12 +33,40 @@ pub struct FundraiserRecord {
     #[sqlx(skip)]
     pub shares: Vec<Share>,
     pub shares_json: String,
+    /// For a payment out that covers several things: each thing. Empty when one.
+    #[sqlx(skip)]
+    pub items: Vec<ExpenseItem>,
+    pub items_json: String,
+    /// The merged entry it is listed under, and that entry's name.
+    pub group_id: Option<i64>,
+    pub group_name: Option<String>,
 }
 
 impl FundraiserRecord {
     /// How many people a contribution is from: each share, or one.
     pub fn people(&self) -> i64 {
         (self.shares.len() as i64).max(1)
+    }
+
+    /// How many things a payment out covered: each item, or one.
+    pub fn things(&self) -> i64 {
+        (self.items.len() as i64).max(1)
+    }
+}
+
+/// Counts contributions as people see them listed: one per person sharing a
+/// payment, and one for all the payments merged into one entry.
+#[derive(Default)]
+struct Givers {
+    groups: BTreeSet<i64>,
+}
+
+impl Givers {
+    fn count(&mut self, r: &FundraiserRecord) -> i64 {
+        match r.group_id {
+            Some(group) => i64::from(self.groups.insert(group)),
+            None => r.people(),
+        }
     }
 }
 
@@ -50,9 +78,14 @@ pub async fn fundraiser_records(conn: &mut SqliteConnection) -> AppResult<Vec<Fu
                         WHERE r.transaction_id = t.id AND i.status = 'ready') AS matched,
                 (SELECT json_group_array(json_object('public_name', s.public_name, 'amount_minor', s.amount_minor))
                    FROM (SELECT public_name, amount_minor FROM contribution_shares
-                          WHERE transaction_id = t.id ORDER BY position) s) AS shares_json
+                          WHERE transaction_id = t.id ORDER BY position) s) AS shares_json,
+                (SELECT json_group_array(json_object('description', x.description, 'amount_minor', x.amount_minor))
+                   FROM (SELECT description, amount_minor FROM expense_items
+                          WHERE transaction_id = t.id ORDER BY position) x) AS items_json,
+                t.group_id, g.public_name AS group_name
          FROM transactions t
          JOIN transaction_versions v ON v.transaction_id = t.id AND v.is_current = 1
+         LEFT JOIN contribution_groups g ON g.id = t.group_id
          WHERE v.removed = 0 AND v.kind <> 'personal'
          ORDER BY v.occurred_at, t.id",
     )
@@ -62,6 +95,7 @@ pub async fn fundraiser_records(conn: &mut SqliteConnection) -> AppResult<Vec<Fu
         .into_iter()
         .map(|mut r: FundraiserRecord| {
             r.shares = parse_shares(&r.shares_json);
+            r.items = parse_items(&r.items_json);
             r
         })
         .collect())
@@ -93,17 +127,18 @@ impl Totals {
         let mut t = Totals { opening_funds_minor, ..Totals::default() };
         let mut pledges: BTreeMap<i64, i64> = BTreeMap::new();
         let mut bills: BTreeMap<i64, i64> = BTreeMap::new();
+        let mut givers = Givers::default();
 
         for r in records {
             let amount = r.amount_minor;
             match (r.kind, r.direction) {
                 (Kind::Contribution, _) => {
                     t.contributions_minor += amount;
-                    t.contributions_count += r.people();
+                    t.contributions_count += givers.count(r);
                 }
                 (Kind::Expense, _) => {
                     t.expenses_minor += amount;
-                    t.expenses_count += 1;
+                    t.expenses_count += r.things();
                 }
                 (Kind::Charge, _) => {
                     t.charges_minor += amount;
@@ -232,6 +267,63 @@ pub fn pledge_totals(progress: &[PledgeProgress]) -> PledgeTotals {
     totals
 }
 
+/// Where a bill stands, from the money paid and linked to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BillStatus {
+    /// Nothing paid yet.
+    NotPaid,
+    PartPaid,
+    FullyPaid,
+    /// More was paid than the bill: the bill or a payment may be wrong.
+    Overpaid,
+}
+
+/// One bill with what has been paid towards it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BillProgress {
+    pub id: i64,
+    pub total_minor: i64,
+    /// Payments out linked to the bill (may exceed it).
+    pub paid_minor: i64,
+    /// Still to pay, never below zero.
+    pub balance_minor: i64,
+    pub status: BillStatus,
+    /// The payments, oldest first.
+    pub payment_ids: Vec<i64>,
+}
+
+/// Every current bill, oldest first, with what has been paid towards it.
+pub fn bill_progress(records: &[FundraiserRecord]) -> Vec<BillProgress> {
+    let mut payments: BTreeMap<i64, Vec<&FundraiserRecord>> = BTreeMap::new();
+    for r in records.iter().filter(|r| r.kind == Kind::Expense) {
+        if let Some(link) = r.related_transaction_id {
+            payments.entry(link).or_default().push(r);
+        }
+    }
+    records
+        .iter()
+        .filter(|r| r.kind == Kind::Commitment)
+        .map(|r| {
+            let paid_by = payments.get(&r.id).map(Vec::as_slice).unwrap_or_default();
+            let paid: i64 = paid_by.iter().map(|p| p.amount_minor).sum();
+            BillProgress {
+                id: r.id,
+                total_minor: r.amount_minor,
+                paid_minor: paid,
+                balance_minor: (r.amount_minor - paid).max(0),
+                status: match paid {
+                    0 => BillStatus::NotPaid,
+                    p if p < r.amount_minor => BillStatus::PartPaid,
+                    p if p == r.amount_minor => BillStatus::FullyPaid,
+                    _ => BillStatus::Overpaid,
+                },
+                payment_ids: paid_by.iter().map(|p| p.id).collect(),
+            }
+        })
+        .collect()
+}
+
 /// What one challenge has brought in. Its money is part of the fundraiser's
 /// totals already; this only adds up the records linked to the challenge.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -254,13 +346,14 @@ pub struct ChallengeTotals {
 /// Every challenge's kitty, from the money received and pledged through it.
 pub fn challenge_totals(records: &[FundraiserRecord]) -> BTreeMap<i64, ChallengeTotals> {
     let mut by_challenge: BTreeMap<i64, ChallengeTotals> = BTreeMap::new();
+    let mut givers: BTreeMap<i64, Givers> = BTreeMap::new();
     for r in records {
         let Some(challenge) = r.challenge_id else { continue };
         let t = by_challenge.entry(challenge).or_default();
         match r.kind {
             Kind::Contribution => {
                 t.raised_minor += r.amount_minor;
-                t.contributions_count += r.people();
+                t.contributions_count += givers.entry(challenge).or_default().count(r);
                 if t.last_received_at.as_deref().is_none_or(|last| r.occurred_at.as_str() > last) {
                     t.last_received_at = Some(r.occurred_at.clone());
                 }
@@ -341,6 +434,10 @@ mod tests {
             matched: false,
             shares: Vec::new(),
             shares_json: String::new(),
+            items: Vec::new(),
+            items_json: String::new(),
+            group_id: None,
+            group_name: None,
         }
     }
 
@@ -396,5 +493,43 @@ mod tests {
         assert_eq!(kitty.last_received_at.as_deref(), Some("2024-06-03T00:00:00Z"));
         // The same money counts once in the fundraiser's totals.
         assert_eq!(Totals::from_records(&records, 0).contributions_minor, 12_500);
+    }
+
+    #[test]
+    fn merged_payments_count_as_one_giver_and_items_as_several_things() {
+        let merged = |id, amount| {
+            let mut r = rec(id, Kind::Contribution, Some(Direction::In), amount);
+            r.group_id = Some(1);
+            r
+        };
+        let mut clothes = rec(4, Kind::Expense, Some(Direction::Out), 10_000);
+        clothes.items = vec![
+            ExpenseItem { description: "Shoes".into(), amount_minor: 4_000 },
+            ExpenseItem { description: "Clothing".into(), amount_minor: 6_000 },
+        ];
+        let records =
+            vec![merged(1, 1_000), merged(2, 2_000), rec(3, Kind::Contribution, Some(Direction::In), 500), clothes];
+        let t = Totals::from_records(&records, 0);
+        assert_eq!((t.contributions_minor, t.contributions_count), (3_500, 2), "money counts in full, the family once");
+        assert_eq!((t.expenses_minor, t.expenses_count), (10_000, 2));
+    }
+
+    #[test]
+    fn a_bill_is_paid_in_parts_until_fully_paid() {
+        let paid = |id, amount| {
+            let mut r = rec(id, Kind::Expense, Some(Direction::Out), amount);
+            r.related_transaction_id = Some(1);
+            r
+        };
+        let bill = rec(1, Kind::Commitment, None, 10_000);
+        let status = |records: &[FundraiserRecord]| bill_progress(records)[0].clone();
+
+        assert_eq!(status(std::slice::from_ref(&bill)).status, BillStatus::NotPaid);
+        let part = status(&[bill.clone(), paid(2, 4_000)]);
+        assert_eq!((part.status, part.paid_minor, part.balance_minor), (BillStatus::PartPaid, 4_000, 6_000));
+        let full = status(&[bill.clone(), paid(2, 4_000), paid(3, 6_000)]);
+        assert_eq!((full.status, full.balance_minor, full.payment_ids), (BillStatus::FullyPaid, 0, vec![2, 3]));
+        let over = status(&[bill, paid(2, 4_000), paid(3, 7_000)]);
+        assert_eq!((over.status, over.balance_minor), (BillStatus::Overpaid, 0));
     }
 }

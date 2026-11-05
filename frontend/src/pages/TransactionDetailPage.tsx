@@ -1,16 +1,18 @@
-import { Archive, ArchiveRestore, ArrowLeft, Eye, EyeOff, FilePlus2, FileText, HandCoins, PencilLine, Save, Users } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, Eye, EyeOff, FilePlus2, FileText, HandCoins, ListTree, Merge, PencilLine, Save, Undo2, Unlink, Users } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
 import { LoadState, SaveError } from "@/components/LoadState";
 import { Amount, ChallengeTag, KindBadge, ReconciliationBadge, TransactionRow, itemLabel } from "@/components/money";
 import { PledgeGroupTag, PledgeProgressBar, PledgeStatusBadge } from "@/components/pledges";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { Checkbox, Field, Textarea } from "@/components/ui/form";
+import { Checkbox, Field, Input, Textarea } from "@/components/ui/form";
 import { Dialog } from "@/components/ui/dialog";
 import { Badge, Card, CardBody, CardHeader, Detail, Notice } from "@/components/ui/misc";
 import { ChangeList, actorName } from "@/features/audit";
 import { ChallengePicker, canJoinChallenge } from "@/features/challenges";
 import { SharesEditor, buildShares, draftsFrom, type ShareDraft } from "@/features/shares";
+import { ItemsEditor, buildItems, itemDraftsFrom, type ItemDraft } from "@/features/items";
+import { BillStatusBadge, billStatus } from "@/features/bills";
 import { MovementFields, apiDraftErrors, buildMovement, draftFromItem, type DraftErrors, type MovementDraft } from "@/features/movementForm";
 import { PresentationFields, presentationDraftFrom, toPresentation, type PresentationDraft } from "@/features/presentationFields";
 import { api, fieldError, useResource } from "@/lib/api";
@@ -36,6 +38,8 @@ export function TransactionDetailPage() {
   // A pledge's progress: the money received and linked to it.
   const pledgeReceived = d.linked.filter((l) => l.kind === "contribution" && !l.removed).reduce((s, l) => s + l.amount_minor, 0);
   const pledgeStatus: PledgeStatus = pledgeReceived === 0 ? "pledged" : pledgeReceived < t.amount_minor ? "part_received" : "received";
+  // A bill's progress: the money paid and linked to it.
+  const billPaid = d.linked.filter((l) => l.kind === "expense" && !l.removed).reduce((s, l) => s + l.amount_minor, 0);
 
   return (
     <div className="space-y-4">
@@ -51,9 +55,16 @@ export function TransactionDetailPage() {
             <KindBadge kind={t.kind} />
             <ReconciliationBadge status={t.reconciliation} />
             {t.removed && <Badge tone="neutral">Archived</Badge>}
+            {d.group && (
+              <Badge tone="info">
+                <Merge className="size-3.5" aria-hidden />
+                Merged as {d.group.public_name ?? settings.data?.anonymous_label ?? "Anonymous"}
+              </Badge>
+            )}
             {t.kind === "personal" && <Badge>Not counted in fundraiser totals</Badge>}
             {t.kind === "pledge" && t.pledged_by && <PledgeGroupTag by={t.pledged_by} />}
             {t.kind === "pledge" && !t.removed && <PledgeStatusBadge status={pledgeStatus} />}
+            {t.kind === "commitment" && !t.removed && <BillStatusBadge status={billStatus(t.amount_minor, billPaid)} />}
             {t.challenge_id && t.challenge_name && (
               <Link to={`/manage/challenges/${t.challenge_id}`} className="inline-flex max-w-full min-w-0 no-underline hover:no-underline">
                 <ChallengeTag name={t.challenge_name} />
@@ -86,6 +97,26 @@ export function TransactionDetailPage() {
             {pledgeStatus !== "received" && (
               <ButtonLink to={`/manage/add?pledge=${t.id}`} variant="secondary" icon={<HandCoins className="size-4" aria-hidden />}>
                 Record payment
+              </ButtonLink>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {t.kind === "commitment" && !t.removed && (
+        <Card>
+          <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-stone-600">
+                <span className="font-semibold text-stone-900">{formatKes(billPaid)}</span> of {formatKes(t.amount_minor)} paid
+                {billPaid < t.amount_minor && ` · ${formatKes(t.amount_minor - billPaid)} left to pay`}
+                {billPaid > t.amount_minor && ` · ${formatKes(billPaid - t.amount_minor)} more than the bill`}
+              </p>
+              <PledgeProgressBar received={billPaid} amount={t.amount_minor} className="mt-2 h-2.5" />
+            </div>
+            {billPaid < t.amount_minor && (
+              <ButtonLink to={`/manage/add?bill=${t.id}`} variant="secondary" icon={<HandCoins className="size-4" aria-hidden />}>
+                Record a payment
               </ButtonLink>
             )}
           </CardBody>
@@ -139,7 +170,9 @@ export function TransactionDetailPage() {
             <PresentationCard detail={d} anonymousLabel={settings.data?.anonymous_label} onSaved={detail.setData} />
           )}
           {t.kind === "personal" && <PresentationCard detail={d} onSaved={detail.setData} notesOnly />}
-          {!t.removed && t.kind === "contribution" && <SharesCard detail={d} anonymousLabel={settings.data?.anonymous_label} onSaved={detail.setData} />}
+          {d.group && <MergedCard detail={d} anonymousLabel={settings.data?.anonymous_label} onSaved={detail.setData} onChanged={detail.reload} />}
+          {!t.removed && t.kind === "contribution" && !d.group && <SharesCard detail={d} anonymousLabel={settings.data?.anonymous_label} onSaved={detail.setData} />}
+          {!t.removed && t.kind === "expense" && <ItemsCard detail={d} onSaved={detail.setData} />}
           {!t.removed && canJoinChallenge(t.kind) && <ChallengeCard detail={d} onSaved={detail.setData} />}
 
           {(t.kind === "expense" || receipts.length > 0) && <ReceiptsCard detail={d} receipts={receipts} onChanged={detail.reload} onSaved={detail.setData} />}
@@ -163,7 +196,7 @@ export function TransactionDetailPage() {
             <CardBody>
               {d.statement_links.length === 0 ? (
                 <p className="text-sm text-stone-600">
-                  {t.reconciliation === "not_applicable" ? "Cash, pledges and unpaid bills have no statement." : "Not yet matched to an uploaded statement."}
+                  {t.reconciliation === "not_applicable" ? "Cash, pledges and bills have no statement." : "Not yet matched to an uploaded statement."}
                 </p>
               ) : (
                 <ul className="space-y-3 text-sm">
@@ -313,6 +346,231 @@ function SharesCard({ detail, anonymousLabel, onSaved }: { detail: DetailData; a
           </ol>
         ) : (
           <p className="text-sm text-stone-600">From one person, listed under the public name above.</p>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * Several payments from one giver, listed publicly as one entry. Every payment
+ * keeps its message and history; separating them changes no money.
+ */
+function MergedCard({
+  detail,
+  anonymousLabel,
+  onSaved,
+  onChanged,
+}: {
+  detail: DetailData;
+  anonymousLabel?: string;
+  onSaved: (d: DetailData) => void;
+  onChanged: () => void;
+}) {
+  const group = detail.group!;
+  const t = detail.transaction;
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState(group.public_name ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [undoing, setUndoing] = useState(false);
+  const live = group.members.filter((m) => !m.removed);
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const rename = (event: FormEvent) => {
+    event.preventDefault();
+    void run(async () => {
+      await api.put(`/api/manage/merged/${group.id}`, { public_name: name.trim() || null });
+      setRenaming(false);
+      onChanged();
+    });
+  };
+  const separate = () => run(async () => onSaved(await api.post<DetailData>(`/api/manage/transactions/${t.id}/separate`, {})));
+  const undo = () =>
+    run(async () => {
+      await api.delete(`/api/manage/merged/${group.id}`);
+      setUndoing(false);
+      onChanged();
+    });
+
+  return (
+    <Card>
+      <CardHeader
+        title="Merged entry"
+        description={`Listed publicly as one entry: ${live.length} payments, ${formatKes(group.total_minor)} in all. Each payment keeps its message and history.`}
+        actions={
+          !renaming && (
+            <Button variant="secondary" size="sm" icon={<PencilLine className="size-4" aria-hidden />} onClick={() => (setName(group.public_name ?? ""), setRenaming(true))}>
+              Rename
+            </Button>
+          )
+        }
+      />
+      <CardBody className="space-y-4">
+        {renaming ? (
+          <form onSubmit={rename} className="space-y-3">
+            <Field label="Listed publicly as" htmlFor="merged-name" hint="Left empty, the entry shows the anonymous label.">
+              <Input id="merged-name" value={name} maxLength={80} placeholder={anonymousLabel} onChange={(e) => setName(e.target.value)} />
+            </Field>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" size="sm" busy={busy} icon={<Save className="size-4" aria-hidden />}>
+                Save name
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setRenaming(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <p className="text-[15px]">
+            <Merge className="mr-1.5 inline size-4 text-plum-700" aria-hidden />
+            <span className="font-semibold text-stone-900">{group.public_name ?? anonymousLabel ?? "Anonymous contributor"}</span>
+          </p>
+        )}
+
+        <ol className="divide-y divide-stone-100 rounded-lg border border-stone-200">
+          {group.members.map((m) => {
+            const messages = group.messages.filter((g) => g.transaction_id === m.id);
+            return (
+              <li key={m.id} className={m.id === t.id ? "bg-plum-50/60" : undefined}>
+                <div className="flex items-start justify-between gap-3 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-stone-900">
+                      {m.id === t.id ? (
+                        <>#{m.id} · this payment</>
+                      ) : (
+                        <Link to={`/manage/transactions/${m.id}`}>#{m.id} · {itemLabel(m)}</Link>
+                      )}
+                      {m.removed && <Badge tone="neutral" className="ml-2">Archived</Badge>}
+                    </p>
+                    <p className="text-sm text-stone-600">
+                      {formatNairobi(m.occurred_at)}
+                      {m.reference && ` · ${m.reference}`}
+                    </p>
+                  </div>
+                  <Amount minor={m.amount_minor} direction={m.direction} kind={m.kind} className={m.removed ? "line-through" : undefined} />
+                </div>
+                {messages.map((msg, i) => (
+                  <details key={i} className="px-3 pb-2.5">
+                    <summary className="cursor-pointer text-sm text-plum-800">Original message</summary>
+                    <p className="mt-1.5 rounded-md bg-stone-50 p-2.5 font-mono text-[13px] break-words whitespace-pre-wrap text-stone-700">{msg.text_content}</p>
+                  </details>
+                ))}
+              </li>
+            );
+          })}
+        </ol>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" busy={busy} icon={<Unlink className="size-4" aria-hidden />} onClick={() => void separate()}>
+            Take this payment out
+          </Button>
+          <Button variant="ghost" size="sm" icon={<Undo2 className="size-4" aria-hidden />} onClick={() => setUndoing(true)}>
+            Undo the merge
+          </Button>
+        </div>
+        <SaveError error={error} />
+      </CardBody>
+      <Dialog open={undoing} onClose={() => setUndoing(false)} title="Undo the merge?">
+        <p className="text-[15px] text-stone-700">
+          The {group.members.length} payments are listed on their own again, each under its own public name. No money changes and nothing is deleted.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button busy={busy} icon={<Undo2 className="size-4" aria-hidden />} onClick={() => void undo()}>
+            Undo the merge
+          </Button>
+          <Button variant="ghost" onClick={() => setUndoing(false)}>
+            Keep it merged
+          </Button>
+        </div>
+      </Dialog>
+    </Card>
+  );
+}
+
+/** What a payment out covered: one thing, or several, each with its part. No money moves when it changes. */
+function ItemsCard({ detail, onSaved }: { detail: DetailData; onSaved: (d: DetailData) => void }) {
+  const t = detail.transaction;
+  const items = t.items ?? [];
+  const [editing, setEditing] = useState(false);
+  const [rows, setRows] = useState<ItemDraft[]>(() => itemDraftsFrom(items));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  async function save(next: { description: string; amount_minor: number }[]) {
+    setBusy(true);
+    setError(undefined);
+    try {
+      onSaved(await api.put<DetailData>(`/api/manage/transactions/${t.id}/items`, { items: next }));
+      setEditing(false);
+    } catch (e) {
+      setError(fieldError(e, "items") ?? (e instanceof Error ? e.message : "The items could not be saved."));
+    } finally {
+      setBusy(false);
+    }
+  }
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const built = buildItems(rows, t.amount_minor);
+    if ("error" in built) setError(built.error);
+    else void save(built.items);
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="What it paid for"
+        description="One payment can cover several things. Each is listed on its own publicly; the money counts once."
+        actions={
+          !editing && (
+            <Button variant="secondary" size="sm" icon={<ListTree className="size-4" aria-hidden />} onClick={() => (setRows(itemDraftsFrom(items)), setEditing(true))}>
+              {items.length ? "Change the items" : "Break it down"}
+            </Button>
+          )
+        }
+      />
+      <CardBody>
+        {editing ? (
+          <form onSubmit={submit} className="space-y-3">
+            <ItemsEditor total={t.amount_minor} value={rows} onChange={setRows} error={error} />
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" size="sm" busy={busy} icon={<Save className="size-4" aria-hidden />}>
+                Save items
+              </Button>
+              {items.length > 0 && (
+                <Button type="button" variant="ghost" size="sm" busy={busy} onClick={() => void save([])}>
+                  Make it one payment again
+                </Button>
+              )}
+              <Button type="button" variant="ghost" size="sm" onClick={() => (setEditing(false), setError(undefined))}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : items.length ? (
+          <ol className="divide-y divide-stone-100 text-[15px]">
+            {items.map((item, i) => (
+              <li key={i} className="flex justify-between gap-3 py-1.5">
+                <span className="text-stone-800">
+                  <span className="mr-2 text-stone-400 tabular-nums">{i + 1}.</span>
+                  {item.description}
+                </span>
+                <span className="font-semibold tabular-nums">{formatKes(item.amount_minor)}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="text-sm text-stone-600">One thing, listed under the description above.</p>
         )}
       </CardBody>
     </Card>

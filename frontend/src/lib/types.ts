@@ -170,6 +170,10 @@ export interface ListItem {
   challenge_name: string | null;
   /** For a payment from several people: who it is from, each with their part. */
   shares: Share[];
+  /** For a payment out that covers several things: each thing with its part. */
+  items: ExpenseItem[];
+  /** The merged entry it is listed under publicly, with every payment in it. */
+  group: GroupSummary | null;
   /** Who recorded it (null for the system or imported data), and who changed it last and when. */
   created_by: string | null;
   last_changed_by: string | null;
@@ -177,6 +181,71 @@ export interface ListItem {
   receipt_count: number;
   reconciliation: ReconciliationStatus;
   attention: Attention[];
+}
+
+export interface ExpenseItem {
+  description: string;
+  amount_minor: number;
+}
+
+/** Several payments from one giver, listed publicly as one entry. */
+export interface GroupSummary {
+  id: number;
+  public_name: string | null;
+  /** Payments in it that count (archived ones are kept, not counted). */
+  count: number;
+  total_minor: number;
+}
+
+export interface GroupMessage {
+  transaction_id: number;
+  text_content: string;
+  created_at: string;
+}
+
+export interface GroupDetail {
+  id: number;
+  public_name: string | null;
+  total_minor: number;
+  /** Oldest first, archived ones included. */
+  members: ListItem[];
+  messages: GroupMessage[];
+}
+
+export type BillStatus = "not_paid" | "part_paid" | "fully_paid" | "overpaid";
+
+export interface BillPayment {
+  id: number;
+  amount_minor: number;
+  occurred_at: string;
+  account_name: string | null;
+  reference: string | null;
+}
+
+export interface Bill {
+  id: number;
+  total_minor: number;
+  paid_minor: number;
+  balance_minor: number;
+  status: BillStatus;
+  payment_ids: number[];
+  description: string;
+  occurred_at: string;
+  payments: BillPayment[];
+}
+
+export interface BillsResponse {
+  bills: Bill[];
+  totals: {
+    count: number;
+    total_minor: number;
+    paid_minor: number;
+    balance_minor: number;
+    not_paid: number;
+    part_paid: number;
+    fully_paid: number;
+    overpaid: number;
+  };
 }
 
 export interface ListResponse {
@@ -268,6 +337,8 @@ export interface Detail {
   statement_links: StatementLink[];
   related: ListItem | null;
   linked: ListItem[];
+  /** The merged entry it is listed under, with every payment and message in it. */
+  group: GroupDetail | null;
   history: ChangeEntry[];
 }
 
@@ -305,6 +376,8 @@ export interface CreateRequest {
   challenge_id?: number | null;
   /** For a payment from several people: who it is from. The parts must add up to the amount. */
   shares?: Share[] | null;
+  /** For a payment out that covered several things. The parts must add up to the amount. */
+  items?: ExpenseItem[] | null;
 }
 
 /** One person's part of a payment shared by several people. */

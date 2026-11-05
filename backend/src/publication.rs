@@ -262,12 +262,39 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
     let pick = |kinds: &[Kind]| -> Vec<PublicEntry> {
         newest_first(records.iter().filter(|r| kinds.contains(&r.kind)).map(entry).collect())
     };
+    // Payments merged into one entry are listed once, under the entry's name, on
+    // the day of the latest of them.
+    let mut merged: HashMap<i64, Vec<&FundraiserRecord>> = HashMap::new();
+    for r in records.iter().filter(|r| r.kind == Kind::Contribution) {
+        if let Some(group) = r.group_id {
+            merged.entry(group).or_default().push(r);
+        }
+    }
+    let merged_entry = |members: &[&FundraiserRecord]| -> PublicEntry {
+        let latest = members[members.len() - 1];
+        let total: i64 = members.iter().map(|m| m.amount_minor).sum();
+        let challenge = latest.challenge_id.filter(|c| members.iter().all(|m| m.challenge_id == Some(*c)));
+        PublicEntry {
+            label: latest.group_name.clone().unwrap_or_else(|| anonymous.clone()),
+            amount_minor: fundraiser.show_contribution_amounts.then_some(total),
+            // Several codes: a contributor checks theirs by code instead.
+            reference_hint: None,
+            matched_to_statement: members.iter().all(|m| m.matched),
+            receipts: members.iter().flat_map(|m| receipts.get(&m.id).cloned().unwrap_or_default()).collect(),
+            challenge_id: challenge.filter(|c| published_challenges.contains(c)),
+            ..entry(latest)
+        }
+    };
     // A payment from several people is listed once per person, with their part.
     let contributions = newest_first(
         records
             .iter()
             .filter(|r| r.kind == Kind::Contribution)
             .flat_map(|r| {
+                if let Some(members) = r.group_id.and_then(|g| merged.get(&g)) {
+                    let last = members[members.len() - 1];
+                    return if last.id == r.id { vec![merged_entry(members)] } else { Vec::new() };
+                }
                 let whole = entry(r);
                 if r.shares.is_empty() {
                     return vec![whole];
@@ -285,7 +312,28 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
             })
             .collect(),
     );
-    let spending = pick(&[Kind::Expense]);
+    // A payment out that covered several things is listed once per thing, with its part.
+    let spending = newest_first(
+        records
+            .iter()
+            .filter(|r| r.kind == Kind::Expense)
+            .flat_map(|r| {
+                let whole = entry(r);
+                if r.items.is_empty() {
+                    return vec![whole];
+                }
+                r.items
+                    .iter()
+                    .rev()
+                    .map(|i| PublicEntry {
+                        label: i.description.clone(),
+                        amount_minor: Some(i.amount_minor),
+                        ..whole.clone()
+                    })
+                    .collect()
+            })
+            .collect(),
+    );
     let charges = pick(&[Kind::Charge]);
     let refunds_and_reversals = pick(&[Kind::Refund, Kind::Reversal]);
     let unpaid_bills = pick(&[Kind::Commitment]);
@@ -530,9 +578,18 @@ pub async fn check_contribution(conn: &mut SqliteConnection, input: &str) -> App
     Ok(match found {
         None => CheckResult { found: false, contribution: None },
         Some((at, amount_minor, public_name, matched, id)) => {
-            // A shared payment is listed under each person who shared it.
+            // A shared payment is listed under each person who shared it, and a
+            // merged one under the merged entry's name.
             let shared = crate::transactions::shares(conn, id).await?;
-            let listed_as = if shared.is_empty() {
+            let merged_as: Option<Option<String>> = sqlx::query_scalar(
+                "SELECT g.public_name FROM transactions t JOIN contribution_groups g ON g.id = t.group_id WHERE t.id = ?",
+            )
+            .bind(id)
+            .fetch_optional(&mut *conn)
+            .await?;
+            let listed_as = if let Some(name) = merged_as {
+                name.unwrap_or(fundraiser.anonymous_label)
+            } else if shared.is_empty() {
                 public_name.unwrap_or(fundraiser.anonymous_label)
             } else {
                 shared

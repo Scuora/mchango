@@ -18,6 +18,7 @@ use crate::db;
 use crate::error::{AppError, AppResult};
 use crate::export;
 use crate::history::{self, Entity};
+use crate::money::Amount;
 use crate::publication::{self, PublicPage};
 use crate::reconciliation::{self, CreateFromRow, ImportDetail, ReconciledPeriod};
 use crate::reports;
@@ -57,6 +58,11 @@ pub fn routes(config: &Config) -> Router<AppState> {
         .route("/api/manage/transactions/{id}/corrections", post(correct_transaction))
         .route("/api/manage/transactions/{id}/challenge", put(set_transaction_challenge))
         .route("/api/manage/transactions/{id}/shares", put(set_transaction_shares))
+        .route("/api/manage/transactions/{id}/items", put(set_transaction_items))
+        .route("/api/manage/transactions/{id}/separate", post(separate_transaction))
+        .route("/api/manage/merged", post(merge_contributions))
+        .route("/api/manage/merged/{id}", put(rename_merged).delete(unmerge))
+        .route("/api/manage/bills", get(list_bills).post(create_bill))
         .route("/api/manage/transactions/{id}/restore", post(restore_transaction))
         .route("/api/manage/activity", get(activity))
         .route("/api/manage/transactions/{id}/receipts", post(upload_receipt).layer(upload_limit))
@@ -338,8 +344,11 @@ async fn set_transaction_challenge(
     Path(id): Path<i64>,
     Json(request): Json<SetChallenge>,
 ) -> AppResult<Json<Detail>> {
+    // Merged payments move together, so their entry stays in one place.
     let mut tx = db::begin_write(&state.pool).await?;
-    challenges::set_for_transaction(&mut tx, id, request.challenge_id).await?;
+    for member in transactions::merged_with(&mut tx, id).await? {
+        challenges::set_for_transaction(&mut tx, member, request.challenge_id).await?;
+    }
     tx.commit().await?;
     let mut conn = state.pool.acquire().await?;
     Ok(Json(transactions::detail(&mut conn, id).await?))
@@ -386,6 +395,279 @@ async fn set_transaction_shares(
     tx.commit().await?;
     let mut conn = state.pool.acquire().await?;
     Ok(Json(transactions::detail(&mut conn, id).await?))
+}
+
+#[derive(Deserialize)]
+struct SetItems {
+    /// Empty makes the payment one thing again.
+    items: Vec<transactions::ExpenseItemInput>,
+}
+
+async fn set_transaction_items(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(request): Json<SetItems>,
+) -> AppResult<Json<Detail>> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    transactions::set_items(&mut tx, id, request.items).await?;
+    tx.commit().await?;
+    let mut conn = state.pool.acquire().await?;
+    Ok(Json(transactions::detail(&mut conn, id).await?))
+}
+
+// ---------------------------------------------------------------------------
+// Merged contributions
+
+#[derive(Serialize)]
+struct Merged {
+    id: i64,
+}
+
+async fn merge_contributions(
+    State(state): State<AppState>,
+    Json(request): Json<transactions::MergeRequest>,
+) -> AppResult<Json<Merged>> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    let id = transactions::merge(&mut tx, request).await?;
+    tx.commit().await?;
+    Ok(Json(Merged { id }))
+}
+
+#[derive(Deserialize)]
+struct RenameMerged {
+    /// `null` lists the merged entry under the anonymous label.
+    public_name: Option<String>,
+}
+
+async fn rename_merged(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(request): Json<RenameMerged>,
+) -> AppResult<StatusCode> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    transactions::rename(&mut tx, id, request.public_name).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn unmerge(State(state): State<AppState>, Path(id): Path<i64>) -> AppResult<StatusCode> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    transactions::unmerge(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn separate_transaction(State(state): State<AppState>, Path(id): Path<i64>) -> AppResult<Json<Detail>> {
+    let mut tx = db::begin_write(&state.pool).await?;
+    transactions::separate(&mut tx, id).await?;
+    tx.commit().await?;
+    let mut conn = state.pool.acquire().await?;
+    Ok(Json(transactions::detail(&mut conn, id).await?))
+}
+
+// ---------------------------------------------------------------------------
+// Bills: what is owed, what has been paid towards it, and where each stands
+
+#[derive(Serialize)]
+struct BillPayment {
+    id: i64,
+    amount_minor: i64,
+    occurred_at: String,
+    account_name: Option<String>,
+    reference: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ManagedBill {
+    #[serde(flatten)]
+    progress: totals::BillProgress,
+    description: String,
+    occurred_at: String,
+    payments: Vec<BillPayment>,
+}
+
+#[derive(Serialize, Default)]
+struct BillTotals {
+    count: i64,
+    total_minor: i64,
+    paid_minor: i64,
+    balance_minor: i64,
+    not_paid: i64,
+    part_paid: i64,
+    fully_paid: i64,
+    overpaid: i64,
+}
+
+#[derive(Serialize)]
+struct BillsResponse {
+    /// Newest first.
+    bills: Vec<ManagedBill>,
+    totals: BillTotals,
+}
+
+async fn list_bills(State(state): State<AppState>) -> AppResult<Json<BillsResponse>> {
+    let mut conn = state.pool.acquire().await?;
+    let records = totals::fundraiser_records(&mut conn).await?;
+    let accounts = settings::accounts(&mut conn).await?;
+    let account_name = |id: Option<i64>| accounts.iter().find(|a| Some(a.id) == id).map(|a| a.name.clone());
+    let mut sums = BillTotals::default();
+    let mut bills = Vec::new();
+    for progress in totals::bill_progress(&records).into_iter().rev() {
+        let Some(bill) = records.iter().find(|r| r.id == progress.id) else { continue };
+        sums.count += 1;
+        sums.total_minor += progress.total_minor;
+        sums.paid_minor += progress.paid_minor;
+        sums.balance_minor += progress.balance_minor;
+        match progress.status {
+            totals::BillStatus::NotPaid => sums.not_paid += 1,
+            totals::BillStatus::PartPaid => sums.part_paid += 1,
+            totals::BillStatus::FullyPaid => sums.fully_paid += 1,
+            totals::BillStatus::Overpaid => sums.overpaid += 1,
+        }
+        let payments = progress
+            .payment_ids
+            .iter()
+            .filter_map(|id| records.iter().find(|r| r.id == *id))
+            .map(|p| BillPayment {
+                id: p.id,
+                amount_minor: p.amount_minor,
+                occurred_at: p.occurred_at.clone(),
+                account_name: account_name(p.account_id),
+                reference: p.reference.clone(),
+            })
+            .collect();
+        bills.push(ManagedBill {
+            description: bill.description.clone(),
+            occurred_at: bill.occurred_at.clone(),
+            payments,
+            progress,
+        });
+    }
+    Ok(Json(BillsResponse { bills, totals: sums }))
+}
+
+#[derive(Deserialize)]
+struct NewBill {
+    /// What the bill is for, shown publicly once money is paid towards it.
+    description: String,
+    /// The full amount owed.
+    total_minor: Amount,
+    /// When it was agreed (RFC 3339).
+    occurred_at: String,
+    /// Who is owed (private).
+    #[serde(default)]
+    counterparty: Option<String>,
+    #[serde(default)]
+    notes: String,
+    #[serde(default)]
+    client_key: Option<String>,
+    /// What has been paid already, if anything: one payment out, linked to the bill.
+    #[serde(default)]
+    paid: Option<FirstPayment>,
+}
+
+#[derive(Deserialize)]
+struct FirstPayment {
+    amount_minor: Amount,
+    occurred_at: String,
+    account_id: i64,
+    #[serde(default)]
+    reference: Option<String>,
+    #[serde(default)]
+    source_message: Option<String>,
+    #[serde(default)]
+    charge_minor: Option<Amount>,
+    #[serde(default)]
+    confirm_possible_duplicate: bool,
+}
+
+#[derive(Serialize)]
+struct NewBillCreated {
+    id: i64,
+    payment_id: Option<i64>,
+}
+
+/// Records a bill and, in the same step, whatever has already been paid towards it.
+async fn create_bill(
+    State(state): State<AppState>,
+    Json(request): Json<NewBill>,
+) -> AppResult<(StatusCode, Json<NewBillCreated>)> {
+    if request.description.trim().is_empty() {
+        return Err(AppError::field("description", "Say what the bill is for."));
+    }
+    let movement =
+        |kind, amount_minor, occurred_at, account_id, reference, related_transaction_id| transactions::MovementInput {
+            kind,
+            direction: None,
+            amount_minor,
+            occurred_at,
+            account_id,
+            to_account_id: None,
+            reference,
+            is_fee: false,
+            related_transaction_id,
+            counterparty: request.counterparty.clone(),
+        };
+    let presentation = |notes: String| Presentation {
+        public_name: None,
+        description: request.description.clone(),
+        notes,
+        pledged_by: None,
+    };
+    let mut tx = db::begin_write(&state.pool).await?;
+    let bill = transactions::create(
+        &mut tx,
+        CreateRequest {
+            movement: movement(
+                transactions::Kind::Commitment,
+                request.total_minor,
+                request.occurred_at.clone(),
+                None,
+                None,
+                None,
+            ),
+            presentation: presentation(request.notes.clone()),
+            source_message: None,
+            charge_minor: None,
+            client_key: request.client_key.clone(),
+            confirm_possible_duplicate: true,
+            challenge_id: None,
+            shares: None,
+            items: None,
+        },
+        "new bill",
+    )
+    .await?;
+    let mut payment_id = None;
+    if let Some(paid) = request.paid {
+        let origin = if paid.source_message.is_some() { "from pasted M-Pesa message" } else { "entered by hand" };
+        let created = transactions::create(
+            &mut tx,
+            CreateRequest {
+                movement: movement(
+                    transactions::Kind::Expense,
+                    paid.amount_minor,
+                    paid.occurred_at,
+                    Some(paid.account_id),
+                    paid.reference,
+                    Some(bill.id),
+                ),
+                presentation: presentation(String::new()),
+                source_message: paid.source_message,
+                charge_minor: paid.charge_minor,
+                client_key: None,
+                confirm_possible_duplicate: paid.confirm_possible_duplicate,
+                challenge_id: None,
+                shares: None,
+                items: None,
+            },
+            origin,
+        )
+        .await?;
+        payment_id = Some(created.id);
+    }
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(NewBillCreated { id: bill.id, payment_id })))
 }
 
 // ---------------------------------------------------------------------------

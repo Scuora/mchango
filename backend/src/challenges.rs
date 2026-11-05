@@ -627,7 +627,16 @@ pub async fn link_many(conn: &mut SqliteConnection, challenge_id: i64, transacti
         return Err(AppError::invalid("Add at most 200 records at a time."));
     }
     get(conn, challenge_id).await?;
+    // Merged payments join together, so their entry stays in one place.
+    let mut ids = Vec::new();
     for &id in transaction_ids {
+        for member in crate::transactions::merged_with(conn, id).await? {
+            if !ids.contains(&member) {
+                ids.push(member);
+            }
+        }
+    }
+    for id in ids {
         set_for_transaction(conn, id, Some(challenge_id)).await.map_err(|e| match e {
             AppError::Invalid { message, .. } => AppError::invalid(format!("Transaction #{id}: {message}")),
             AppError::NotFound(_) => AppError::invalid(format!("Transaction #{id} was not found.")),

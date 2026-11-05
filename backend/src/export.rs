@@ -14,7 +14,8 @@ pub async fn transactions_csv(conn: &mut SqliteConnection) -> AppResult<String> 
     let mut out = String::from(
         "id,version,transaction_time_nairobi,recorded_at_utc,type,direction,amount_kes,account,to_account,\
          reference,is_charge_line,counts_for_fundraiser,public_name,description,private_notes,counterparty,\
-         statement_status,archived,challenge,shared_among,recorded_by,last_changed_by,last_changed_at_utc\n",
+         statement_status,archived,challenge,shared_among,items,merged_as,recorded_by,last_changed_by,\
+         last_changed_at_utc\n",
     );
     for t in items {
         let local = clock::parse_instant(&t.occurred_at)
@@ -56,6 +57,18 @@ pub async fn transactions_csv(conn: &mut SqliteConnection) -> AppResult<String> 
                 })
                 .collect::<Vec<_>>()
                 .join("; "),
+            t.items
+                .iter()
+                .map(|i| {
+                    let amount = format_kes(i.amount_minor).trim_start_matches("KES ").replace(',', "");
+                    format!("{} {amount}", i.description)
+                })
+                .collect::<Vec<_>>()
+                .join("; "),
+            t.group
+                .as_ref()
+                .map(|g| format!("#{} {}", g.id, g.public_name.as_deref().unwrap_or("anonymous")))
+                .unwrap_or_default(),
             t.created_by.clone().unwrap_or_else(|| "system".into()),
             t.last_changed_by.clone().unwrap_or_else(|| "system".into()),
             t.last_changed_at.clone().unwrap_or_default(),
@@ -76,12 +89,15 @@ fn csv_field(value: &str) -> String {
     if v.contains([',', '"', '\n', '\r']) { format!("\"{}\"", v.replace('"', "\"\"")) } else { v }
 }
 
-const TABLES: [(&str, &str); 9] = [
+const TABLES: [(&str, &str); 12] = [
     ("fundraiser", "SELECT * FROM fundraiser"),
     ("accounts", "SELECT * FROM accounts ORDER BY id"),
     ("challenges", "SELECT * FROM challenges ORDER BY id"),
     ("transactions", "SELECT * FROM transactions ORDER BY id"),
     ("transaction_versions", "SELECT * FROM transaction_versions ORDER BY transaction_id, version"),
+    ("contribution_shares", "SELECT * FROM contribution_shares ORDER BY transaction_id, position"),
+    ("contribution_groups", "SELECT * FROM contribution_groups ORDER BY id"),
+    ("expense_items", "SELECT * FROM expense_items ORDER BY transaction_id, position"),
     ("documents", "SELECT * FROM documents ORDER BY id"),
     ("statement_imports", "SELECT * FROM statement_imports ORDER BY id"),
     ("statement_rows", "SELECT * FROM statement_rows ORDER BY import_id, position"),

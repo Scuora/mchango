@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { AlertTriangle, CheckCircle2, CircleDashed, FileWarning, GitCompareArrows, Trophy } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleDashed, FileWarning, GitCompareArrows, ListTree, Merge, Trophy } from "lucide-react";
 import { Link } from "react-router";
 import { formatKes } from "@/lib/money";
 import { ATTENTION_LABELS, KIND_LABELS, RECONCILIATION_LABELS } from "@/lib/labels";
@@ -77,20 +77,59 @@ export function ChallengeTag({ name }: { name: string }) {
   );
 }
 
-export function TransactionRow({ item }: { item: ListItem }) {
+/**
+ * One record in a list. `combined` shows a merged entry as one line (its name and
+ * total); `select` adds a tick box beside it for choosing payments to merge.
+ */
+export function TransactionRow({
+  item,
+  combined = false,
+  select,
+}: {
+  item: ListItem;
+  combined?: boolean;
+  select?: { checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean };
+}) {
+  const asGroup = combined && item.group && item.group.count > 1 ? item.group : null;
   return (
-    <li>
+    <li className={clsx(select && "flex items-start", select?.checked && "bg-plum-50/60")}>
+      {select && (
+        <label className="grid min-h-11 shrink-0 cursor-pointer place-items-center self-stretch pl-4 sm:pl-5" title={select.disabled ? "Only money received from one person can be merged" : undefined}>
+          <input
+            type="checkbox"
+            aria-label={`Choose ${itemLabel(item)}`}
+            className="size-5 rounded border-stone-400 accent-plum-700 disabled:opacity-30"
+            checked={select.checked}
+            disabled={select.disabled}
+            onChange={(e) => select.onChange(e.target.checked)}
+          />
+        </label>
+      )}
       <Link
         to={`/manage/transactions/${item.id}`}
-        className="flex items-start gap-3 px-4 py-3 hover:bg-stone-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-plum-600 sm:px-5"
+        className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3 hover:bg-stone-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-plum-600 sm:px-5"
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={clsx("font-medium text-stone-900", item.removed && "line-through decoration-stone-400")}>{itemLabel(item)}</span>
+            <span className={clsx("font-medium text-stone-900", item.removed && "line-through decoration-stone-400")}>
+              {asGroup ? (asGroup.public_name ?? "Anonymous") : itemLabel(item)}
+            </span>
             {item.removed && <Badge tone="neutral">Archived</Badge>}
+            {item.group && (
+              <Badge tone="info">
+                <Merge className="size-3.5" aria-hidden />
+                {asGroup ? `${asGroup.count} payments merged` : `Merged as ${item.group.public_name ?? "Anonymous"}`}
+              </Badge>
+            )}
+            {(item.items?.length ?? 0) > 0 && (
+              <Badge tone="neutral">
+                <ListTree className="size-3.5" aria-hidden />
+                {item.items?.length} items
+              </Badge>
+            )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-stone-600">
-            <span>{formatNairobi(item.occurred_at)}</span>
+            <span>{asGroup ? `Latest ${formatNairobi(item.occurred_at)}` : formatNairobi(item.occurred_at)}</span>
             <KindBadge kind={item.kind} />
             {item.kind === "pledge" && item.pledged_by && <PledgeGroupTag by={item.pledged_by} />}
             {item.kind === "personal" && <span className="text-xs text-stone-500">not counted</span>}
@@ -105,7 +144,7 @@ export function TransactionRow({ item }: { item: ListItem }) {
             ))}
           </div>
         </div>
-        <Amount minor={item.amount_minor} direction={item.direction} kind={item.kind} className="pt-0.5 text-right" />
+        <Amount minor={asGroup ? asGroup.total_minor : item.amount_minor} direction={item.direction} kind={item.kind} className="pt-0.5 text-right" />
       </Link>
     </li>
   );

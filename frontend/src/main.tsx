@@ -28,6 +28,7 @@ const OverviewPage = lazyPage("OverviewPage");
 const AddTransactionPage = lazyPage("AddTransactionPage");
 const TransactionsPage = lazyPage("TransactionsPage");
 const PledgesPage = lazyPage("PledgesPage");
+const BillsPage = lazyPage("BillsPage");
 const AccountsPage = lazyPage("AccountsPage");
 const ActivityPage = lazyPage("ActivityPage");
 const ChallengesPage = lazyPage("ChallengesPage");
@@ -85,6 +86,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="add" element={<AddTransactionPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="pledges" element={<PledgesPage />} />
+          <Route path="bills" element={<BillsPage />} />
           <Route path="accounts" element={<AccountsPage />} />
           <Route path="activity" element={<ActivityPage />} />
           <Route path="challenges" element={<ChallengesPage />} />
