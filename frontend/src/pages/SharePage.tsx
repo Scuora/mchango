@@ -138,7 +138,7 @@ export function SharePage() {
             <fieldset>
               <legend className="mb-1 text-sm font-medium text-stone-800">Accounts to report</legend>
               <p className="mb-1 text-sm text-stone-600">
-                Each account gets its own list and what it holds. With more than one, a summary adds them up. The goal is shown when every account is ticked.
+                Each account gets its own list and what it holds. With more than one, a summary adds them up.
               </p>
               {!accounts.data && <LoadState loading={accounts.loading} error={accounts.error} onRetry={accounts.reload} label="Loading accounts" />}
               {accountList.map((a) => {

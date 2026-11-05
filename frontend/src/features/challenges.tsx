@@ -4,14 +4,13 @@
 import { Check, Copy, MessageCircle, Plus, Save, Trash2, Trophy } from "lucide-react";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { SaveError } from "@/components/LoadState";
-import { PledgeProgressBar } from "@/components/pledges";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Field, Input, Textarea } from "@/components/ui/form";
 import { Badge, Card, CardBody, CardHeader } from "@/components/ui/misc";
 import { Choice, DateField } from "@/components/ui/pickers";
 import { api, fieldError, useResource } from "@/lib/api";
 import { STARTERS, TEMPLATE_GROUPS, buildChallengeUpdate, fillTemplate, type ChallengeEntry, type ShareLang } from "@/lib/challengeShare";
-import { formatKesShort, parseKes } from "@/lib/money";
+import { formatKesShort } from "@/lib/money";
 import { formatNairobiDate } from "@/lib/time";
 import type { Account, AccountKind, ChallengeInput, ChallengeMessage, ChallengeSummary, Detail, Fundraiser, GivingMethod, Kind, ListItem, ListResponse, PublicPreview } from "@/lib/types";
 import { copyText } from "@/public/share";
@@ -88,7 +87,7 @@ export function challengeDates(c: { starts_on: string | null; ends_on: string | 
   return null;
 }
 
-/** Raised so far, and the way to its own target when it has one. */
+/** Raised so far, and what the challenge still holds (no targets: only what has come in, been spent and remains is reported). */
 export function ChallengeProgress({ challenge, large = false }: { challenge: ChallengeSummary; large?: boolean }) {
   const t = challenge.totals;
   return (
@@ -96,10 +95,7 @@ export function ChallengeProgress({ challenge, large = false }: { challenge: Cha
       <p className={large ? "text-3xl font-semibold tabular-nums" : "text-2xl font-semibold tabular-nums"}>{formatKesShort(t.raised_minor)}</p>
       <p className="text-sm text-stone-600">
         raised from {t.contributions_count} contribution{t.contributions_count === 1 ? "" : "s"}
-        {challenge.target_minor ? ` · target ${formatKesShort(challenge.target_minor)}` : ""}
-        {t.pledged_outstanding_minor > 0 ? ` · ${formatKesShort(t.pledged_outstanding_minor)} pledged, not yet received` : ""}
       </p>
-      {challenge.target_minor ? <PledgeProgressBar received={t.raised_minor} amount={challenge.target_minor} className="mt-2.5 h-2.5" /> : null}
       {t.held_minor !== null && (
         <p className="mt-2 text-sm text-stone-600">
           <span className="font-semibold text-stone-800">{formatKesShort(t.held_minor)}</span> held in {challenge.account_name ?? "its account"}, to be handed over ·{" "}
@@ -195,7 +191,7 @@ function MessagesField({ value, onChange, error }: { value: ChallengeMessage[]; 
       {value.length < 10 && unused.length > 0 && (
         <div>
           <p className="text-sm font-medium text-stone-700">Or start from a ready-made message</p>
-          <p className="text-sm text-stone-600">They suit any challenge: a line whose figure the challenge does not have, such as a target, is left out.</p>
+          <p className="text-sm text-stone-600">They suit any challenge: a line whose figure the challenge does not have is left out.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {unused.map((s) => (
               <Button key={s.title} type="button" variant="ghost" size="sm" icon={<Plus className="size-4" aria-hidden />} onClick={() => onChange([...value, s])}>
@@ -419,8 +415,6 @@ export function CopyUpdateButton({ text, label, disabled }: { text: () => string
 
 export function ChallengeEditor({ id, initial, onDone, onCancel }: { id: number | null; initial: ChallengeInput; onDone: (saved: ChallengeSummary) => void; onCancel: () => void }) {
   const [input, setInput] = useState(initial);
-  const [target, setTarget] = useState(initial.target_minor ? String(initial.target_minor / 100) : "");
-  const [targetError, setTargetError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const set = <K extends keyof ChallengeInput>(key: K, value: ChallengeInput[K]) => setInput((i) => ({ ...i, [key]: value }));
@@ -429,20 +423,11 @@ export function ChallengeEditor({ id, initial, onDone, onCancel }: { id: number 
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    let target_minor: number | null = null;
-    if (target.trim()) {
-      const parsed = parseKes(target);
-      if (!parsed.ok) {
-        setTargetError(parsed.error);
-        return;
-      }
-      target_minor = parsed.minor;
-    }
-    setTargetError(undefined);
     setBusy(true);
     setError(null);
     try {
-      const body = { ...input, target_minor };
+      // Challenges have no targets: only what has come in, been spent and remains is reported.
+      const body = { ...input, target_minor: null };
       const saved = id === null ? await api.post<ChallengeSummary>("/api/manage/challenges", body) : await api.put<ChallengeSummary>(`/api/manage/challenges/${id}`, body);
       onDone(saved);
     } catch (e) {
@@ -463,10 +448,7 @@ export function ChallengeEditor({ id, initial, onDone, onCancel }: { id: number 
           <Field label="How it works" htmlFor="ch-description" optional error={fieldError(error, "description")} hint="The rules or the dare, in a few lines. Shown in updates and on the public page.">
             <Textarea id="ch-description" rows={4} value={input.description} onChange={(e) => set("description", e.target.value)} />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Challenge target (KES)" htmlFor="ch-target" optional error={targetError ?? fieldError(error, "target_minor")}>
-              <Input id="ch-target" inputMode="decimal" value={target} placeholder="e.g. 50,000" tone={targetError ? "invalid" : "normal"} onChange={(e) => setTarget(e.target.value)} />
-            </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Starts" htmlFor="ch-start" optional error={fieldError(error, "starts_on")}>
               <DateField id="ch-start" value={input.starts_on ?? ""} onChange={(v) => set("starts_on", v || null)} />
             </Field>

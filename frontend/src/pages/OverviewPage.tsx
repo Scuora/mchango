@@ -2,13 +2,11 @@ import { AlertTriangle, ArrowRight, FileUp, GitCompareArrows, Loader2, Megaphone
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { CountUp } from "@/components/CountUp";
-import { GoalBar } from "@/components/GoalBar";
 import { LoadState } from "@/components/LoadState";
 import { TransactionRow } from "@/components/money";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, EmptyState } from "@/components/ui/misc";
 import { useResource } from "@/lib/api";
-import { familyOf, goalOf } from "@/lib/goal";
 import { formatKes, formatKesShort } from "@/lib/money";
 import { formatNairobiDate } from "@/lib/time";
 import type { Overview } from "@/lib/types";
@@ -43,7 +41,6 @@ export function OverviewPage() {
   const { fundraiser, totals } = overview.data;
   const o = overview.data;
   const refundsNet = totals.refunds_paid_minor - totals.refunds_received_minor;
-  const goal = goalOf(fundraiser.target_minor, o.pledges, totals.contributions_minor);
   const latest = o.reconciled_periods[0];
   const attentionCount = o.needs_review + o.missing_receipts + o.statement_rows_to_resolve + o.imports_in_progress;
 
@@ -65,23 +62,6 @@ export function OverviewPage() {
           Post an update
         </ButtonLink>
       </div>
-
-      {goal && (
-        <Card>
-          <CardHeader
-            title={goal.target !== null ? `Goal: ${formatKes(goal.target)}` : "Pledges"}
-            description="The part received from the family, then what family, friends and well-wishers are asked for. Link money received to its pledge so it is counted on the right side."
-            actions={
-              <ButtonLink to="/manage/pledges" variant="secondary" size="sm">
-                Pledges
-              </ButtonLink>
-            }
-          />
-          <CardBody>
-            <GoalBar goal={goal} family={familyOf(fundraiser.memorial_name)} />
-          </CardBody>
-        </Card>
-      )}
 
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="Contributions received" value={formatKes(totals.contributions_minor)} amount={totals.contributions_minor} note={`${totals.contributions_count} contributions`} />
@@ -227,23 +207,6 @@ export function OverviewPage() {
           </Card>
         )}
 
-        {(totals.pledged_outstanding_minor > 0 || totals.unpaid_bills_minor > 0) && (
-          <Card>
-            <CardHeader title="Promises" description="Not money yet; not in the totals above." />
-            <CardBody>
-              <dl className="divide-y divide-stone-100 text-[15px]">
-                <div className="flex justify-between gap-3 py-2">
-                  <dt className="text-stone-700">Pledged, not yet received</dt>
-                  <dd className="font-semibold tabular-nums">{formatKes(totals.pledged_outstanding_minor)}</dd>
-                </div>
-                <div className="flex justify-between gap-3 py-2">
-                  <dt className="text-stone-700">Unpaid bills</dt>
-                  <dd className="font-semibold tabular-nums">{formatKes(totals.unpaid_bills_minor)}</dd>
-                </div>
-              </dl>
-            </CardBody>
-          </Card>
-        )}
       </div>
 
       <Card>

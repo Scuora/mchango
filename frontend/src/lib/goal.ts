@@ -1,61 +1,5 @@
-// The funeral budget as the family presents it: the family pledges its own
-// share first, and friends and well-wishers are asked for the rest. Pledges
-// are promises; money received is linked to the pledge it fulfils, so it is
-// never counted twice and each side shows what is promised and what is in.
-
-import type { PledgeTotals, PledgedBy } from "./types";
-
-export interface Goal {
-  target: number | null;
-  /** What the family has pledged in all. */
-  familyPledged: number;
-  /** Money received against the family's pledges. */
-  familyReceived: number;
-  /** The family's pledges not yet received. */
-  familyOutstanding: number;
-  /** Every other contribution: friends and well-wishers, pledged or not. */
-  othersReceived: number;
-  /** Friends' pledges not yet received. */
-  othersOutstanding: number;
-  /** The part of the target asked of friends and well-wishers. */
-  othersShare: number | null;
-  /**
-   * The target less the family's share and the money received from others, never
-   * below zero. Pledges not yet received are not subtracted: they are not money
-   * yet, so "still needed" never looks smaller than the account bears out.
-   */
-  stillNeeded: number | null;
-}
-
-export function goalOf(target: number | null, pledges: PledgeTotals | null, contributions: number): Goal | null {
-  const family = pledges?.family;
-  const friends = pledges?.friends;
-  if (!target && !family?.count && !friends?.count) return null;
-  const familyPledged = family?.pledged_minor ?? 0;
-  const familyReceived = family?.received_minor ?? 0;
-  const familyOutstanding = family?.outstanding_minor ?? 0;
-  const othersReceived = Math.max(0, contributions - familyReceived);
-  const othersOutstanding = friends?.outstanding_minor ?? 0;
-  // The family's share counts as received from the family (see GoalBar); other pledges do not count until paid.
-  const covered = familyPledged + othersReceived;
-  return {
-    target,
-    familyPledged,
-    familyReceived,
-    familyOutstanding,
-    othersReceived,
-    othersOutstanding,
-    othersShare: target ? Math.max(0, target - familyPledged) : null,
-    stillNeeded: target ? Math.max(0, target - covered) : null,
-  };
-}
-
-/**
- * Whether a pledge is listed publicly as a pledge. The family's share is shown
- * as received from the family, so only pledges from family, friends and
- * well-wishers are listed (and counted as "not yet received").
- */
-export const listedAsPledge = (p: { pledged_by: PledgedBy }) => p.pledged_by === "friends";
+// The family's name for messages: "the family of Karisa Gonzi" from the memorial name.
+// (The fundraiser no longer reports a goal, what is still needed or pledges not yet in.)
 
 /** Titles before a name, which are not part of the family's name. */
 const TITLE = /^(dr|dkt|prof|mzee|mr|mrs|ms|rev|hon|eng|sir|bishop|pastor)\.?$/i;
@@ -69,4 +13,3 @@ export function familyOf(memorialName: string | null | undefined, lang: "en" | "
   return lang === "sw" ? `familia ya ${surname}` : `the family of ${surname}`;
 }
 
-export const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);

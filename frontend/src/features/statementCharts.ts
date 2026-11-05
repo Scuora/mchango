@@ -393,9 +393,9 @@ export interface Flow {
 }
 
 /**
- * The statement's charts, in order: progress to the goal (or the challenge's
- * target), money received over time and by day, where the money went, the
- * largest expenses, where the money is, and each challenge's progress. A chart
+ * The statement's charts, in order: money received over time and by day, where
+ * the money went, the largest expenses, where the money is, and what each
+ * challenge has received (never a goal, target or anything pending). A chart
  * appears only when there is enough to show.
  */
 export function drawCharts(doc: jsPDF, r: StatementReport, kind: "full" | "received" | "spent", flow: Flow, x: number, w: number) {
