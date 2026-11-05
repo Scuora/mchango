@@ -1,5 +1,5 @@
 // Pieces of the funeral programme shared by the programme pages, the navbar and
-// the home page: the live clock, the status wording and the day cards.
+// the home page: the live clock, the status wording and the day badges.
 
 import { clsx } from "clsx";
 import { useEffect, useMemo, useState } from "react";
