@@ -13,7 +13,6 @@ import {
   FuneralCard,
   FundsCard,
   GiveCard,
-  GoalCard,
   LatestUpdate,
   LedgerCard,
   OrganisersCard,
@@ -101,7 +100,6 @@ export function HomePage() {
       <LatestUpdate page={page} />
       <ChallengesLink page={page} />
       <TrendsLink page={page} />
-      <GoalCard page={page} />
       {nothingYet ? (
         <DayOneCard page={page} />
       ) : (
@@ -229,8 +227,6 @@ export function ExpensesPage() {
   const tr = useTr();
   const t = page.totals;
   const otherOut = [...page.refunds_and_reversals];
-  // The family's share counts as received from the family, so only other pledges are "not yet received".
-  const pledgedOutstanding = page.fundraiser.pledges.friends.outstanding_minor;
   return (
     <>
       <PageHeader title={tr("Expenses", "Matumizi")}>
@@ -262,30 +258,6 @@ export function ExpensesPage() {
           <PublicCard>
             <CardTitle>{tr("Refunds and reversals", "Marejesho na miamala iliyobatilishwa")}</CardTitle>
             <EntryRows entries={otherOut} showTime={false} />
-          </PublicCard>
-        )}
-        {page.promises && (page.promises.unpaid_bills.length > 0 || pledgedOutstanding > 0) && (
-          <PublicCard>
-            <CardTitle>{tr("Not yet money", "Bado si pesa")}</CardTitle>
-            {page.promises.unpaid_bills.length > 0 && (
-              <>
-                <p className="text-stone-700">
-                  {tr(
-                    `Bills agreed but not yet paid (${kes(page.promises.unpaid_bills_minor)}). They are not counted as spent.`,
-                    `Bili zilizokubaliwa lakini bado hazijalipwa (${kes(page.promises.unpaid_bills_minor)}). Hazihesabiwi kama zimetumika.`,
-                  )}
-                </p>
-                <EntryRows entries={page.promises.unpaid_bills} showTime={false} />
-              </>
-            )}
-            {pledgedOutstanding > 0 && (
-              <p className="mt-2 text-stone-700">
-                {tr(
-                  `${kes(pledgedOutstanding)} has been pledged but not yet received. It is not counted as received.`,
-                  `${kes(pledgedOutstanding)} zimeahidiwa lakini bado hazijapokelewa. Hazihesabiwi kama zimepokelewa.`,
-                )}
-              </p>
-            )}
           </PublicCard>
         )}
       </div>

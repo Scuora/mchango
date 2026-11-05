@@ -2,13 +2,11 @@
 // data only, so nothing private can appear.
 
 import { clsx } from "clsx";
-import { ArrowRight, Check, ChevronDown, Copy, FileText, MapPin, Megaphone, Phone, Share2 } from "lucide-react";
+import { Check, ChevronDown, Copy, FileText, MapPin, Megaphone, Phone, Share2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { formatKesShort } from "@/lib/money";
 import { CountUp } from "@/components/CountUp";
-import { GoalBar } from "@/components/GoalBar";
-import { capitalise, familyOf, goalOf, listedAsPledge } from "@/lib/goal";
 import { formatNairobiLongDate, formatShortDate, formatShortDateTime } from "@/lib/time";
 import type { PublicEntry, PublicPage } from "@/lib/types";
 import { localiseDates, localiseName, useLang, useTr } from "./i18n";
@@ -212,61 +210,6 @@ function Swatch({ color, hollow }: { color: string; hollow?: boolean }) {
       style={hollow ? { boxShadow: `inset 0 0 0 1.5px ${color}` } : { background: color }}
       aria-hidden
     />
-  );
-}
-
-/** The target: the part paid by the deceased's family, then what family, friends and well-wishers are asked to raise. */
-export function GoalCard({ page }: { page: PublicPage }) {
-  const tr = useTr();
-  const lang = useLang();
-  const f = page.fundraiser;
-  const goal = goalOf(f.target_minor, f.pledges, page.totals.contributions_minor);
-  if (!goal) return null;
-  const { target, familyPledged, othersShare, stillNeeded } = goal;
-  const family = familyOf(f.memorial_name, lang);
-  return (
-    <PublicCard className="relative overflow-hidden">
-      <div aria-hidden className="card-glow pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-ochre-200/40 blur-3xl" />
-      <div className="relative">
-        <p className="mb-1 text-[13px] font-semibold tracking-[0.14em] text-stone-500 uppercase">{tr("The goal", "Lengo")}</p>
-        {target !== null ? (
-          <>
-            <p className="font-display text-[2.6rem] leading-none font-semibold text-stone-900">
-              <CountUp value={target} format={kes} />
-            </p>
-            <p className="mt-1.5 text-[15px] text-stone-600">{tr("needed in all", "kinachohitajika kwa jumla")}</p>
-          </>
-        ) : (
-          <h2 className="font-display text-[1.65rem] leading-tight font-semibold text-stone-900">{capitalise(family)}</h2>
-        )}
-        <p className="mt-3 text-[16px] leading-relaxed text-stone-700">
-          {familyPledged > 0 && target !== null && othersShare !== null ? (
-            <>
-              <strong className="font-semibold text-stone-900">{kes(familyPledged)}</strong>
-              {tr(` has been received from ${family}. Family, friends and well-wishers are kindly asked to help with the remaining `, ` zimepokelewa kutoka kwa ${family}. Familia, marafiki na wahisani wanaombwa kwa upole kusaidia kiasi kilichobaki cha `)}
-              <strong className="font-semibold text-stone-900">{kes(othersShare)}</strong>.
-            </>
-          ) : familyPledged > 0 ? (
-            <>
-              <strong className="font-semibold text-stone-900">{kes(familyPledged)}</strong>
-              {tr(` has been received from ${family} towards the funeral.`, ` zimepokelewa kutoka kwa ${family} kwa ajili ya mazishi.`)}
-            </>
-          ) : (
-            tr("Every contribution, large or small, helps the family give him a dignified send-off.", "Kila mchango, mkubwa au mdogo, unaisaidia familia kumpa mazishi ya heshima.")
-          )}
-        </p>
-        <GoalBar goal={goal} family={family} className="mt-5" />
-        {page.promises?.pledges.some(listedAsPledge) && (
-          <Link to="/contributions?view=pledges" className="group mt-2 inline-flex min-h-11 items-center gap-1.5 font-semibold">
-            {tr("See every pledge", "Tazama ahadi zote")}
-            <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" aria-hidden />
-          </Link>
-        )}
-        {stillNeeded === 0 && (
-          <p className="mt-3 rounded-xl bg-sage-50 px-4 py-3 text-[15px] text-sage-800">{tr("The target has been reached. Thank you, all of you.", "Lengo limefikiwa. Asanteni nyote.")}</p>
-        )}
-      </div>
-    </PublicCard>
   );
 }
 

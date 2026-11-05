@@ -1,6 +1,5 @@
 import { HandCoins, Trophy } from "lucide-react";
 import { Link } from "react-router";
-import { PledgeProgressBar } from "@/components/pledges";
 import { buildChallengeUpdate } from "@/lib/challengeShare";
 import { formatNairobiDate } from "@/lib/time";
 import type { PublicChallenge, PublicPage } from "@/lib/types";
@@ -40,8 +39,8 @@ export function ChallengesPage() {
     <>
       <PageHeader title={tr("Challenges", "Changamoto")}>
         {tr(
-          "Games and dares from family and friends to keep the fundraiser going. Every shilling goes to the same funeral fund and counts towards the main target.",
-          "Michezo na changamoto kutoka kwa familia na marafiki ili kuendeleza mchango. Kila shilingi inaingia kwenye mfuko uleule wa mazishi na inahesabiwa kwenye lengo kuu.",
+          "Games and dares from family and friends to keep the fundraiser going. Every shilling goes to the same funeral fund.",
+          "Michezo na changamoto kutoka kwa familia na marafiki ili kuendeleza mchango. Kila shilingi inaingia kwenye mfuko uleule wa mazishi.",
         )}
       </PageHeader>
       <div className="mx-auto max-w-3xl space-y-4 px-4 pt-4 md:px-6">
@@ -79,20 +78,13 @@ export function ChallengesPage() {
                     `raised from ${c.contributions_count} contribution${c.contributions_count === 1 ? "" : "s"}`,
                     `zimechangwa kutoka michango ${c.contributions_count}`,
                   )}
-                  {c.target_minor ? tr(` · target ${kes(c.target_minor)}`, ` · lengo ${kes(c.target_minor)}`) : ""}
                 </p>
-                {c.target_minor ? <PledgeProgressBar received={c.raised_minor} amount={c.target_minor} className="mt-3 h-2.5" /> : null}
                 {c.held_minor !== null && c.held_minor !== undefined && c.raised_minor > 0 && (
                   <p className="mt-2 text-[15px] text-stone-600">
                     {tr(
                       `Handed over to the main fund: ${kes(c.handed_over_minor ?? 0)}${c.held_minor > 0 ? ` · still with the challenge: ${kes(c.held_minor)}` : ""}`,
                       `Zimekabidhiwa kwa mfuko mkuu: ${kes(c.handed_over_minor ?? 0)}${c.held_minor > 0 ? ` · bado ziko kwenye changamoto: ${kes(c.held_minor)}` : ""}`,
                     )}
-                  </p>
-                )}
-                {c.pledged_outstanding_minor > 0 && (
-                  <p className="mt-2 text-[15px] text-stone-600">
-                    {tr(`${kes(c.pledged_outstanding_minor)} pledged, not yet received`, `${kes(c.pledged_outstanding_minor)} zimeahidiwa, bado hazijapokelewa`)}
                   </p>
                 )}
               </div>

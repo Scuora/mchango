@@ -7,7 +7,6 @@ import { clsx } from "clsx";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CountUp } from "@/components/CountUp";
 import { whenBootDone } from "@/lib/boot";
-import { goalOf } from "@/lib/goal";
 import { formatKesShort } from "@/lib/money";
 import { formatShortDate, todayNairobi } from "@/lib/time";
 import type { PublicPage } from "@/lib/types";
@@ -641,7 +640,6 @@ export function TrendsPage() {
   const showIn = page.fundraiser.show_contribution_amounts;
   const spent = t.expenses_minor + t.charges_minor;
   const hasData = buckets.some((b) => b.in > 0 || b.out > 0);
-  const goal = goalOf(page.fundraiser.target_minor, page.fundraiser.pledges, t.contributions_minor);
   const tr = useTr();
   return (
     <>
@@ -667,19 +665,11 @@ export function TrendsPage() {
             note={t.charges_minor > 0 ? tr(`incl. ${kes(t.charges_minor)} transaction costs`, `pamoja na gharama za miamala ${kes(t.charges_minor)}`) : undefined}
           />
           <StatTile label={tr("Remaining", "Iliyobaki")} value={kes(t.remaining_minor)} />
-          {goal?.stillNeeded != null ? (
-            <StatTile
-              label={tr("Still needed", "Bado kinahitajika")}
-              value={kes(goal.stillNeeded)}
-              note={goal.target !== null ? tr(`of ${kes(goal.target)}`, `kati ya ${kes(goal.target)}`) : undefined}
-            />
-          ) : (
-            <StatTile
-              label={weekly ? tr("Largest week", "Wiki kubwa zaidi") : tr("Largest day", "Siku kubwa zaidi")}
-              value={hasData ? kes(Math.max(...buckets.map((b) => b.in))) : "—"}
-              note={tr("received", "zilizopokelewa")}
-            />
-          )}
+          <StatTile
+            label={weekly ? tr("Largest week", "Wiki kubwa zaidi") : tr("Largest day", "Siku kubwa zaidi")}
+            value={hasData ? kes(Math.max(...buckets.map((b) => b.in))) : "—"}
+            note={tr("received", "zilizopokelewa")}
+          />
         </div>
 
         {!hasData ? (

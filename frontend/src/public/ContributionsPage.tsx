@@ -7,13 +7,11 @@ import { clsx } from "clsx";
 import { ArrowUp, HandHeart, Search, Trophy, X } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Link, useSearchParams } from "react-router";
-import { PledgeGroupTag, PledgeProgressBar, PledgeStatusBadge, useStatusLabel } from "@/components/pledges";
+import { Link } from "react-router";
 import { CountUp } from "@/components/CountUp";
-import { capitalise, familyOf, listedAsPledge } from "@/lib/goal";
 import { formatKesShort } from "@/lib/money";
-import { daysAgoNairobi, formatDayHeading, formatNairobiTime, formatShortDate, formatShortDateTime, todayNairobi } from "@/lib/time";
-import type { PledgeStatus, PublicEntry, PublicPledge } from "@/lib/types";
+import { daysAgoNairobi, formatDayHeading, formatNairobiTime, formatShortDateTime, todayNairobi } from "@/lib/time";
+import type { PublicEntry } from "@/lib/types";
 import { localiseName, useLang, useTr } from "./i18n";
 import { PageHeader } from "./parts";
 import { Sparkline, dailySeries } from "./Sparkline";
@@ -190,130 +188,6 @@ function BackToTop() {
   );
 }
 
-function Initials({ name }: { name: string }) {
-  return (
-    <span className={clsx("grid size-10 shrink-0 place-items-center rounded-full text-[14px] font-semibold tracking-wide", tone(name))} aria-hidden>
-      {initials(name)}
-    </span>
-  );
-}
-
-/** Pledges from the family and from friends, coloured by where each one stands. */
-function PledgesView({ pledges, showAmounts, family }: { pledges: PublicPledge[]; showAmounts: boolean; family: string }) {
-  const tr = useTr();
-  const statusLabel = useStatusLabel();
-  const n = useCounts();
-  const others = tr("Family, friends & well-wishers", "Familia, marafiki na wahisani");
-  const [status, setStatus] = useState<"all" | PledgeStatus>("all");
-  const shown = pledges.filter((p) => status === "all" || p.status === status);
-  const groups = (["family", "friends"] as const)
-    .map((by) => ({ by, rows: shown.filter((p) => p.pledged_by === by), all: pledges.filter((p) => p.pledged_by === by) }))
-    .filter((g) => g.all.length > 0);
-  const sum = (list: PublicPledge[], pick: (p: PublicPledge) => number | null) => list.reduce((s, p) => s + (pick(p) ?? 0), 0);
-  return (
-    <div className="page-enter space-y-4">
-      <div className={clsx("grid gap-3", groups.length > 1 && "sm:grid-cols-2")}>
-        {groups.map((g) => (
-          <div key={g.by} data-reveal className="rounded-2xl border border-stone-200 bg-white p-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[15px] text-stone-600">{g.by === "family" ? capitalise(family) : others}</p>
-              <PledgeGroupTag by={g.by} />
-            </div>
-            {showAmounts ? (
-              <>
-                <p className="mt-1 text-[1.6rem] leading-tight font-semibold text-stone-900 tabular-nums">
-                  <Money minor={sum(g.all, (p) => p.amount_minor)} />
-                </p>
-                <p className="mt-0.5 text-[14px] text-stone-500">
-                  {kes(sum(g.all, (p) => (p.received_minor === null || p.amount_minor === null ? null : Math.min(p.received_minor, p.amount_minor))))}{" "}
-                  {tr("received", "zimepokelewa")} · {n.pledges(g.all.length)}
-                </p>
-                <PledgeProgressBar
-                  received={sum(g.all, (p) => (p.received_minor === null || p.amount_minor === null ? null : Math.min(p.received_minor, p.amount_minor)))}
-                  amount={sum(g.all, (p) => p.amount_minor)}
-                  className="mt-3 h-2.5"
-                />
-              </>
-            ) : (
-              <p className="mt-1 text-[1.6rem] leading-tight font-semibold text-stone-900">{n.pledges(g.all.length)}</p>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div role="radiogroup" aria-label={tr("Where pledges stand", "Hali ya ahadi")} className="flex flex-wrap gap-2">
-        {(["all", "pledged", "part_received", "received"] as const).map((s) => (
-          <button
-            key={s}
-            type="button"
-            role="radio"
-            aria-checked={status === s}
-            onClick={() => setStatus(s)}
-            className={clsx(
-              "press min-h-10 cursor-pointer rounded-full px-4 text-[15px] font-semibold ring-1 ring-inset transition-colors",
-              status === s ? "bg-plum-800 text-white ring-plum-800" : "bg-white text-stone-700 ring-stone-300 hover:bg-stone-50",
-            )}
-          >
-            {s === "all" ? tr("All", "Zote") : statusLabel(s)}{" "}
-            <span className={status === s ? "text-plum-200" : "text-stone-400"}>{count(s === "all" ? pledges.length : pledges.filter((p) => p.status === s).length)}</span>
-          </button>
-        ))}
-      </div>
-
-      <section aria-label={tr("Pledges", "Ahadi")} className="overflow-clip rounded-[20px] border border-[rgb(27_25_23/0.09)] bg-white">
-        {groups.every((g) => g.rows.length === 0) ? (
-          <p className="px-6 py-10 text-center text-stone-600">
-            {status === "all"
-              ? tr("No pledges are recorded yet.", "Bado hakuna ahadi zilizorekodiwa.")
-              : tr(`No pledges are marked “${statusLabel(status).toLowerCase()}”.`, `Hakuna ahadi zilizowekwa alama “${statusLabel(status).toLowerCase()}”.`)}
-          </p>
-        ) : (
-          groups
-            .filter((g) => g.rows.length > 0)
-            .map((g) => (
-              <div key={g.by}>
-                <div className="sticky top-[var(--nav-h)] z-20 flex items-center justify-between gap-3 border-y border-stone-100 bg-white/95 px-5 py-2.5 backdrop-blur first:border-t-0">
-                  <h2 className="font-display text-[1.25rem] font-semibold text-stone-900">{g.by === "family" ? capitalise(family) : others}</h2>
-                  <p className="text-[14px] text-stone-500 tabular-nums">{count(g.rows.length)}</p>
-                </div>
-                <ul className="divide-y divide-stone-100">
-                  {g.rows.map((p, i) => (
-                    <li key={`${p.date}-${p.label}-${i}`} className="row-in px-5 py-3.5" style={{ "--d": `${Math.min(i, 14) * 28}ms` } as CSSProperties}>
-                      <div className="flex items-start gap-3.5">
-                        <Initials name={p.label} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="truncate font-medium text-stone-900">{p.label}</p>
-                            <PledgeStatusBadge status={p.status} />
-                          </div>
-                          <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-[14px] text-stone-500">
-                            <span>
-                              {tr("Pledged", "Iliahidiwa")} {formatShortDate(p.date)}
-                            </span>
-                            {p.amount_minor !== null && p.received_minor !== null && (
-                              <span className="tabular-nums">
-                                <span className="font-semibold text-stone-900">{kes(Math.min(p.received_minor, p.amount_minor)).replace(/^KES\s/, "")}</span>{" "}
-                                {tr("of", "kati ya")} {kes(p.amount_minor)}
-                              </span>
-                            )}
-                          </div>
-                          {p.amount_minor !== null && p.received_minor !== null && (
-                            <PledgeProgressBar received={p.received_minor} amount={p.amount_minor} delay={Math.min(i, 14) * 40} className="mt-2" />
-                          )}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))
-        )}
-      </section>
-      {!showAmounts && <p className="text-center text-[15px] text-stone-500">{tr("The family has chosen to show names only.", "Familia imeamua kuonyesha majina pekee.")}</p>}
-    </div>
-  );
-}
-
 export function ContributionsPage() {
   const page = usePublicPage();
   const tr = useTr();
@@ -322,11 +196,6 @@ export function ContributionsPage() {
   const t = page.totals;
   const showAmounts = page.fundraiser.show_contribution_amounts;
   const anonymousLabel = page.fundraiser.anonymous_label;
-  const [params, setParams] = useSearchParams();
-  const pledges = (page.promises?.pledges ?? []).filter(listedAsPledge);
-  const family = familyOf(page.fundraiser.memorial_name, lang);
-  const familyReceived = page.fundraiser.pledges.family.pledged_minor;
-  const view = params.get("view") === "pledges" && pledges.length > 0 ? "pledges" : "received";
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("newest");
   const [limit, setLimit] = useState(CHUNK);
@@ -462,53 +331,6 @@ export function ContributionsPage() {
         className="mx-auto max-w-3xl px-4 pt-4 [--nav-h:3.5rem] md:px-6 md:[--nav-h:4rem]"
         style={{ "--bar-h": `${barHeight}px` } as CSSProperties}
       >
-        {pledges.length > 0 && (
-          <div role="tablist" aria-label={tr("Contributions or pledges", "Michango au ahadi")} className="relative mb-4 grid grid-cols-2 rounded-xl bg-stone-200/70 p-1 text-[16px]">
-            <span
-              aria-hidden
-              className="absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg bg-white shadow-[0_2px_8px_-3px_rgb(46_35_56/0.35)] transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
-              style={{ transform: view === "received" ? "translateX(0)" : "translateX(100%)" }}
-            />
-            {(
-              [
-                ["received", tr("Received", "Zilizopokelewa"), rows.length],
-                ["pledges", tr("Pledges", "Ahadi"), pledges.length],
-              ] as const
-            ).map(([value, label, n]) => (
-              <button
-                key={value}
-                type="button"
-                role="tab"
-                aria-selected={view === value}
-                onClick={() => setParams(value === "pledges" ? { view: "pledges" } : {}, { replace: true })}
-                className={clsx(
-                  "press relative z-10 min-h-11 cursor-pointer rounded-lg font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-plum-600",
-                  view === value ? "text-plum-800" : "text-stone-600 hover:text-stone-900",
-                )}
-              >
-                {label} <span className={view === value ? "text-stone-500" : "text-stone-400"}>{count(n)}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        {view === "pledges" ? (
-          <PledgesView pledges={pledges} showAmounts={showAmounts} family={family} />
-        ) : (
-        <>
-        {familyReceived > 0 && (
-          <div data-reveal className="mb-3 flex items-center gap-3.5 rounded-2xl border border-sage-200 bg-sage-50/70 px-5 py-4">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sage-100 text-sage-800" aria-hidden>
-              <HandHeart className="size-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-stone-900">{tr(`Received from ${family}`, `Kutoka kwa ${family}`)}</p>
-              <p className="text-[14px] text-stone-500">{tr("The family’s share of the funeral costs", "Sehemu ya familia ya gharama za mazishi")}</p>
-            </div>
-            <p className="shrink-0 text-right font-semibold text-stone-900 tabular-nums">
-              <Money minor={familyReceived} />
-            </p>
-          </div>
-        )}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Tile
             className="col-span-2 sm:col-span-1"
@@ -680,8 +502,6 @@ export function ContributionsPage() {
               "Familia imeamua kuonyesha majina pekee. Jumla iliyo juu inajumuisha kila mchango.",
             )}
           </p>
-        )}
-        </>
         )}
         <p className="mt-4 text-center text-stone-600">
           {tr("Don’t see yours?", "Huoni mchango wako?")} <Link to="/check">{tr("Check with your M-Pesa code", "Hakiki kwa namba yako ya M-Pesa")}</Link>

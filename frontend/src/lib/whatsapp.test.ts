@@ -73,12 +73,14 @@ describe("WhatsApp update account by account", () => {
     expect(text).toContain("*2. Samuel Isaac's M-Pesa*\n_Day 1 challenge_\n_Contributions received_\n1. Patrick Kalama Masha (Chief) – KES 200\n2. Kadzovu (Chief) – KES 500");
     expect(text).toContain("Moved to other accounts: KES 300\n*Held in Samuel Isaac's M-Pesa: KES 400*");
     expect(text).toContain("*Summary*\n1. M-Pesa: KES 1,000 (1 contribution)\n2. Samuel Isaac's M-Pesa: KES 700 (2 contributions)\n*Total received: KES 1,700 (3 contributions)*\n*Held across these accounts: KES 1,700*");
-    expect(text).toContain("*The goal: KES 1,100,000*");
+    // Updates report what has come in, been spent and remains: never a goal or what is still needed.
+    expect(text).not.toContain("goal");
+    expect(text).not.toContain("Still needed");
     expect(text).not.toContain("PRIVATE NAME");
     expect(text).not.toContain("TK3AB12CD4");
   });
 
-  it("lists only the period's entries but keeps the balance, and leaves the goal out for some accounts", () => {
+  it("lists only the period's entries but keeps the balance, and never reports a goal", () => {
     const text = buildAccountsUpdate(page, [mpesa], { range: { kind: "since", date: "2026-11-03" }, includeSpending: false, includeTotals: true, link: null, allAccounts: false });
     expect(text).toContain("_Account: M-Pesa_\n\n*Contributions received since 3 Nov 2026*\nNo new contributions in this period.\n\n*Totals so far*\nReceived: KES 1,000 (1 contribution)");
     expect(text).toContain("*Held in M-Pesa: KES 1,300*");

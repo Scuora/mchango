@@ -2,14 +2,13 @@
 // steps one by one, and what happens after sending. The navbar, the phone's
 // bottom bar and the memorial header all lead here.
 
-import { ArrowRight, MessageSquareText, ListChecks, ShieldCheck } from "lucide-react";
+import { MessageSquareText, ListChecks, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { goalOf } from "@/lib/goal";
 import type { PublicPage } from "@/lib/types";
 import { langPath, useLang, useTr, type Lang } from "./i18n";
 import { CopyForWhatsApp } from "./pages";
-import { CardTitle, CopyRow, PageHeader, PublicCard, kes } from "./parts";
+import { CardTitle, CopyRow, PageHeader, PublicCard } from "./parts";
 import { usePublicPage } from "./PublicLayout";
 import { publicLink } from "./share";
 
@@ -80,7 +79,6 @@ export function ContributePage() {
   const lang = useLang();
   const f = page.fundraiser;
   const g = f.giving;
-  const goal = goalOf(f.target_minor, f.pledges, page.totals.contributions_minor);
 
   if (!g) {
     return (
@@ -187,20 +185,6 @@ export function ContributePage() {
           </div>
         </PublicCard>
 
-        {goal?.stillNeeded ? (
-          <Link
-            to="/"
-            className="group flex items-center justify-between gap-4 rounded-[20px] border border-[rgb(27_25_23/0.09)] bg-white px-5 py-4 text-stone-900 no-underline hover:no-underline"
-          >
-            <span>
-              <span className="block text-[15px] text-stone-600">{tr("Still needed", "Bado kinahitajika")}</span>
-              <span className="block font-display text-[1.6rem] leading-tight font-semibold">{kes(goal.stillNeeded)}</span>
-            </span>
-            <span className="flex items-center gap-1.5 text-[15px] font-semibold text-plum-700">
-              {tr("See the goal", "Tazama lengo")} <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" aria-hidden />
-            </span>
-          </Link>
-        ) : null}
 
         <PublicCard>
           <p className="font-semibold text-stone-900">{tr("Share how to give", "Shiriki jinsi ya kuchangia")}</p>

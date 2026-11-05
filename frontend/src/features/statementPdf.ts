@@ -385,8 +385,6 @@ function summary(doc: jsPDF, r: StatementReport, options: StatementOptions, top:
   );
   const moved = movedText(r);
   if (options.kind === "full" && moved) notes.push(moved);
-  if (options.kind !== "spent" && r.pledged_outstanding_minor > 0) notes.push(`Pledged, not yet received: KES ${money(r.pledged_outstanding_minor)}.`);
-  if (options.kind !== "received" && r.unpaid_bills_minor > 0) notes.push(`Bills agreed but not yet paid: KES ${money(r.unpaid_bills_minor)}.`);
   if (r.fundraiser.giving_name) notes.push(`When giving, check that M-Pesa shows: ${r.fundraiser.giving_name}.`);
   doc.setFont(face.sans, "normal");
   doc.setFontSize(7.8);

@@ -2,7 +2,6 @@
 // shared message can never contain phone numbers, M-Pesa names or other
 // private details. WhatsApp formatting: *bold*, _italic_, plain lines.
 
-import { familyOf, goalOf } from "./goal";
 import { formatKesShort } from "./money";
 import { formatNairobiDate, formatNairobiLongDate, toNairobiInputValue } from "./time";
 import type { PublicEntry, PublicPage, StatementReport } from "./types";
@@ -56,23 +55,6 @@ function masthead(page: PublicPage, today: Date): string[] {
     lines.push(`*${fundraiser.name}*`);
   }
   lines.push(`_As of ${formatNairobiLongDate(today)}_`);
-  return lines;
-}
-
-/** The fundraiser's goal: the target, the family's share, and what is still needed. */
-function goalLines(page: PublicPage): string[] {
-  const { fundraiser, totals } = page;
-  const goal = goalOf(fundraiser.target_minor, fundraiser.pledges, totals.contributions_minor);
-  if (!goal) return [];
-  const lines = [""];
-  if (goal.target !== null) lines.push(`*The goal: ${formatKesShort(goal.target)}*`);
-  if (goal.familyPledged > 0) {
-    lines.push(`Received from ${familyOf(fundraiser.memorial_name)}: ${formatKesShort(goal.familyPledged)}`);
-    const share = goal.othersShare !== null ? ` of ${formatKesShort(goal.othersShare)}` : "";
-    lines.push(`From family, friends and well-wishers: ${formatKesShort(goal.othersReceived)}${share}`);
-  }
-  if (goal.othersOutstanding > 0) lines.push(`Pledged by family, friends and well-wishers, not yet received: ${formatKesShort(goal.othersOutstanding)}`);
-  if (goal.stillNeeded !== null) lines.push(goal.stillNeeded > 0 ? `*Still needed: ${formatKesShort(goal.stillNeeded)}*` : "*The target has been reached. Thank you.*");
   return lines;
 }
 
@@ -150,7 +132,6 @@ export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, tod
     if (refunds !== 0) lines.push(`Refunds (net): ${formatKesShort(refunds)}`);
     if (totals.opening_funds_minor > 0) lines.push(`Opening funds: ${formatKesShort(totals.opening_funds_minor)}`);
     lines.push(`*Funds remaining: ${formatKesShort(totals.remaining_minor)}*`);
-    lines.push(...goalLines(page));
   }
 
   lines.push(...closing(options));
@@ -164,7 +145,7 @@ export function buildWhatsAppUpdate(page: PublicPage, options: ShareOptions, tod
 export type AccountStatement = Pick<StatementReport, "account" | "entries" | "totals" | "brought_forward_minor" | "closing_minor">;
 
 export interface AccountShareOptions extends ShareOptions {
-  /** Every account is in the message, so the fundraiser's goal adds up with it. */
+  /** Every account is in the message. */
   allAccounts: boolean;
 }
 
@@ -240,9 +221,6 @@ export function buildAccountsUpdate(page: PublicPage, statements: AccountStateme
     lines.push(showAmounts ? `*Total received${when}: ${formatKesShort(total(all))} (${plural(all.length)})*` : `*${plural(all.length)}${when}*`);
     if (options.includeTotals) lines.push(`*Held across these accounts: ${formatKesShort(statements.reduce((sum, s) => sum + s.closing_minor, 0))}*`);
   }
-
-  // The goal is the whole fundraiser's, so it adds up only when every account is in the message.
-  if (options.includeTotals && options.allAccounts) lines.push(...goalLines(page));
 
   lines.push(...closing(options));
   return lines.join("\n");

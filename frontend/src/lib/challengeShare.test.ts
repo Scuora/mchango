@@ -27,7 +27,8 @@ describe("challenge update", () => {
     const text = buildChallengeUpdate({ ...base, lang: "en" });
     expect(text).toContain("_As at 3 November 2026, 11:00 am_");
     expect(text).toContain("*Raised so far: KES 12,000* (3 contributions)");
-    expect(text).toContain("Still to reach the target: KES 38,000");
+    // Only what has come in: no target, nothing still to reach.
+    expect(text).not.toMatch(/target|Still to reach/i);
     expect(text).toContain("1. Zawadi – KES 1,000");
     expect(text).toContain("M-Pesa, Send Money: *0711 672 840* (Michael Kitsao)");
   });
@@ -59,7 +60,7 @@ describe("challenge update", () => {
     const text = fillTemplate(STARTER_TEMPLATE, { ...base, challenge: own, entries, giving });
     expect(text).toContain("❤️ DAY 1 CHALLENGE ❤️");
     expect(text).toContain("1. Samuel Mashanga – KSh 500\n2. Hon. Phillister Sauti – KSh 100");
-    expect(text).toContain("•  Target Amount : KSh 50,000\n•  Iliyopatikana: KSh 1,000\n•  Salio : KSh 49,000");
+    expect(text).toContain("🎯 TAARIFA ZA MCHANGO\n\n•  Iliyopatikana: KSh 1,000\n\n💳");
     expect(text).toContain("📱 0706608654");
     expect(text).toContain("👤 Jina: Samuel Isaac");
     expect(fillTemplate("Hadi {date_sw}, {time_sw} {unknown}", { ...base, entries })).toBe("Hadi 3 Novemba 2026, saa 11:00 {unknown}");
@@ -75,9 +76,9 @@ describe("challenge update", () => {
     expect(fillTemplate("Hadi {time_sw}", { ...base, now: afternoon })).toBe("Hadi saa 14:30");
   });
 
-  it("leaves no gap when a placeholder is empty", () => {
-    const text = fillTemplate("{name}\n\n{list}\n\nSalio : KSh {remaining}", { ...base, entries: [] });
-    expect(text).toBe("Cousins' 1,000 challenge\n\nSalio : KSh 38,000");
+  it("leaves no gap when a placeholder is empty, and drops what is still needed from the family's own messages", () => {
+    const text = fillTemplate("{name}\n\n{list}\n\nSalio : KSh {remaining}\nStill needed: KES {still_needed}\nLengo: KSh {target}", { ...base, entries: [] });
+    expect(text.trimEnd()).toBe("Cousins' 1,000 challenge");
   });
 
   it("fills the fundraiser's general update from the public view", () => {
@@ -99,10 +100,9 @@ describe("challenge update", () => {
     expect(text).toContain("As of Tue, 3 Nov 2026");
     expect(text).toContain("1. Edward Chai – KES 1,000\n2. Japhet Kalume – KES 300\n3. Peter Katana – KES 10,000\n4. Rose Otieno – KES 1,000");
     expect(text).toContain("Received: KES 12,300 (4 contributions)\nFuneral expenses paid: KES 0\nFunds remaining: KES 12,300");
-    expect(text).toContain("The goal: KES 1,100,000\nReceived from the family of Karisa Gonzi: KES 570,000");
-    expect(text).toContain("From family, friends and well-wishers: KES 12,300 of KES 530,000");
-    expect(text).toContain("not yet received: KES 100,000\nStill needed: KES 517,700");
-    expect(text).toContain("Full record of contributions and expenses: https://rip-daktari.netlify.app\n");
+    // Only what has come in, been spent and remains: the goal lines of an older message drop out.
+    expect(text).toContain("Funds remaining: KES 12,300\n\nFull record of contributions and expenses: https://rip-daktari.netlify.app\n");
+    expect(text).not.toMatch(/goal|Still needed|not yet received|Received from the family|530,000|570,000/);
   });
 
   it("reports the challenge's own contributions in the English update", () => {
@@ -116,7 +116,8 @@ describe("challenge update", () => {
     const text = fillTemplate(ENGLISH_TEMPLATE, { ...base, challenge: day1, entries, fundraiser: page });
     expect(text).toContain("In loving memory of Dr. Joseph Karisa Gonzi\n22 October 1952 – 1 November 2026\nKalale Pehoni Daktari\n\n❤️ DAY 1 CHALLENGE ❤️");
     expect(text).toContain("Contributions received\n1. Philister Kahindi – KES 100\n2. Joseph Mwaduna – KES 200\n3. Lorraine Katana – KES 200\n");
-    expect(text).toContain("Received: KES 500 (3 contributions)\n\nThe goal: KES 50,000\nStill needed: KES 49,500");
+    expect(text).toContain("Received: KES 500 (3 contributions)\n\nFull record of contributions and expenses:");
+    expect(text).not.toMatch(/goal|Still needed|50,000/);
     expect(text).not.toContain("15,000");
   });
 });

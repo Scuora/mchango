@@ -3,7 +3,7 @@
 // amounts the family has chosen to show, and the giving details already on the
 // public page. WhatsApp formatting: *bold*, _italic_, plain lines.
 
-import { familyOf, goalOf } from "./goal";
+import { familyOf } from "./goal";
 import { formatKesShort } from "./money";
 import { formatNairobiLongDate } from "./time";
 import { oldestFirst } from "./whatsapp";
@@ -94,9 +94,6 @@ export const TEMPLATE_GROUPS: { label: string; fields: [string, string][] }[] = 
       ["list_kes", "the same, in KES: “1. Samuel – KES 500”"],
       ["count", "how many contributions"],
       ["raised", "amount raised, e.g. 1,000"],
-      ["target", "the challenge's target"],
-      ["remaining", "still to reach the target"],
-      ["pledged", "pledged, not yet received"],
       ["held", "still held by the challenge"],
       ["handed_over", "handed over to the main fund"],
       ["number", "the number to send to"],
@@ -117,13 +114,7 @@ export const TEMPLATE_GROUPS: { label: string; fields: [string, string][] }[] = 
       ["total_count", "how many contributions"],
       ["expenses", "funeral expenses paid, M-Pesa transaction costs included"],
       ["funds_remaining", "funds remaining"],
-      ["goal", "the fundraiser's target"],
       ["family", "e.g. the family of Karisa Gonzi"],
-      ["family_received", "received from the family"],
-      ["others_received", "from family, friends and well-wishers"],
-      ["others_share", "the part asked of friends and well-wishers"],
-      ["others_pledged", "pledged by them, not yet received"],
-      ["still_needed", "still needed"],
       ["site", "the public page"],
     ],
   },
@@ -139,6 +130,13 @@ export const TEMPLATE_GROUPS: { label: string; fields: [string, string][] }[] = 
   },
 ];
 
+/**
+ * Figures the family no longer reports (5 November 2026): updates give only what has come in,
+ * been spent and remains, never a target, what is still needed or pledges not yet in. A line
+ * that asks for any of them is left out, even in a message the family wrote earlier.
+ */
+const WITHHELD = new Set(["target", "remaining", "pledged", "goal", "family_received", "others_received", "others_share", "others_pledged", "still_needed"]);
+
 /** Fills the family's own message with the challenge's live figures. Unknown {words} are left as written. */
 export function fillTemplate(template: string, input: Omit<ChallengeShareInput, "lang" | "includeList" | "includeGiving">): string {
   const { challenge: c } = input;
@@ -151,9 +149,6 @@ export function fillTemplate(template: string, input: Omit<ChallengeShareInput, 
     list_kes: input.entries.map((e, i) => `${i + 1}. ${e.label}${e.amount_minor === null ? "" : ` – KES ${bare(e.amount_minor)}`}`).join("\n"),
     count: String(t.contributions_count),
     raised: bare(t.raised_minor),
-    target: c.target_minor ? bare(c.target_minor) : "",
-    remaining: c.target_minor ? bare(Math.max(0, c.target_minor - t.raised_minor)) : "",
-    pledged: bare(t.pledged_outstanding_minor),
     held: bare(t.held_minor ?? 0),
     handed_over: bare(t.handed_over_minor ?? 0),
     number: input.giving?.number ?? "",
@@ -170,13 +165,13 @@ export function fillTemplate(template: string, input: Omit<ChallengeShareInput, 
     memorial_name: input.memorialName ?? "",
     ...fundraiserValues(input.fundraiser ?? null),
   };
-  // A line whose figures are all empty (such as {list} before any contributions, or
-  // "Lengo: KSh {target}" for a challenge without a target) is left out, so the same
+  // A line whose figures are all empty (such as {list} before any contributions) is left out, so the same
   // message suits every challenge and never has a gap of blank lines.
   const known = (line: string) => [...line.matchAll(/\{([a-z_]+)\}/g)].map((m) => m[1]).filter((key) => key in values);
   return template
     .split("\n")
     .filter((line) => {
+      if ([...line.matchAll(/\{([a-z_]+)\}/g)].some((m) => WITHHELD.has(m[1]))) return false;
       const keys = known(line);
       return keys.length === 0 || keys.some((key) => values[key].trim() !== "");
     })
@@ -190,8 +185,6 @@ function fundraiserValues(page: PublicPage | null): Record<string, string> {
   if (!page) return {};
   const f = page.fundraiser;
   const t = page.totals;
-  const goal = goalOf(f.target_minor, f.pledges, t.contributions_minor);
-  const maybe = (minor: number | null | undefined) => (minor === null || minor === undefined ? "" : bare(minor));
   return {
     memorial_name: f.memorial_name ?? f.name,
     memorial_dates: f.memorial_dates ?? "",
@@ -204,13 +197,7 @@ function fundraiserValues(page: PublicPage | null): Record<string, string> {
     total_count: String(t.contributions_count),
     expenses: bare(t.expenses_minor + (t.charges_minor ?? 0)), // transaction costs count as spending
     funds_remaining: bare(t.remaining_minor),
-    goal: maybe(goal?.target),
     family: familyOf(f.memorial_name),
-    family_received: maybe(goal?.familyPledged),
-    others_received: maybe(goal?.othersReceived),
-    others_share: maybe(goal?.othersShare),
-    others_pledged: maybe(goal?.othersOutstanding),
-    still_needed: maybe(goal?.stillNeeded),
   };
 }
 
@@ -229,9 +216,6 @@ Contributions received
 Totals so far
 Received: KES {raised} ({count} contributions)
 
-The goal: KES {target}
-Still needed: KES {remaining}
-
 Full record of contributions and expenses: {site}
 
 Thank you for standing with the family.`;
@@ -245,9 +229,7 @@ export const STARTER_TEMPLATE = `{name}
 
 🎯 TAARIFA ZA MCHANGO
 
-•  Target Amount : KSh {target}
 •  Iliyopatikana: KSh {raised}
-•  Salio : KSh {remaining}
 
 💳 NAMBA YA MWEKA HAZINA
 
@@ -258,7 +240,7 @@ export const STARTER_TEMPLATE = `{name}
 🕊️ TUKUMBUKE WEMA WAKE, TUENDELEZE UPENDO WAKE. ❤️`;
 
 // Ready-made messages for any challenge. Lines whose figures a challenge does not have
-// (a target, a number to send to) drop out, so none of them needs editing to fit.
+// (a number to send to) drop out, so none of them needs editing to fit.
 
 /** The English update, in Kiswahili. */
 export const SWAHILI_UPDATE_TEMPLATE = `Kwa kumbukumbu ya {memorial_name}
@@ -275,9 +257,6 @@ Michango iliyopokelewa
 Jumla hadi sasa
 Iliyopatikana: KSh {raised} (michango {count})
 
-Lengo: KSh {target}
-Salio: KSh {remaining}
-
 Rekodi kamili ya michango na matumizi: {site}
 
 Asanteni kwa kusimama pamoja na familia.`;
@@ -289,7 +268,6 @@ export const INVITATION_TEMPLATE = `*{name}*
 
 In loving memory of {memorial_name}
 
-🎯 Target: KES {target}
 ✅ Raised so far: KES {raised} ({count} contributions)
 
 💳 *How to contribute*
@@ -305,7 +283,6 @@ export const SWAHILI_INVITATION_TEMPLATE = `*{name}*
 
 Kwa kumbukumbu ya {memorial_name}
 
-🎯 Lengo: KSh {target}
 ✅ Iliyopatikana hadi sasa: KSh {raised} (michango {count})
 
 💳 *Jinsi ya kuchangia*
@@ -380,22 +357,9 @@ export function buildChallengeUpdate(input: ChallengeShareInput): string {
       `*Zilizochangwa hadi sasa: ${formatKesShort(t.raised_minor)}* (michango ${t.contributions_count})`,
     ),
   );
-  if (c.target_minor) {
-    const percent = Math.floor((t.raised_minor / c.target_minor) * 100);
-    lines.push(tr(`Challenge target: ${formatKesShort(c.target_minor)} (${percent}% reached)`, `Lengo la changamoto: ${formatKesShort(c.target_minor)} (asilimia ${percent} imefikiwa)`));
-    const left = c.target_minor - t.raised_minor;
-    lines.push(
-      left > 0
-        ? tr(`Still to reach the target: ${formatKesShort(left)}`, `Kiasi kilichobaki kufikia lengo: ${formatKesShort(left)}`)
-        : tr("*The challenge target has been reached. Thank you!*", "*Lengo la changamoto limefikiwa. Asanteni!*"),
-    );
-  }
   if (t.held_minor !== null && t.held_minor !== undefined && t.raised_minor > 0) {
     lines.push(tr(`Handed over to the main fund: ${formatKesShort(t.handed_over_minor ?? 0)}`, `Zimekabidhiwa kwa mfuko mkuu: ${formatKesShort(t.handed_over_minor ?? 0)}`));
     if (t.held_minor > 0) lines.push(tr(`Still with the challenge, to be handed over: ${formatKesShort(t.held_minor)}`, `Bado ziko kwenye changamoto, zitakabidhiwa: ${formatKesShort(t.held_minor)}`));
-  }
-  if (t.pledged_outstanding_minor > 0) {
-    lines.push(tr(`Pledged, not yet received: ${formatKesShort(t.pledged_outstanding_minor)}`, `Ahadi ambazo bado hazijapokelewa: ${formatKesShort(t.pledged_outstanding_minor)}`));
   }
 
   if (input.includeList) {
@@ -408,8 +372,8 @@ export function buildChallengeUpdate(input: ChallengeShareInput): string {
   lines.push("");
   lines.push(
     tr(
-      "Every shilling goes to the funeral fund and counts towards the main target.",
-      "Kila shilingi inaingia kwenye mfuko wa mazishi na inahesabiwa kwenye lengo kuu.",
+      "Every shilling goes to the funeral fund.",
+      "Kila shilingi inaingia kwenye mfuko wa mazishi.",
     ),
   );
   if (input.includeGiving && c.status === "active" && input.giving) {

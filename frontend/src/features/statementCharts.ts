@@ -9,16 +9,12 @@ import cormorantMediumItalic from "@/assets/pdf-fonts/CormorantGaramond-MediumIt
 import cormorantSemiBold from "@/assets/pdf-fonts/CormorantGaramond-SemiBold.ttf?url";
 import sansRegular from "@/assets/pdf-fonts/SourceSans3-Regular.ttf?url";
 import sansSemiBold from "@/assets/pdf-fonts/SourceSans3-SemiBold.ttf?url";
-import { familyOf } from "@/lib/goal";
 import { formatKesShort } from "@/lib/money";
 import { formatShortDate, formatShortDateTime, toNairobiInputValue } from "@/lib/time";
 import type { StatementReport } from "@/lib/types";
 
 type RGB = [number, number, number];
 const RECEIVED: RGB = [184, 134, 42];
-const PLEDGED_BASE: RGB = [246, 235, 205];
-const PLEDGED_HATCH: RGB = [212, 169, 79];
-const TRACK: RGB = [236, 230, 241];
 const SPENT: RGB = [111, 76, 148];
 const MOVED: RGB = [26, 143, 102];
 const INK: RGB = [31, 29, 27];
@@ -130,15 +126,6 @@ function translucent(doc: jsPDF, opacity: number, draw: () => void) {
   doc.restoreGraphicsState();
 }
 
-/** Diagonal hatching inside the current clip: pledged money, as on the public page. */
-function hatch(doc: jsPDF, x: number, y: number, w: number, h: number) {
-  doc.setFillColor(...PLEDGED_BASE);
-  doc.rect(x, y, w, h, "F");
-  doc.setDrawColor(...PLEDGED_HATCH);
-  doc.setLineWidth(0.45);
-  for (let d = -h; d < w; d += 1.5) doc.line(x + d, y + h, x + d + h, y);
-}
-
 /** A bar with a rounded data end and a square base, growing right from x. */
 function hbar(doc: jsPDF, x: number, y: number, length: number, thickness: number, color: RGB) {
   if (length <= 0) return;
@@ -146,33 +133,6 @@ function hbar(doc: jsPDF, x: number, y: number, length: number, thickness: numbe
   doc.setFillColor(...color);
   doc.roundedRect(x, y, length, thickness, r, r, "F");
   if (length > r) doc.rect(x, y, Math.min(r, length), thickness, "F");
-}
-
-/** A meter: received (solid), then pledged (hatched), then the track, with fully rounded ends. */
-function meter(doc: jsPDF, x: number, y: number, w: number, h: number, received: number, pledged: number, whole: number) {
-  const r = h / 2;
-  doc.setFillColor(...TRACK);
-  doc.roundedRect(x, y, w, h, r, r, "F");
-  if (whole <= 0) return;
-  const got = Math.min(1, received / whole);
-  const promised = Math.min(1 - got, pledged / whole);
-  const gotW = got > 0 ? Math.max(h, got * w) : 0;
-  if (promised > 0) {
-    const start = x + (gotW ? gotW + GAP : 0);
-    const width = Math.max(0, Math.min(x + w, x + gotW + promised * w) - start);
-    if (width > 0) {
-      doc.saveGraphicsState();
-      doc.roundedRect(start, y, width, h, Math.min(r, width / 2), r, null);
-      doc.clip();
-      doc.discardPath();
-      hatch(doc, start, y, width, h);
-      doc.restoreGraphicsState();
-    }
-  }
-  if (gotW) {
-    doc.setFillColor(...RECEIVED);
-    doc.roundedRect(x, y, gotW, h, r, r, "F");
-  }
 }
 
 /** A section title with a gold rule, and an optional line under it. Returns where the content starts. */
@@ -261,136 +221,6 @@ function daysBetween(first: string, last: string): string[] {
   const out: string[] = [];
   for (let t = dayTime(first); t <= dayTime(last); t += 86_400_000) out.push(new Date(t + 3 * 3_600_000).toISOString().slice(0, 10));
   return out;
-}
-
-/** The gauge: how much of the target is covered, what is pledged, what is still needed. */
-function gauge(doc: jsPDF, r: StatementReport, x: number, y: number, w: number): number {
-  const g = r.goal;
-  if (!g) return y;
-  const target = g.target_minor;
-  const parts = [
-    { value: g.family_share_minor, kind: "received" as const },
-    { value: g.received_minor, kind: "received" as const },
-    { value: g.pledged_outstanding_minor, kind: "pledged" as const },
-  ].filter((p) => p.value > 0);
-  const covered = g.family_share_minor + g.received_minor;
-  const stillNeeded = Math.max(0, target - covered);
-
-  // The arc: a half ring, filled from the left.
-  const cx = x + 40;
-  const cy = y + 40;
-  const outer = 36;
-  const inner = 25;
-  const angle = (f: number) => Math.PI * (1 - Math.min(1, Math.max(0, f)));
-  const point = (radius: number, a: number): [number, number] => [cx + radius * Math.cos(a), cy - radius * Math.sin(a)];
-  const band = (from: number, to: number) => {
-    const a0 = angle(from);
-    const a1 = angle(to);
-    const steps = Math.max(2, Math.ceil(Math.abs(a0 - a1) / (Math.PI / 120)));
-    const [sx, sy] = point(outer, a0);
-    doc.moveTo(sx, sy);
-    for (let i = 1; i <= steps; i++) doc.lineTo(...point(outer, a0 + ((a1 - a0) * i) / steps));
-    for (let i = steps; i >= 0; i--) doc.lineTo(...point(inner, a0 + ((a1 - a0) * i) / steps));
-    doc.close();
-  };
-  const gap = GAP / outer / Math.PI; // the 2px gap, as a fraction of the half ring
-  const minimum = 0.012; // a part above zero always shows
-  let at = 0;
-  for (const p of parts) {
-    if (at >= 1) break;
-    const end = Math.min(1, at + Math.max(minimum, p.value / target));
-    const to = end >= 1 ? 1 : end - gap;
-    if (p.kind === "received") {
-      doc.setFillColor(...RECEIVED);
-      band(at, to);
-      doc.fill();
-    } else {
-      doc.saveGraphicsState();
-      band(at, to);
-      doc.clip();
-      doc.discardPath();
-      hatch(doc, cx - outer, cy - outer, outer * 2, outer);
-      doc.restoreGraphicsState();
-    }
-    at = end;
-  }
-  if (at < 1) {
-    doc.setFillColor(...TRACK);
-    band(at, 1);
-    doc.fill();
-  }
-
-  // The figure in the middle, and the scale's ends.
-  const share = covered / target;
-  const percent = share >= 1 ? "100%" : share > 0 && share < 0.01 ? "<1%" : `${Math.floor(share * 100)}%`;
-  font(doc, 22, "bold", INK);
-  doc.text(percent, cx, cy - 5, { align: "center" });
-  font(doc, 7.5, "normal", MUTED);
-  doc.text(r.account?.challenge_name ? "of the target reached" : "of the goal covered", cx, cy + 1, { align: "center" });
-  font(doc, 6.8, "normal", MUTED);
-  doc.text("0", cx - (outer + inner) / 2, cy + 4.5, { align: "center" });
-  doc.text(tickLabel(target, true), cx + (outer + inner) / 2, cy + 4.5, { align: "center" });
-
-  // The figures beside it, as on the public page.
-  const family = familyOf(r.fundraiser.memorial_name || r.fundraiser.name);
-  const challenge = r.account?.challenge_name;
-  const rows: { swatch: "received" | "pledged" | "needed" | null; label: string; note?: string; value: string; strong?: boolean }[] = [];
-  if (g.family_share_minor > 0) rows.push({ swatch: "received", label: `Received from ${family}`, value: kes(g.family_share_minor) });
-  rows.push({
-    swatch: "received",
-    label: g.family_share_minor > 0 ? "From family, friends and well-wishers" : challenge ? "Received through the challenge" : "Received so far",
-    note: g.family_share_minor > 0 ? `of ${kes(Math.max(0, target - g.family_share_minor))} asked for` : undefined,
-    value: kes(g.received_minor),
-  });
-  if (g.pledged_outstanding_minor > 0) rows.push({ swatch: "pledged", label: "Pledged, not yet received", value: kes(g.pledged_outstanding_minor) });
-  rows.push({
-    swatch: "needed",
-    label: "Still needed",
-    note: g.pledged_outstanding_minor > 0 && stillNeeded > 0 ? `${kes(Math.min(g.pledged_outstanding_minor, stillNeeded))} of it is pledged` : undefined,
-    value: stillNeeded === 0 ? "Reached" : kes(stillNeeded),
-  });
-  rows.push({ swatch: null, label: challenge ? "The challenge's target" : "The goal", value: kes(target), strong: true });
-
-  const left = x + 90;
-  const right = x + w;
-  let ry = y + 6;
-  for (const row of rows) {
-    if (row.strong) {
-      doc.setDrawColor(...GRID);
-      doc.setLineWidth(0.3);
-      doc.line(left, ry - 3.5, right, ry - 3.5);
-    }
-    if (row.swatch) {
-      const sy = ry - 2.6;
-      if (row.swatch === "received") {
-        doc.setFillColor(...RECEIVED);
-        doc.roundedRect(left, sy, 3.2, 3.2, 0.7, 0.7, "F");
-      } else if (row.swatch === "pledged") {
-        doc.saveGraphicsState();
-        doc.roundedRect(left, sy, 3.2, 3.2, 0.7, 0.7, null);
-        doc.clip();
-        doc.discardPath();
-        hatch(doc, left, sy, 3.2, 3.2);
-        doc.restoreGraphicsState();
-      } else {
-        doc.setFillColor(...TRACK);
-        doc.roundedRect(left, sy, 3.2, 3.2, 0.7, 0.7, "F");
-      }
-    }
-    font(doc, 8.5, row.strong ? "bold" : "normal", INK);
-    const valueWidth = doc.getTextWidth(plain(row.value));
-    doc.text(fit(doc, plain(row.label), right - left - 7 - valueWidth - 3), left + (row.swatch ? 5.5 : 0), ry);
-    font(doc, 8.5, "bold", INK);
-    doc.text(plain(row.value), right, ry, { align: "right" });
-    ry += 4.6;
-    if (row.note) {
-      font(doc, 7.2, "normal", MUTED);
-      doc.text(plain(row.note), left + 5.5, ry - 0.8);
-      ry += 3.6;
-    }
-    ry += 2.6;
-  }
-  return Math.max(cy + 9, ry);
 }
 
 /** Money received, adding up over the period: one line with its latest figure at the end. */
@@ -535,23 +365,17 @@ function ranked(doc: jsPDF, rows: { label: string; sub?: string; value: number }
   return ry;
 }
 
-/** Each challenge against its target: what came in, what is pledged, what is left. */
+/** What each challenge has brought in (no targets: statements report what came in, not what is left). */
 function challengeMeters(doc: jsPDF, list: StatementReport["challenges"], x: number, y: number, w: number): number {
   let ry = y;
   for (const c of list) {
-    const target = c.target_minor ?? 0;
     font(doc, 8, "normal", MUTED);
-    const figure = target > 0 ? `${kes(c.raised_minor)} of ${kes(target)}` : `${kes(c.raised_minor)} received`;
+    const figure = `${kes(c.raised_minor)} received`;
     const figureWidth = doc.getTextWidth(figure);
     doc.text(figure, x + w, ry + 3.5, { align: "right" });
     font(doc, 8.5, "bold", INK);
     doc.text(fit(doc, tidy(c.name), w - figureWidth - 4), x, ry + 3.5);
-    if (target > 0) {
-      meter(doc, x, ry + 5.5, w, 2.6, c.raised_minor, c.pledged_outstanding_minor, target);
-      ry += 12;
-    } else {
-      ry += 7;
-    }
+    ry += 7;
   }
   return ry;
 }
@@ -580,11 +404,7 @@ export function drawCharts(doc: jsPDF, r: StatementReport, kind: "full" | "recei
   const expenses = r.entries.filter((e) => e.kind === "expense");
   const challenge = r.account?.challenge_name;
 
-  if (kind !== "spent" && r.goal) {
-    const y = flow.need(70);
-    const top = sectionTitle(doc, x, y, w, challenge ? "Progress to the challenge's target" : "Progress to the goal", `As at ${formatShortDate(r.period_to)}, as on the public page.`);
-    flow.y = gauge(doc, r, x, top + 2, w) + 8;
-  }
+  // Statements report what has come in, been spent and remains: no goal, target or pending figures.
 
   // A chart can give up a little height to stay on the page it starts on.
   const fitted = (full: number, least: number, chrome: number) => Math.max(least, Math.min(full, flow.bottom - flow.y - chrome));
@@ -643,7 +463,7 @@ export function drawCharts(doc: jsPDF, r: StatementReport, kind: "full" | "recei
   }
 
   if (kind !== "spent" && r.challenges.length > 0) {
-    const y = flow.need(18 + r.challenges.reduce((s, c) => s + (c.target_minor ? 12 : 7), 0));
+    const y = flow.need(18 + r.challenges.length * 7);
     const top = sectionTitle(doc, x, y, w, "Challenges", "What each challenge has brought in; it is part of the money received above.");
     flow.y = challengeMeters(doc, r.challenges, x, top + 1, w) + 6;
   }
