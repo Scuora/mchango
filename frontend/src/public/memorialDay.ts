@@ -67,7 +67,7 @@ export const WORDS = {
   friTitle: ["Procession and night vigil", "Msafara na mkesha"],
   satTitle: ["Funeral and burial service", "Ibada ya mazishi na maziko"],
   friWhere: ["Funeral home, Bamba and the family home", "Nyumba ya mazishi, Bamba na nyumbani kwa familia"],
-  satWhere: ["At his homestead, Kibomu Ni Mvula", "Boma la mwendazake, Kibomu Ni Mvula"],
+  satWhere: ["At his homestead, Bamba, Kibomu Ni Mvula", "Boma la mwendazake, Bamba, Kibomu Ni Mvula"],
   eveSub: ["Friday, 6 November, from 6:00 a.m. (time to be confirmed)", "Ijumaa, 6 Novemba, kuanzia saa 6:00 (muda utathibitishwa)"],
   vigilMain: ["Night vigil at the family home", "Mkesha nyumbani kwa familia"],
   vigilSub: ["Tomorrow from 9:00 a.m.: funeral and burial service", "Kesho kuanzia saa 9:00: ibada ya mazishi na maziko"],

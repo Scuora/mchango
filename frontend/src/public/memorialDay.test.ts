@@ -22,7 +22,7 @@ describe("the memorial day", () => {
       // Nothing is scheduled from 1:30 to 2:00 p.m.: no invented break, just what comes next.
       [nairobi(7, 13, 30), "sat", "Today", "Funeral and burial service", "Next: Sermon and reflection, 2:00 p.m."],
       [nairobi(7, 14), "sat", "Today", "Sermon and reflection", "Next: Burial service, 3:00 p.m."],
-      [nairobi(7, 15), "burial", "Now", "Burial service", "At his homestead, Kibomu Ni Mvula"],
+      [nairobi(7, 15), "burial", "Now", "Burial service", "At his homestead, Bamba, Kibomu Ni Mvula"],
       [nairobi(7, 16), "after", null, "Thank you for standing with the family.", null],
     ];
     for (const [t, ...expected] of rows) expect(en(t)).toEqual(expected);

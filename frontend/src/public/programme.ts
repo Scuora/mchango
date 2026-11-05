@@ -132,7 +132,7 @@ export const PROGRAMME: readonly ProgrammeDay[] = [
     title: ["Funeral and Burial Service", "Ibada ya Mazishi na Maziko"],
     summary: ["Funeral and burial service", "Ibada ya mazishi na maziko"],
     begins: ["9:00 a.m.", "saa 9:00"],
-    venue: ["At his homestead, Kibomu Ni Mvula", "Boma la mwendazake, Kibomu Ni Mvula"],
+    venue: ["At his homestead, Bamba, Kibomu Ni Mvula", "Boma la mwendazake, Bamba, Kibomu Ni Mvula"],
     poster: `${IMG}/saturday-programme.jpg`,
     cover: `${IMG}/saturday.jpg`,
     parts: [
