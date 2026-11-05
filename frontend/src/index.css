@@ -580,14 +580,14 @@ html.booting .mh-first .mh-inner > * { animation-play-state: paused; }
 @media (max-width: 760px) {
   .mh-stage { min-height: calc(100svh - 74px); }
   .mh-photo, .mh-light { height: min(27.5rem, 60svh); bottom: auto; }
-  .mh-photo {
-    left: 0; width: 100%; object-position: 56% 18%;
-    -webkit-mask-image: linear-gradient(0deg, transparent 0, #000 42%);
-    -webkit-mask-composite: source-over;
-    mask-image: linear-gradient(0deg, transparent 0, #000 42%);
-    mask-composite: add;
+  /* Fading in below the solid navbar (3.5rem) and out at the bottom. */
+  .mh-photo, .mh-light {
+    -webkit-mask-image: linear-gradient(180deg, transparent 0, transparent 3.5rem, #000 8rem), linear-gradient(0deg, transparent 0, #000 42%);
+    -webkit-mask-composite: source-in;
+    mask-image: linear-gradient(180deg, transparent 0, transparent 3.5rem, #000 8rem), linear-gradient(0deg, transparent 0, #000 42%);
+    mask-composite: intersect;
   }
-  .mh-light { -webkit-mask-image: linear-gradient(0deg, transparent 0, #000 42%); mask-image: linear-gradient(0deg, transparent 0, #000 42%); }
+  .mh-photo { left: 0; width: 100%; object-position: 56% 18%; }
   .mh-inner { padding: calc(min(27.5rem, 60svh) - 8rem) 1.25rem 2rem; }
   .mh-name { font-size: clamp(2.85rem, 14.2vw, 3.7rem); }
   .mh-status { margin-top: 1.4rem; padding-top: 0.9rem; }

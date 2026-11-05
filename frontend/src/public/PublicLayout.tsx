@@ -208,7 +208,9 @@ function PublicNav({ page }: { page: PublicPage }) {
     <header
       className={clsx(
         "sticky top-0 z-40 text-[#f7f3ea] transition-[background-color] duration-300",
-        overHero ? "bg-transparent" : open ? "bg-[#0b0a09]" : "bg-[rgb(11_10_9/0.86)] backdrop-blur-[18px] backdrop-saturate-[1.6]",
+        // On phones the bar stays solid over the photo: its bright background would show behind the
+        // buttons, and the browser's status bar takes its colour from the bar.
+        overHero ? "bg-[#0b0a09] md:bg-transparent" : open ? "bg-[#0b0a09]" : "bg-[rgb(11_10_9/0.86)] backdrop-blur-[18px] backdrop-saturate-[1.6]",
       )}
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 md:h-16 md:px-6">
