@@ -1,11 +1,12 @@
 import { clsx } from "clsx";
 import { ExternalLink, FileDown, FileText, HandCoins, History, Home, List, LogOut, Megaphone, Menu, PlusCircle, Receipt, Settings, Share2, Trophy, Wallet, X, type LucideIcon } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { RequireAuth, useAuth } from "@/features/auth";
 import { useResource } from "@/lib/api";
 import { useDismissBoot } from "@/lib/boot";
 import { prefetchManagement } from "@/lib/lazyPages";
+import { lastUrl, usePlaceMemory } from "@/lib/places";
 import type { Fundraiser } from "@/lib/types";
 import { LoadState } from "./LoadState";
 import { PageErrorBoundary } from "./PageErrorBoundary";
@@ -76,8 +77,12 @@ function Shell() {
   const { user, signOut } = useAuth();
   const settings = useResource<Fundraiser>("/api/manage/settings");
   const [moreOpen, setMoreOpen] = useState(false);
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   useEffect(() => setMoreOpen(false), [pathname]);
+  // Filters and scroll are remembered per page, and put back on returning to it.
+  const main = useRef<HTMLElement>(null);
+  usePlaceMemory(main);
+  const href = (to: string) => (to === pathname ? pathname + search : lastUrl(to));
   // Signed in: fetch every page now, so moving between them never waits on the network.
   useEffect(prefetchManagement, []);
   const fundraiser = settings.data;
@@ -141,7 +146,7 @@ function Shell() {
             {NAV.map((item) => (
               <NavLink
                 key={item.to}
-                to={item.to}
+                to={href(item.to)}
                 end={item.end}
                 className={({ isActive }) =>
                   clsx(
@@ -161,7 +166,7 @@ function Shell() {
           </p>
         </aside>
 
-        <main className="min-w-0 flex-1 overflow-y-auto overscroll-contain" id="content">
+        <main ref={main} className="min-w-0 flex-1 overflow-y-auto overscroll-contain" id="content">
           <div className="mx-auto w-full max-w-6xl px-4 pt-4 pb-10 sm:px-6 md:pt-6">
             {fundraiser?.is_demo && (
               <Notice tone="warning" className="mb-4" title="Demo data">
@@ -193,7 +198,7 @@ function Shell() {
           {NAV.filter((item) => MORE.includes(item.to)).map((item) => (
             <NavLink
               key={item.to}
-              to={item.to}
+              to={href(item.to)}
               className={({ isActive }) =>
                 clsx(
                   "flex min-h-12 items-center gap-3 rounded-lg px-3 text-[16px] font-medium no-underline hover:no-underline",
@@ -211,7 +216,7 @@ function Shell() {
         {TABS.map((item) => (
           <NavLink
             key={item.to}
-            to={item.to}
+            to={href(item.to)}
             end={item.end}
             className={({ isActive }) =>
               clsx(

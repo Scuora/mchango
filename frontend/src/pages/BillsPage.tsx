@@ -13,6 +13,7 @@ import { api, fieldError, useResource } from "@/lib/api";
 import { formatKesShort, parseKes } from "@/lib/money";
 import { formatNairobi, formatNairobiDate, fromNairobiInput, nowNairobiInput } from "@/lib/time";
 import type { Account, Bill, BillStatus, BillsResponse } from "@/lib/types";
+import { useUrlState } from "@/lib/places";
 
 const kes = formatKesShort;
 type StatusFilter = "all" | BillStatus;
@@ -24,7 +25,8 @@ type StatusFilter = "all" | BillStatus;
  */
 export function BillsPage() {
   const bills = useResource<BillsResponse>("/api/manage/bills");
-  const [status, setStatus] = useState<StatusFilter>("all");
+  // In the address, so coming back to the page keeps it.
+  const [status, setStatus] = useUrlState<StatusFilter>("status", "all");
   const [adding, setAdding] = useState(false);
   const list = useMemo(() => bills.data?.bills ?? [], [bills.data]);
   const shown = list.filter((b) => status === "all" || b.status === status);

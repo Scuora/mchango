@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { HandCoins, Plus, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router";
 import { LoadState } from "@/components/LoadState";
 import { PledgeGroupTag, PledgeProgressBar, PledgeStatusBadge, STATUS_LABEL } from "@/components/pledges";
@@ -11,6 +11,7 @@ import { useResource } from "@/lib/api";
 import { formatKesShort } from "@/lib/money";
 import { formatNairobiDate } from "@/lib/time";
 import type { ManagedPledge, PledgeStatus, PledgedBy } from "@/lib/types";
+import { useUrlState } from "@/lib/places";
 
 const kes = formatKesShort;
 type GroupFilter = "all" | PledgedBy;
@@ -62,8 +63,9 @@ function Filter<T extends string>({ value, options, onChange, label }: { value: 
 /** Pledges by the family and by friends, and how much of each has come in. */
 export function PledgesPage() {
   const pledges = useResource<ManagedPledge[]>("/api/manage/pledges");
-  const [group, setGroup] = useState<GroupFilter>("all");
-  const [status, setStatus] = useState<StatusFilter>("all");
+  // In the address, so coming back to the page keeps them.
+  const [group, setGroup] = useUrlState<GroupFilter>("group", "all");
+  const [status, setStatus] = useUrlState<StatusFilter>("status", "all");
   const list = useMemo(() => pledges.data ?? [], [pledges.data]);
   const inGroup = list.filter((p) => group === "all" || p.pledged_by === group);
   const shown = inGroup.filter((p) => status === "all" || p.status === status);

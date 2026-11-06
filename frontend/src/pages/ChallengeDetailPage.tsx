@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRightLeft, Check, Copy, HandCoins, Link2, MessageCircle, Pencil, Search, Trash2, Unlink, Wallet } from "lucide-react";
+import { ArrowRightLeft, Check, Copy, HandCoins, Link2, MessageCircle, Pencil, Search, Trash2, Unlink, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { LoadState, SaveError } from "@/components/LoadState";
@@ -23,6 +23,7 @@ import { api, useResource } from "@/lib/api";
 import { formatNairobi } from "@/lib/time";
 import type { ChallengeSummary, ListItem, ListResponse } from "@/lib/types";
 import { copyText } from "@/public/share";
+import { BackLink } from "@/components/BackLink";
 
 /** One challenge: its kitty, an update to share, and the records that came in through it. */
 export function ChallengeDetailPage() {
@@ -49,9 +50,9 @@ export function ChallengeDetailPage() {
 
   return (
     <div className="space-y-4">
-      <Link to="/manage/challenges" className="inline-flex items-center gap-1.5 text-sm text-stone-600">
-        <ArrowLeft className="size-4" aria-hidden /> All challenges
-      </Link>
+      <BackLink to="/manage/challenges" className="inline-flex items-center gap-1.5 text-sm text-stone-600">
+        All challenges
+      </BackLink>
 
       {editing ? (
         <ChallengeEditor

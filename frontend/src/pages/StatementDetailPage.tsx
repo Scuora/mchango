@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, CircleCheckBig, Link2, PlusCircle, RefreshCw, Unlink } from "lucide-react";
+import { CheckCircle2, CircleCheckBig, Link2, PlusCircle, RefreshCw, Unlink } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { LoadState, SaveError } from "@/components/LoadState";
@@ -22,6 +22,8 @@ import { formatKes } from "@/lib/money";
 import { formatNairobi, formatNairobiDate } from "@/lib/time";
 import type { Account, CreateFromRow, Fundraiser, ImportDetail, Kind, ListItem, MatchStatus, RowView } from "@/lib/types";
 import { STATUS_TONES } from "./StatementsPage";
+import { useUrlState } from "@/lib/places";
+import { BackLink } from "@/components/BackLink";
 
 type Tab = "decide" | "matched" | "no_effect" | "not_on_statement";
 
@@ -38,7 +40,7 @@ export function StatementDetailPage() {
   const detail = useResource<ImportDetail>(`/api/manage/statements/${id}`);
   const accounts = useResource<Account[]>("/api/manage/accounts");
   const settings = useResource<Fundraiser>("/api/manage/settings");
-  const [tab, setTab] = useState<Tab>("decide");
+  const [tab, setTab] = useUrlState<Tab>("tab", "decide", ["decide", "matched", "no_effect", "not_on_statement"]);
   const status = detail.data?.import.status;
 
   // Poll while the statement is being read.
@@ -59,9 +61,9 @@ export function StatementDetailPage() {
 
   return (
     <div className="space-y-4">
-      <Link to="/manage/statements" className="inline-flex min-h-11 items-center gap-1 text-sm">
-        <ArrowLeft className="size-4" aria-hidden /> All statements
-      </Link>
+      <BackLink to="/manage/statements" className="inline-flex min-h-11 items-center gap-1 text-sm">
+        All statements
+      </BackLink>
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

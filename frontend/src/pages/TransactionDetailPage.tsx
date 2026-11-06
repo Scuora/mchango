@@ -1,6 +1,7 @@
-import { Archive, ArchiveRestore, ArrowLeft, Eye, EyeOff, FilePlus2, FileText, HandCoins, ListTree, Merge, PencilLine, Save, Undo2, Unlink, Users, Wallet } from "lucide-react";
+import { Archive, ArchiveRestore, Eye, EyeOff, FilePlus2, FileText, HandCoins, ListTree, Merge, PencilLine, Save, Undo2, Unlink, Users, Wallet } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
+import { BackLink } from "@/components/BackLink";
 import { LoadState, SaveError } from "@/components/LoadState";
 import { Amount, ChallengeTag, KindBadge, ReconciliationBadge, TransactionRow, isPaidTogether, itemLabel } from "@/components/money";
 import { PledgeGroupTag, PledgeProgressBar, PledgeStatusBadge } from "@/components/pledges";
@@ -43,9 +44,9 @@ export function TransactionDetailPage() {
 
   return (
     <div className="space-y-4">
-      <Link to="/manage/transactions" className="inline-flex min-h-11 items-center gap-1 text-sm">
-        <ArrowLeft className="size-4" aria-hidden /> All transactions
-      </Link>
+      <BackLink to="/manage/transactions" className="inline-flex min-h-11 items-center gap-1 text-sm">
+        All transactions
+      </BackLink>
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

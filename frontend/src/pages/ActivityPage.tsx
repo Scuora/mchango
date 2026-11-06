@@ -10,6 +10,7 @@ import { ChangeDiff, actorName } from "@/features/audit";
 import { useResource } from "@/lib/api";
 import { formatDayHeading, formatNairobiTime } from "@/lib/time";
 import type { ActivityEntry, ActivityPage as ActivityData } from "@/lib/types";
+import { useSearchParams } from "react-router";
 
 const ENTITIES: { value: string; label: string }[] = [
   { value: "transaction", label: "Transactions" },
@@ -44,11 +45,21 @@ function target(e: ActivityEntry): { label: string; to: string | null } {
 
 /** Every change made to the fundraiser: who did what, when, and why. */
 export function ActivityPage() {
-  const [actor, setActor] = useState("");
-  const [entity, setEntity] = useState("");
-  const [search, setSearch] = useState("");
-  const [query, setQuery] = useState("");
-  const [limit, setLimit] = useState(PAGE);
+  // Who, what, the search and how many are shown live in the address, so coming back keeps them.
+  const [url, setUrl] = useSearchParams();
+  const actor = url.get("who") ?? "";
+  const entity = url.get("what") ?? "";
+  const query = url.get("q") ?? "";
+  const limit = Math.max(PAGE, Number(url.get("shown")) || PAGE);
+  const [search, setSearch] = useState(query);
+  function update(patch: Record<string, string | number | null>) {
+    const next = new URLSearchParams(url);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null || value === "" || (key === "shown" && value === PAGE)) next.delete(key);
+      else next.set(key, String(value));
+    }
+    setUrl(next, { replace: true });
+  }
   const params = new URLSearchParams({ limit: String(limit) });
   if (actor) params.set("actor", actor);
   if (entity) params.set("entity", entity);
@@ -57,8 +68,7 @@ export function ActivityPage() {
 
   function find(event: FormEvent) {
     event.preventDefault();
-    setQuery(search.trim());
-    setLimit(PAGE);
+    update({ q: search.trim(), shown: null });
   }
 
   const data = activity.data;
@@ -85,13 +95,13 @@ export function ActivityPage() {
               id="act-actor"
               value={actor}
               options={[...(data?.actors ?? []).map((a) => ({ value: a, label: a })), { value: "system", label: "The app (system)" }]}
-              onChange={(v) => (setActor(v), setLimit(PAGE))}
+              onChange={(v) => update({ who: v, shown: null })}
               placeholder="Everyone"
               clearable
             />
           </Field>
           <Field label="What" htmlFor="act-entity">
-            <Choice id="act-entity" value={entity} options={ENTITIES} onChange={(v) => (setEntity(v), setLimit(PAGE))} placeholder="Everything" clearable />
+            <Choice id="act-entity" value={entity} options={ENTITIES} onChange={(v) => update({ what: v, shown: null })} placeholder="Everything" clearable />
           </Field>
           <form onSubmit={find} className="flex gap-2">
             <Input aria-label="Search the changes" placeholder="Search, e.g. a name, an amount or a reason" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -145,7 +155,7 @@ export function ActivityPage() {
               Showing {data.entries.length} of {data.total}
             </span>
             {data.entries.length < data.total && (
-              <Button variant="secondary" size="sm" busy={activity.loading} onClick={() => setLimit((l) => l + PAGE)}>
+              <Button variant="secondary" size="sm" busy={activity.loading} onClick={() => update({ shown: limit + PAGE })}>
                 Show more
               </Button>
             )}
