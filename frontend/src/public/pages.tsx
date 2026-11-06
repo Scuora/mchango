@@ -119,7 +119,7 @@ export function HomePage() {
       <MemorialHero page={page} />
       {hasAside ? (
         <div className="mx-auto max-w-6xl px-4 md:grid md:grid-cols-[minmax(320px,380px)_1fr] md:items-start md:gap-6 md:px-6">
-          <aside className="mt-6 space-y-4 md:sticky md:top-16">
+          <aside className="mt-6 space-y-4 md:sticky md:top-[5.5rem]">
             <GiveCard page={page} />
             <FuneralCard page={page} />
           </aside>
