@@ -118,6 +118,7 @@ async fn demo_flow() {
                 challenge_id: None,
                 shares: None,
                 items: None,
+                sources: None,
             },
             "test",
         )
@@ -154,6 +155,7 @@ async fn demo_flow() {
             challenge_id: None,
             shares: None,
             items: None,
+            sources: None,
         };
         let mut tx = db::begin_write(&pool).await.unwrap();
         let flagged = transactions::create(&mut tx, manual(false, None), "test").await;
@@ -424,6 +426,7 @@ fn record(kind: Kind, amount: i64, related: Option<i64>, challenge_id: Option<i6
         challenge_id,
         shares: None,
         items: None,
+        sources: None,
     }
 }
 
@@ -723,11 +726,12 @@ async fn merged_payments_itemised_spending_and_bills() {
         gift.source_message = Some(format!("TK1MERGE0{i} Confirmed. You have received Ksh{amount} from KALUME"));
         ids.push(transactions::create(&mut tx, gift, "test").await.unwrap().id);
     }
-    let merge = |ids: &[i64], name: Option<&str>| transactions::MergeRequest {
+    // `None`: no name given; `Some(None)`: listed anonymously.
+    let merge = |ids: &[i64], name: Option<Option<&str>>| transactions::MergeRequest {
         transaction_ids: ids.to_vec(),
-        public_name: name.map(Into::into),
+        public_name: name.map(|n| n.map(Into::into)),
     };
-    let group = transactions::merge(&mut tx, merge(&ids[..2], Some("Family of Kalume"))).await.unwrap();
+    let group = transactions::merge(&mut tx, merge(&ids[..2], Some(Some("Family of Kalume")))).await.unwrap();
     // Merging into an entry brings the whole entry along.
     assert_eq!(transactions::merge(&mut tx, merge(&[ids[1], ids[2]], None)).await.unwrap(), group);
     assert!(transactions::merge(&mut tx, merge(&ids[..1], None)).await.is_ok(), "already merged: nothing to do");
@@ -762,6 +766,26 @@ async fn merged_payments_itemised_spending_and_bills() {
     assert_eq!(combined.total, 1);
     assert_eq!(combined.items[0].group.as_ref().map(|g| (g.count, g.total_minor)), Some((3, 3_500_00)));
 
+    // Sorted by the amount the list shows (a merged entry by its total), or by name.
+    let sorted = |sort| transactions::ListQuery {
+        kind: Some(Kind::Contribution),
+        combine: true,
+        sort,
+        limit: Some(500),
+        ..Default::default()
+    };
+    let by_amount = transactions::list(&mut tx, sorted(transactions::Sort::AmountDesc)).await.unwrap();
+    let shown =
+        |i: &transactions::ListItem| i.group.as_ref().filter(|g| g.count > 1).map_or(i.amount_minor, |g| g.total_minor);
+    assert!(by_amount.items.windows(2).all(|w| shown(&w[0]) >= shown(&w[1])));
+    assert_eq!(by_amount.items.iter().filter(|i| shown(i) == 3_500_00).count(), 1, "the family once, at its total");
+    let by_name = transactions::list(&mut tx, sorted(transactions::Sort::NameAsc)).await.unwrap();
+    assert_eq!(by_name.total, by_amount.total);
+
+    // Choosing "Anonymous" when merging into a named entry lists it anonymously.
+    transactions::merge(&mut tx, merge(&ids[..1], Some(None))).await.unwrap();
+    assert_eq!(transactions::detail(&mut tx, ids[0]).await.unwrap().group.unwrap().public_name, None);
+
     // Taking payments out lists them on their own again; the last one left ends the entry.
     transactions::separate(&mut tx, ids[2]).await.unwrap();
     assert_eq!(transactions::detail(&mut tx, ids[0]).await.unwrap().group.unwrap().members.len(), 2);
@@ -769,6 +793,33 @@ async fn merged_payments_itemised_spending_and_bills() {
     assert!(transactions::detail(&mut tx, ids[0]).await.unwrap().group.is_none());
     let page = publication::build(&mut tx).await.unwrap();
     assert!(page.contributions.iter().all(|e| e.label != "Family of Kalume"));
+
+    // One payment out from two accounts: a record in each, listed and counted once.
+    let before_split = Totals::from_records(&fundraiser_records(&mut tx).await.unwrap(), 12_000_00);
+    let source = |account: i64, amount: i64, reference: Option<&str>| -> transactions::SourceInput {
+        serde_json::from_value(
+            serde_json::json!({ "account_id": account, "amount_minor": amount, "reference": reference }),
+        )
+        .unwrap()
+    };
+    let mut casket = record(Kind::Expense, 50_000_00, None, None);
+    casket.presentation.description = "Casket".into();
+    casket.sources = Some(vec![source(1, 30_000_00, Some("TK1SPLIT01")), source(2, 25_000_00, None)]);
+    assert!(transactions::create(&mut tx, casket, "test").await.is_err(), "the accounts must add up to the payment");
+    let mut casket = record(Kind::Expense, 50_000_00, None, None);
+    casket.presentation.description = "Casket".into();
+    casket.sources = Some(vec![source(1, 30_000_00, Some("TK1SPLIT01")), source(2, 20_000_00, None)]);
+    let first = transactions::create(&mut tx, casket, "test").await.unwrap().id;
+    let parts = transactions::detail(&mut tx, first).await.unwrap().group.unwrap().members;
+    let accounts: Vec<_> = parts.iter().map(|p| (p.account_id, p.amount_minor, p.reference.clone())).collect();
+    assert_eq!(accounts, [(Some(1), 30_000_00, Some("TK1SPLIT01".into())), (Some(2), 20_000_00, None)]);
+    let t = Totals::from_records(&fundraiser_records(&mut tx).await.unwrap(), 12_000_00);
+    assert_eq!(t.expenses_minor, before_split.expenses_minor + 50_000_00);
+    assert_eq!(t.expenses_count, before_split.expenses_count + 1);
+    let page = publication::build(&mut tx).await.unwrap();
+    let listed: Vec<_> = page.spending.iter().filter(|e| e.label == "Casket").collect();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].amount_minor, Some(50_000_00));
 
     // One payment out for several things: each listed, the money counted once.
     let items = |parts: &[(&str, i64)]| -> Vec<transactions::ExpenseItemInput> {
@@ -787,8 +838,9 @@ async fn merged_payments_itemised_spending_and_bills() {
     clothes.items = Some(items(&[("Shoes", 4_000_00), ("Clothing", 6_000_00)]));
     transactions::create(&mut tx, clothes, "test").await.unwrap();
     let t = Totals::from_records(&fundraiser_records(&mut tx).await.unwrap(), 12_000_00);
-    assert_eq!(t.expenses_minor, before.expenses_minor + 10_000_00);
-    assert_eq!(t.expenses_count, before.expenses_count + 2);
+    // On top of the casket: 10,000 more and two more things.
+    assert_eq!(t.expenses_minor, before.expenses_minor + 50_000_00 + 10_000_00);
+    assert_eq!(t.expenses_count, before.expenses_count + 1 + 2);
     let page = publication::build(&mut tx).await.unwrap();
     let labels: Vec<_> = page.spending.iter().map(|e| e.label.as_str()).collect();
     assert!(labels.contains(&"Shoes") && labels.contains(&"Clothing") && !labels.contains(&"Shoes and clothing"));

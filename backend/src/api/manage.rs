@@ -634,6 +634,7 @@ async fn create_bill(
             challenge_id: None,
             shares: None,
             items: None,
+            sources: None,
         },
         "new bill",
     )
@@ -660,6 +661,7 @@ async fn create_bill(
                 challenge_id: None,
                 shares: None,
                 items: None,
+                sources: None,
             },
             origin,
         )
@@ -772,7 +774,10 @@ async fn update_presentation(
     Json(update): Json<Presentation>,
 ) -> AppResult<Json<Detail>> {
     let mut tx = db::begin_write(&state.pool).await?;
-    transactions::update_presentation(&mut tx, id, update).await?;
+    // The parts of a payment from several accounts keep one description.
+    for part in transactions::paid_together(&mut tx, id).await? {
+        transactions::update_presentation(&mut tx, part, update.clone()).await?;
+    }
     tx.commit().await?;
     let mut conn = state.pool.acquire().await?;
     Ok(Json(transactions::detail(&mut conn, id).await?))

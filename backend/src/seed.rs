@@ -264,6 +264,7 @@ async fn sms(tx: &mut db::Tx, message: &str, kind: Kind, name: Option<&str>, des
             challenge_id: None,
             shares: None,
             items: None,
+            sources: None,
         },
         "demo data",
     )
@@ -297,6 +298,7 @@ async fn sms_personal(tx: &mut db::Tx, message: &str, direction: Direction, note
             challenge_id: None,
             shares: None,
             items: None,
+            sources: None,
         },
         "demo data",
     )
@@ -328,6 +330,7 @@ async fn manual(
             challenge_id: None,
             shares: None,
             items: None,
+            sources: None,
         },
         "demo data",
     )
@@ -359,6 +362,7 @@ async fn family_pledge(tx: &mut db::Tx, minor: i64, at: &str, presentation: Pres
         challenge_id: None,
         shares: None,
         items: None,
+        sources: None,
     };
     Ok(transactions::create(tx, request, "demo data").await?.id)
 }
@@ -395,6 +399,7 @@ async fn promise(
             challenge_id: None,
             shares: None,
             items: None,
+            sources: None,
         },
         "demo data",
     )

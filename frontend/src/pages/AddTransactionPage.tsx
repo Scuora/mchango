@@ -8,6 +8,7 @@ import { Badge, Card, CardBody, CardHeader, Notice } from "@/components/ui/misc"
 import { ChallengePicker, UpdatedChallengeMessage, canJoinChallenge } from "@/features/challenges";
 import { SharesEditor, buildShares, type ShareDraft } from "@/features/shares";
 import { ItemsEditor, blankItems, buildItems, type ItemDraft } from "@/features/items";
+import { SourcesEditor, buildSources, sourcesTotal, type SourceDraft } from "@/features/sources";
 import {
   MovementFields,
   apiDraftErrors,
@@ -55,6 +56,10 @@ export function AddTransactionPage() {
   const [itemised, setItemised] = useState(false);
   const [itemRows, setItemRows] = useState<ItemDraft[]>(blankItems);
   const [itemsError, setItemsError] = useState<string | undefined>();
+  // A payment out made from several accounts: each account with its part.
+  const [split, setSplit] = useState(false);
+  const [sourceRows, setSourceRows] = useState<SourceDraft[]>([]);
+  const [sourcesError, setSourcesError] = useState<string | undefined>();
   // From the Pledges page: `?kind=pledge&by=family` starts a new pledge; `?pledge=12` records money for pledge 12.
   const [params] = useSearchParams();
   const pledgeFor = params.get("pledge");
@@ -98,10 +103,28 @@ export function AddTransactionPage() {
     return <LoadState loading={accounts.loading} error={accounts.error} onRetry={accounts.reload} />;
   }
   const accountList = accounts.data;
+  const accountKind = (id: string) => accountList.find((a) => String(a.id) === id)?.kind;
+  /** Paying out from several accounts: only for money spent. */
+  const splitting = (d: MovementDraft) => split && d.kind === "expense";
   /** Expenses, transfers and refunds paid out of an M-Pesa account carry an M-Pesa charge. */
   const paysOutOfMpesa = (d: MovementDraft) =>
-    accountList.find((a) => String(a.id) === d.accountId)?.kind === "mpesa" &&
+    (splitting(d) ? sourceRows.some((r) => accountKind(r.accountId) === "mpesa") : accountKind(d.accountId) === "mpesa") &&
     (d.kind === "expense" || d.kind === "transfer" || (d.kind === "refund" && d.direction === "out"));
+
+  /** The parts changed: the amount is their total, and the first part's account stands for the payment. */
+  function changeSources(rows: SourceDraft[]) {
+    setSourceRows(rows);
+    setSourcesError(undefined);
+    setDraft((d) => d && { ...d, amount: toInput(sourcesTotal(rows)), accountId: rows[0]?.accountId ?? d.accountId, reference: rows[0]?.reference ?? "" });
+  }
+  function startSplit(d: MovementDraft) {
+    const other = accountList.find((a) => a.kind === "cash" && String(a.id) !== d.accountId) ?? accountList.find((a) => String(a.id) !== d.accountId);
+    setSplit(true);
+    changeSources([
+      { accountId: d.accountId, amount: d.amount, reference: d.reference },
+      { accountId: other ? String(other.id) : "", amount: "", reference: "" },
+    ]);
+  }
   const duplicate = saveError instanceof ApiError && saveError.code === "possible_duplicate" ? saveError : null;
 
   function reset() {
@@ -124,6 +147,9 @@ export function AddTransactionPage() {
     setItemised(false);
     setItemRows(blankItems());
     setItemsError(undefined);
+    setSplit(false);
+    setSourceRows([]);
+    setSourcesError(undefined);
   }
 
   async function readMessage(event: FormEvent) {
@@ -235,7 +261,7 @@ export function AddTransactionPage() {
     }
     setSharesError(undefined);
     let items = null;
-    if (itemised && draft.kind === "expense") {
+    if (itemised && draft.kind === "expense" && !splitting(draft)) {
       const parsedTotal = parseKes(draft.amount);
       const builtItems = buildItems(itemRows, parsedTotal.ok ? parsedTotal.minor : null);
       if ("error" in builtItems) {
@@ -245,17 +271,29 @@ export function AddTransactionPage() {
       items = builtItems.items;
     }
     setItemsError(undefined);
+    let sources = null;
+    if (splitting(draft)) {
+      const builtSources = buildSources(sourceRows, accountList, chargeMinor);
+      if ("error" in builtSources) {
+        setSourcesError(builtSources.error);
+        return;
+      }
+      sources = builtSources.sources;
+    }
+    setSourcesError(undefined);
     setErrors({});
     const body: CreateRequest = {
       movement: built.movement,
       presentation: toPresentation(presentation, draft.kind),
       source_message: step.message,
-      charge_minor: chargeMinor,
+      // A payment from several accounts carries its charge on the M-Pesa part.
+      charge_minor: sources ? null : chargeMinor,
       client_key: formKey,
       confirm_possible_duplicate: confirmPossibleDuplicate,
       challenge_id: canJoinChallenge(draft.kind) && challenge ? Number(challenge) : null,
       shares,
       items,
+      sources,
     };
     setSaving(true);
     try {
@@ -267,6 +305,7 @@ export function AddTransactionPage() {
       setChargeError(fieldError(e, "charge_minor"));
       setSharesError(fieldError(e, "shares"));
       setItemsError(fieldError(e, "items"));
+      setSourcesError(fieldError(e, "sources"));
     } finally {
       setSaving(false);
     }
@@ -349,7 +388,8 @@ export function AddTransactionPage() {
   const costRequired = paysOutOfMpesa(draft);
   const toCash = accountList.find((a) => String(a.id) === draft.toAccountId)?.kind === "cash";
   const how: PaidBy = paidBy ?? (draft.kind === "transfer" && toCash ? "withdraw" : "send");
-  const amount = parseKes(draft.amount);
+  // Several accounts: the charge is worked out on the M-Pesa part.
+  const amount = parseKes(splitting(draft) ? (sourceRows.find((r) => accountKind(r.accountId) === "mpesa")?.amount ?? "") : draft.amount);
   const suggestion = costRequired && amount.ok ? suggestedCost(amount.minor, how) : null;
 
   return (
@@ -399,6 +439,26 @@ export function AddTransactionPage() {
             errors={errors}
             uncertain={uncertain}
             idPrefix="add"
+            amountFromParts={splitting(draft)}
+            afterAccount={
+              draft.kind === "expense" && accountList.length > 1 ? (
+                <Checkbox
+                  className="sm:col-span-2"
+                  checked={false}
+                  onChange={() => startSplit(draft)}
+                  label="Paid from more than one account"
+                  hint="e.g. KES 30,000 by M-Pesa and KES 20,000 in cash. Saved as one payment, with each part in its own account."
+                />
+              ) : null
+            }
+            accountsOverride={
+              splitting(draft) ? (
+                <div className="space-y-3 sm:col-span-2">
+                  <Checkbox checked onChange={() => setSplit(false)} label="Paid from more than one account" />
+                  <SourcesEditor accounts={accountList} value={sourceRows} onChange={changeSources} error={sourcesError} />
+                </div>
+              ) : undefined
+            }
             afterAmount={
               showCharge ? (
                 <>
@@ -476,7 +536,7 @@ export function AddTransactionPage() {
                 )}
               </div>
             )}
-            {draft.kind === "expense" && (
+            {draft.kind === "expense" && !splitting(draft) && (
               <div className="mt-4 space-y-3 rounded-xl border border-stone-200 p-4">
                 <Checkbox
                   checked={itemised}

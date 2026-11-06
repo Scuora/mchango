@@ -1,10 +1,15 @@
-//! Merged contributions.
+//! Merged contributions, and payments out made from several accounts.
 //!
 //! Several payments from the same giver (a family that gave three times) can be
 //! listed publicly as one entry under one name. Nothing about the payments
 //! changes: each keeps its amount, M-Pesa message, statement match and history,
 //! and the money is counted once per payment as before. Separating them puts
 //! everything back as it was.
+//!
+//! A payment out made from several accounts (30,000 by M-Pesa and 20,000 in
+//! cash) is saved as one record per account, linked the same way: listed once,
+//! under its description, with each part kept in its own account. Every record
+//! in an entry is of one kind.
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -49,10 +54,16 @@ pub struct GroupMessage {
 #[derive(Debug, Deserialize)]
 pub struct MergeRequest {
     pub transaction_ids: Vec<i64>,
-    /// The name to list them under. Left out, a merged entry keeps its name and a
-    /// new one takes the first public name among the payments.
-    #[serde(default)]
-    pub public_name: Option<String>,
+    /// The name to list them under, `null` for the anonymous label. Left out, a
+    /// merged entry keeps its name and a new one takes the first public name among
+    /// the payments.
+    #[serde(default, deserialize_with = "sent")]
+    pub public_name: Option<Option<String>>,
+}
+
+/// Tells a field sent as `null` (`Some(None)`) from one left out (`None`).
+fn sent<'de, D: serde::Deserializer<'de>>(field: D) -> Result<Option<Option<String>>, D::Error> {
+    Option::<String>::deserialize(field).map(Some)
 }
 
 async fn group_of(conn: &mut SqliteConnection, id: i64) -> AppResult<Option<i64>> {
@@ -98,6 +109,83 @@ fn quoted(name: &Option<String>) -> String {
     format!("“{}”", name.as_deref().unwrap_or("anonymous"))
 }
 
+/// How history names an entry: a merged entry by its name, a payment from
+/// several accounts by what it paid for.
+async fn entry_label(conn: &mut SqliteConnection, group: i64) -> AppResult<String> {
+    let first: Option<(Kind, String)> = sqlx::query_as(
+        "SELECT v.kind, t.description FROM transactions t
+         JOIN transaction_versions v ON v.transaction_id = t.id AND v.is_current = 1
+         WHERE t.group_id = ? ORDER BY t.id LIMIT 1",
+    )
+    .bind(group)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(match first {
+        Some((Kind::Expense, description)) => {
+            format!(
+                "payment “{}” from several accounts",
+                if description.is_empty() { "money spent" } else { &description }
+            )
+        }
+        _ => format!("merged entry {}", quoted(&group_name(conn, group).await?)),
+    })
+}
+
+/// Links the parts of a payment out made from several accounts, just saved
+/// together, so it is listed and counted once.
+pub(crate) async fn link_parts(conn: &mut SqliteConnection, ids: &[i64]) -> AppResult<()> {
+    let now = clock::now_string();
+    let group: i64 = sqlx::query_scalar(
+        "INSERT INTO contribution_groups (public_name, created_at, updated_at) VALUES (NULL, ?, ?) RETURNING id",
+    )
+    .bind(&now)
+    .bind(&now)
+    .fetch_one(&mut *conn)
+    .await?;
+    let mut parts = Vec::new();
+    let mut total = 0;
+    for &id in ids {
+        sqlx::query("UPDATE transactions SET group_id = ?, updated_at = ? WHERE id = ?")
+            .bind(group)
+            .bind(&now)
+            .bind(id)
+            .execute(&mut *conn)
+            .await?;
+        let (account, amount): (String, i64) = sqlx::query_as(
+            "SELECT a.name, v.amount_minor FROM transaction_versions v JOIN accounts a ON a.id = v.account_id
+             WHERE v.transaction_id = ? AND v.is_current = 1",
+        )
+        .bind(id)
+        .fetch_one(&mut *conn)
+        .await?;
+        parts.push(format!("#{id} {} from {account}", format_kes(amount)));
+        total += amount;
+    }
+    let summary = format!("Paid from {} accounts, {} in all: {}", ids.len(), format_kes(total), parts.join(", "));
+    for &id in ids {
+        history::record(
+            conn,
+            Entity::Transaction,
+            Some(id),
+            "merged",
+            &summary,
+            None,
+            Some(json!({ "group_id": group, "members": ids })),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+/// The records an edit to a payment's description applies to: every part of a
+/// payment from several accounts, so they stay one payment; otherwise just it.
+pub async fn paid_together(conn: &mut SqliteConnection, id: i64) -> AppResult<Vec<i64>> {
+    if current_version(conn, id).await?.kind != Kind::Expense {
+        return Ok(vec![id]);
+    }
+    merged_with(conn, id).await
+}
+
 /// Merges payments into one public entry. Payments already merged bring their
 /// whole entry with them, so merging two merged entries makes one. Returns the
 /// merged entry's id.
@@ -106,7 +194,7 @@ pub async fn merge(conn: &mut SqliteConnection, request: MergeRequest) -> AppRes
     if chosen.len() > 200 {
         return Err(AppError::invalid("Merge at most 200 payments at a time."));
     }
-    let name = clean_optional(request.public_name, 80, "public_name")?;
+    let name = request.public_name.map(|name| clean_optional(name, 80, "public_name")).transpose()?;
 
     let mut existing_groups = BTreeSet::new();
     let mut members = BTreeSet::new();
@@ -180,7 +268,7 @@ pub async fn merge(conn: &mut SqliteConnection, request: MergeRequest) -> AppRes
         }
     };
     let after_name = match name {
-        Some(name) => Some(name),
+        Some(chosen) => chosen,
         None if !existing_groups.is_empty() => before_name.clone(),
         None => {
             let mut first = None;
@@ -282,26 +370,26 @@ pub async fn separate(conn: &mut SqliteConnection, id: i64) -> AppResult<()> {
 
 /// Separates every payment in a merged entry: each is listed on its own again.
 pub async fn unmerge(conn: &mut SqliteConnection, group: i64) -> AppResult<()> {
-    let name = group_name(conn, group).await?;
+    let label = entry_label(conn, group).await?;
     let members = member_ids(conn, group).await?;
-    end_group(conn, group, &members, &format!("Merged entry {} undone: listed on its own again", quoted(&name))).await
+    end_group(conn, group, &members, &format!("The {label} was undone: listed on its own again")).await
 }
 
 /// Takes a payment out of its merged entry, if it is in one, saying why.
 pub(crate) async fn leave_group(conn: &mut SqliteConnection, id: i64, why: &str) -> AppResult<()> {
     let Some(group) = group_of(conn, id).await? else { return Ok(()) };
-    let name = group_name(conn, group).await?;
+    let label = entry_label(conn, group).await?;
     sqlx::query("UPDATE transactions SET group_id = NULL, updated_at = ? WHERE id = ?")
         .bind(clock::now_string())
         .bind(id)
         .execute(&mut *conn)
         .await?;
-    let summary = format!("Taken out of the merged entry {} ({why}); listed on its own again", quoted(&name));
+    let summary = format!("Taken out of the {label} ({why}); listed on its own again");
     history::record(conn, Entity::Transaction, Some(id), "merged", &summary, None, Some(json!({ "group_id": group })))
         .await?;
     let rest = member_ids(conn, group).await?;
     if rest.len() < 2 {
-        let summary = format!("Merged entry {} ended: no other payment was left in it", quoted(&name));
+        let summary = format!("The {label} ended: no other payment was left in it");
         end_group(conn, group, &rest, &summary).await?;
     }
     Ok(())

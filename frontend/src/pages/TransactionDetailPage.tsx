@@ -1,8 +1,8 @@
-import { Archive, ArchiveRestore, ArrowLeft, Eye, EyeOff, FilePlus2, FileText, HandCoins, ListTree, Merge, PencilLine, Save, Undo2, Unlink, Users } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, Eye, EyeOff, FilePlus2, FileText, HandCoins, ListTree, Merge, PencilLine, Save, Undo2, Unlink, Users, Wallet } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
 import { LoadState, SaveError } from "@/components/LoadState";
-import { Amount, ChallengeTag, KindBadge, ReconciliationBadge, TransactionRow, itemLabel } from "@/components/money";
+import { Amount, ChallengeTag, KindBadge, ReconciliationBadge, TransactionRow, isPaidTogether, itemLabel } from "@/components/money";
 import { PledgeGroupTag, PledgeProgressBar, PledgeStatusBadge } from "@/components/pledges";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Checkbox, Field, Input, Textarea } from "@/components/ui/form";
@@ -55,7 +55,13 @@ export function TransactionDetailPage() {
             <KindBadge kind={t.kind} />
             <ReconciliationBadge status={t.reconciliation} />
             {t.removed && <Badge tone="neutral">Archived</Badge>}
-            {d.group && (
+            {d.group && isPaidTogether(t) && (
+              <Badge tone="info">
+                <Wallet className="size-3.5" aria-hidden />
+                Paid from {d.group.members.filter((m) => !m.removed).length} accounts
+              </Badge>
+            )}
+            {d.group && !isPaidTogether(t) && (
               <Badge tone="info">
                 <Merge className="size-3.5" aria-hidden />
                 Merged as {d.group.public_name ?? settings.data?.anonymous_label ?? "Anonymous"}
@@ -170,9 +176,10 @@ export function TransactionDetailPage() {
             <PresentationCard detail={d} anonymousLabel={settings.data?.anonymous_label} onSaved={detail.setData} />
           )}
           {t.kind === "personal" && <PresentationCard detail={d} onSaved={detail.setData} notesOnly />}
-          {d.group && <MergedCard detail={d} anonymousLabel={settings.data?.anonymous_label} onSaved={detail.setData} onChanged={detail.reload} />}
+          {d.group && isPaidTogether(t) && <PaidFromCard detail={d} onSaved={detail.setData} />}
+          {d.group && !isPaidTogether(t) && <MergedCard detail={d} anonymousLabel={settings.data?.anonymous_label} onSaved={detail.setData} onChanged={detail.reload} />}
           {!t.removed && t.kind === "contribution" && !d.group && <SharesCard detail={d} anonymousLabel={settings.data?.anonymous_label} onSaved={detail.setData} />}
-          {!t.removed && t.kind === "expense" && <ItemsCard detail={d} onSaved={detail.setData} />}
+          {!t.removed && t.kind === "expense" && !d.group && <ItemsCard detail={d} onSaved={detail.setData} />}
           {!t.removed && canJoinChallenge(t.kind) && <ChallengeCard detail={d} onSaved={detail.setData} />}
 
           {(t.kind === "expense" || receipts.length > 0) && <ReceiptsCard detail={d} receipts={receipts} onChanged={detail.reload} onSaved={detail.setData} />}
@@ -356,6 +363,72 @@ function SharesCard({ detail, anonymousLabel, onSaved }: { detail: DetailData; a
  * Several payments from one giver, listed publicly as one entry. Every payment
  * keeps its message and history; separating them changes no money.
  */
+/** A payment out made from several accounts: each account's part, kept in that account. */
+function PaidFromCard({ detail, onSaved }: { detail: DetailData; onSaved: (d: DetailData) => void }) {
+  const group = detail.group!;
+  const t = detail.transaction;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const live = group.members.filter((m) => !m.removed);
+
+  async function separate() {
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(await api.post<DetailData>(`/api/manage/transactions/${t.id}/separate`, {}));
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Paid from several accounts"
+        description={`One payment of ${formatKes(group.total_minor)} from ${live.length} accounts, listed once. Each part counts in its own account and keeps its own M-Pesa code, charge and statement match. Changes to the description apply to every part.`}
+      />
+      <CardBody className="space-y-4">
+        <ol className="divide-y divide-stone-100 rounded-lg border border-stone-200">
+          {group.members.map((m) => (
+            <li key={m.id} className={m.id === t.id ? "bg-plum-50/60" : undefined}>
+              <div className="flex items-start justify-between gap-3 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-stone-900">
+                    {m.id === t.id ? (
+                      <>
+                        #{m.id} · {m.account_name ?? "?"} · this part
+                      </>
+                    ) : (
+                      <Link to={`/manage/transactions/${m.id}`}>
+                        #{m.id} · {m.account_name ?? "?"}
+                      </Link>
+                    )}
+                    {m.removed && <Badge tone="neutral" className="ml-2">Archived</Badge>}
+                  </p>
+                  <p className="text-sm text-stone-600">
+                    {formatNairobi(m.occurred_at)}
+                    {m.reference && ` · ${m.reference}`}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <Amount minor={m.amount_minor} direction={m.direction} kind={m.kind} className={m.removed ? "line-through" : undefined} />
+                  <ReconciliationBadge status={m.reconciliation} />
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <Button variant="secondary" size="sm" busy={busy} icon={<Unlink className="size-4" aria-hidden />} onClick={() => void separate()}>
+          Take this part out
+        </Button>
+        <SaveError error={error} />
+      </CardBody>
+    </Card>
+  );
+}
+
 function MergedCard({
   detail,
   anonymousLabel,

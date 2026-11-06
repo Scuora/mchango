@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::{QueryBuilder, Sqlite, SqliteConnection};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
     Direction, ExpenseItem, ExpenseItemInput, Kind, Movement, MovementInput, PledgedBy, Presentation, Share,
@@ -99,6 +99,22 @@ pub struct CreateRequest {
     /// The parts must add up to the amount.
     #[serde(default)]
     pub items: Option<Vec<ExpenseItemInput>>,
+    /// For a payment out made from several accounts: each account with its part,
+    /// M-Pesa code and charge. The parts must add up to the amount.
+    #[serde(default)]
+    pub sources: Option<Vec<SourceInput>>,
+}
+
+/// One account a payment out was made from, as sent by the client.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SourceInput {
+    pub account_id: i64,
+    pub amount_minor: Amount,
+    #[serde(default)]
+    pub reference: Option<String>,
+    /// The M-Pesa charge on this part, saved as its own charge line.
+    #[serde(default)]
+    pub charge_minor: Option<Amount>,
 }
 
 #[derive(Debug, Serialize)]
@@ -108,8 +124,103 @@ pub struct Created {
 }
 
 /// Creates a transaction (and its charge line, if any) inside the caller's
-/// write transaction.
-pub async fn create(conn: &mut SqliteConnection, request: CreateRequest, origin: &str) -> AppResult<Created> {
+/// write transaction. A payment out from several accounts is saved as one
+/// record per account, linked so it is listed once.
+pub async fn create(conn: &mut SqliteConnection, mut request: CreateRequest, origin: &str) -> AppResult<Created> {
+    match request.sources.take().filter(|s| !s.is_empty()) {
+        Some(sources) => create_from_accounts(conn, request, sources, origin).await,
+        None => create_one(conn, request, origin).await,
+    }
+}
+
+/// A payment out made from several accounts (30,000 by M-Pesa and 20,000 in
+/// cash). Each account's part is a record of its own, so balances, M-Pesa codes,
+/// charges and statement matches stay per account; the parts are linked so the
+/// payment is listed and counted once. The pasted message goes with the first part.
+async fn create_from_accounts(
+    conn: &mut SqliteConnection,
+    mut request: CreateRequest,
+    sources: Vec<SourceInput>,
+    origin: &str,
+) -> AppResult<Created> {
+    let part = |request: &mut CreateRequest, source: SourceInput, first: bool| CreateRequest {
+        movement: MovementInput {
+            account_id: Some(source.account_id),
+            amount_minor: source.amount_minor,
+            reference: source.reference,
+            ..request.movement.clone()
+        },
+        presentation: request.presentation.clone(),
+        source_message: if first { request.source_message.take() } else { None },
+        charge_minor: source.charge_minor,
+        client_key: if first { request.client_key.take() } else { None },
+        confirm_possible_duplicate: request.confirm_possible_duplicate,
+        challenge_id: None,
+        shares: None,
+        items: None,
+        sources: None,
+    };
+    // The same form sent again: the first part answers with what was saved.
+    if let Some(key) = request.client_key.as_deref().map(str::trim).filter(|k| !k.is_empty()) {
+        let saved: Option<i64> = sqlx::query_scalar("SELECT id FROM transactions WHERE client_key = ?")
+            .bind(key)
+            .fetch_optional(&mut *conn)
+            .await?;
+        if saved.is_some() {
+            let first = sources.into_iter().next().expect("sources is not empty");
+            let request = part(&mut request, first, true);
+            return create_one(conn, request, origin).await;
+        }
+    }
+
+    let movement = request.movement.clone().validate()?;
+    if movement.kind != Kind::Expense {
+        return Err(AppError::field("sources", "Only money spent can be paid from several accounts."));
+    }
+    if sources.len() < 2 {
+        return Err(AppError::field("sources", "Add a second account, or pay from one account."));
+    }
+    if sources.len() > 10 {
+        return Err(AppError::field("sources", "Pay from at most 10 accounts at a time."));
+    }
+    let mut accounts = BTreeSet::new();
+    if !sources.iter().all(|s| accounts.insert(s.account_id)) {
+        return Err(AppError::field("sources", "Choose each account once."));
+    }
+    let sum: i64 = sources.iter().map(|s| s.amount_minor.minor()).sum();
+    if sum != movement.amount_minor {
+        return Err(AppError::field(
+            "sources",
+            format!(
+                "The accounts add up to {}, but the payment is {}.",
+                format_kes(sum),
+                format_kes(movement.amount_minor)
+            ),
+        ));
+    }
+    if request.charge_minor.is_some() {
+        return Err(AppError::field("charge_minor", "Give the charge with the account it was taken from."));
+    }
+    if request.items.as_ref().is_some_and(|i| !i.is_empty()) {
+        return Err(AppError::field(
+            "items",
+            "A payment from several accounts cannot be broken into items. Describe what it paid for instead.",
+        ));
+    }
+
+    let mut ids = Vec::new();
+    let mut charge_id = None;
+    for (i, source) in sources.into_iter().enumerate() {
+        let request = part(&mut request, source, i == 0);
+        let created = create_one(conn, request, origin).await?;
+        charge_id = charge_id.or(created.charge_id);
+        ids.push(created.id);
+    }
+    super::groups::link_parts(conn, &ids).await?;
+    Ok(Created { id: ids[0], charge_id })
+}
+
+async fn create_one(conn: &mut SqliteConnection, request: CreateRequest, origin: &str) -> AppResult<Created> {
     let client_key = match request.client_key.as_deref().map(str::trim).filter(|k| !k.is_empty()) {
         None => None,
         Some(k) if (8..=64).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') => {
@@ -545,13 +656,14 @@ async fn apply_correction(
 
     // Shares must still add up to the contribution; otherwise they no longer describe it.
     // An archived record keeps them, so restoring it brings them back.
-    // The same goes for the items a payment out covers, and for a merged entry,
-    // which only ever holds money received.
+    // The same goes for the items a payment out covers, and for a merged entry or
+    // a payment from several accounts, whose records are all of one kind.
     if !removed {
         drop_stale_shares(conn, id, &after).await?;
         drop_stale_items(conn, id, &after).await?;
-        if after.kind != Kind::Contribution {
-            super::groups::leave_group(conn, id, "it is no longer money received").await?;
+        if after.kind != before.kind {
+            let why = format!("it is no longer {}", before.kind.label().to_lowercase());
+            super::groups::leave_group(conn, id, &why).await?;
         }
     }
     // Money moved into a challenge's own account joins that challenge.
@@ -1199,7 +1311,9 @@ const ITEMS_CTE: &str = "WITH items AS (
                AS last_changed_by,
            (SELECT at FROM change_log WHERE entity = 'transaction' AND entity_id = t.id ORDER BY id DESC LIMIT 1)
                AS last_changed_at,
-           (SELECT COUNT(*) FROM documents d WHERE d.transaction_id = t.id AND d.kind = 'receipt') AS receipt_count,
+           (SELECT COUNT(*) FROM documents d WHERE d.kind = 'receipt' AND (d.transaction_id = t.id
+                OR d.transaction_id IN (SELECT m.id FROM transactions m WHERE m.group_id = t.group_id)))
+               AS receipt_count,
            EXISTS (SELECT 1 FROM statement_rows r JOIN statement_imports i ON i.id = r.import_id
                    WHERE r.transaction_id = t.id AND i.status = 'ready') AS matched,
            EXISTS (SELECT 1 FROM statement_rows r JOIN statement_imports i ON i.id = r.import_id
@@ -1226,6 +1340,20 @@ pub enum StatusFilter {
     Removed,
 }
 
+/// How a list is ordered. Names and amounts are the ones the list shows: a
+/// merged entry by its own name and total.
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Sort {
+    #[default]
+    Newest,
+    Oldest,
+    NameAsc,
+    NameDesc,
+    AmountDesc,
+    AmountAsc,
+}
+
 #[derive(Debug, Default, Deserialize)]
 pub struct ListQuery {
     pub q: Option<String>,
@@ -1240,6 +1368,8 @@ pub struct ListQuery {
     /// Lists merged payments once, as their latest payment that fits the filters.
     #[serde(default)]
     pub combine: bool,
+    #[serde(default)]
+    pub sort: Sort,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -1335,8 +1465,37 @@ fn push_rows(qb: &mut QueryBuilder<Sqlite>, query: &ListQuery) -> AppResult<()> 
     Ok(())
 }
 
+/// The ORDER BY for a list, newest first among equals. Records with no name
+/// (anonymous) come after the named ones either way.
+fn order_by(query: &ListQuery) -> String {
+    // The amount and name a row shows; a combined merged entry shows its own.
+    let as_entry = if query.combine { "group_id IS NOT NULL AND group_count > 1" } else { "0" };
+    let amount = format!("CASE WHEN {as_entry} THEN group_total_minor ELSE amount_minor END");
+    let name = format!(
+        "trim(CASE
+            WHEN {as_entry} AND kind = 'contribution' THEN coalesce(group_name, '')
+            WHEN kind = 'contribution' AND shares_json <> '[]' THEN coalesce(json_extract(shares_json, '$[0].public_name'), '')
+            WHEN kind IN ('contribution', 'pledge') THEN coalesce(public_name, counterparty, '')
+            WHEN kind = 'transfer' THEN coalesce(account_name, '')
+            ELSE coalesce(nullif(description, ''), counterparty, public_name, '')
+         END)"
+    );
+    let newest = "occurred_at DESC, id DESC";
+    match query.sort {
+        Sort::Newest => newest.to_string(),
+        Sort::Oldest => "occurred_at, id".to_string(),
+        Sort::NameAsc => format!("{name} = '', {name} COLLATE NOCASE, {newest}"),
+        Sort::NameDesc => format!("{name} = '', {name} COLLATE NOCASE DESC, {newest}"),
+        Sort::AmountDesc => format!("{amount} DESC, {newest}"),
+        Sort::AmountAsc => format!("{amount}, {newest}"),
+    }
+}
+
+/// The most records one list returns: enough for the whole fundraiser on one page.
+pub const MAX_LIST: i64 = 10_000;
+
 pub async fn list(conn: &mut SqliteConnection, query: ListQuery) -> AppResult<ListResponse> {
-    let limit = query.limit.unwrap_or(50).clamp(1, 500);
+    let limit = query.limit.unwrap_or(50).clamp(1, MAX_LIST);
     let offset = query.offset.unwrap_or(0).max(0);
 
     let mut count = QueryBuilder::<Sqlite>::new(ITEMS_CTE);
@@ -1348,7 +1507,8 @@ pub async fn list(conn: &mut SqliteConnection, query: ListQuery) -> AppResult<Li
     let mut select = QueryBuilder::<Sqlite>::new(ITEMS_CTE);
     select.push("SELECT * FROM (");
     push_rows(&mut select, &query)?;
-    select.push(") ORDER BY occurred_at DESC, id DESC LIMIT ").push_bind(limit).push(" OFFSET ").push_bind(offset);
+    select.push(") ORDER BY ").push(order_by(&query));
+    select.push(" LIMIT ").push_bind(limit).push(" OFFSET ").push_bind(offset);
     let items: Vec<ListItem> = select.build_query_as().fetch_all(&mut *conn).await?;
 
     Ok(ListResponse { items: items.into_iter().map(ListItem::finish).collect(), total })

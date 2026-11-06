@@ -263,13 +263,24 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
         newest_first(records.iter().filter(|r| kinds.contains(&r.kind)).map(entry).collect())
     };
     // Payments merged into one entry are listed once, under the entry's name, on
-    // the day of the latest of them.
+    // the day of the latest of them; so is a payment out from several accounts,
+    // under what it paid for. An entry's records are all of one kind.
     let mut merged: HashMap<i64, Vec<&FundraiserRecord>> = HashMap::new();
-    for r in records.iter().filter(|r| r.kind == Kind::Contribution) {
+    for r in records.iter().filter(|r| matches!(r.kind, Kind::Contribution | Kind::Expense)) {
         if let Some(group) = r.group_id {
             merged.entry(group).or_default().push(r);
         }
     }
+    let paid_together = |members: &[&FundraiserRecord]| -> PublicEntry {
+        let latest = members[members.len() - 1];
+        PublicEntry {
+            amount_minor: Some(members.iter().map(|m| m.amount_minor).sum()),
+            reference_hint: None,
+            matched_to_statement: members.iter().all(|m| m.matched),
+            receipts: members.iter().flat_map(|m| receipts.get(&m.id).cloned().unwrap_or_default()).collect(),
+            ..entry(latest)
+        }
+    };
     let merged_entry = |members: &[&FundraiserRecord]| -> PublicEntry {
         let latest = members[members.len() - 1];
         let total: i64 = members.iter().map(|m| m.amount_minor).sum();
@@ -318,6 +329,10 @@ pub async fn build(conn: &mut SqliteConnection) -> AppResult<PublicPage> {
             .iter()
             .filter(|r| r.kind == Kind::Expense)
             .flat_map(|r| {
+                if let Some(members) = r.group_id.and_then(|g| merged.get(&g)) {
+                    let last = members[members.len() - 1];
+                    return if last.id == r.id { vec![paid_together(members)] } else { Vec::new() };
+                }
                 let whole = entry(r);
                 if r.items.is_empty() {
                     return vec![whole];

@@ -309,7 +309,10 @@ pub async fn statement(
             }
             (Kind::Expense, _) => {
                 totals.expenses_minor += a;
-                totals.expenses_count += itemised.len().max(1) as i64;
+                totals.expenses_count += match row.group_id {
+                    Some(group) => i64::from(merged_counted.insert(group)),
+                    None => itemised.len().max(1) as i64,
+                };
             }
             (Kind::Charge, _) => totals.charges_minor += a,
             (Kind::Refund, Some(Direction::In)) => totals.refunds_received_minor += a,

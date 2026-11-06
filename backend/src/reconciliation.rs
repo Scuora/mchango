@@ -528,6 +528,7 @@ pub async fn create_from_row(
             challenge_id: None,
             shares: None,
             items: None,
+            sources: None,
         },
         &format!("from statement import #{import_id}"),
     )

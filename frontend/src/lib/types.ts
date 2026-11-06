@@ -378,6 +378,16 @@ export interface CreateRequest {
   shares?: Share[] | null;
   /** For a payment out that covered several things. The parts must add up to the amount. */
   items?: ExpenseItem[] | null;
+  /** For a payment out made from several accounts: each account's part. The parts must add up to the amount. */
+  sources?: Source[] | null;
+}
+
+/** One account a payment out was made from, with its part, M-Pesa code and charge. */
+export interface Source {
+  account_id: number;
+  amount_minor: number;
+  reference: string | null;
+  charge_minor: number | null;
 }
 
 /** One person's part of a payment shared by several people. */

@@ -122,11 +122,17 @@ interface Props {
   uncertain?: Uncertain;
   /** Extra content after the amount (e.g. the charge field). */
   afterAmount?: ReactNode;
+  /** Extra content after the account fields (e.g. "paid from more than one account"). */
+  afterAccount?: ReactNode;
+  /** Shown instead of the account and M-Pesa code, e.g. a payment's several accounts. */
+  accountsOverride?: ReactNode;
+  /** The amount is the parts added up, so it cannot be typed. */
+  amountFromParts?: boolean;
   idPrefix?: string;
 }
 
 /** The financial fields of a transaction, adapting to the chosen type. */
-export function MovementFields({ draft, onChange, accounts, errors, uncertain = {}, afterAmount, idPrefix = "m" }: Props) {
+export function MovementFields({ draft, onChange, accounts, errors, uncertain = {}, afterAmount, afterAccount, accountsOverride, amountFromParts, idPrefix = "m" }: Props) {
   const set = <K extends keyof MovementDraft>(key: K, value: MovementDraft[K]) => onChange({ ...draft, [key]: value });
   const id = (name: string) => `${idPrefix}-${name}`;
   const kind = draft.kind;
@@ -165,13 +171,15 @@ export function MovementFields({ draft, onChange, accounts, errors, uncertain = 
         htmlFor={id("amount")}
         error={errors.amount}
         uncertain={uncertain.amount}
-        hint={kind && money ? "Without the charge; charges are recorded on their own line." : undefined}
+        hint={amountFromParts ? "The accounts below, added up. Without the charge." : kind && money ? "Without the charge; charges are recorded on their own line." : undefined}
       >
         <Input
           id={id("amount")}
           inputMode="decimal"
           autoComplete="off"
           placeholder="e.g. 1,250.50"
+          readOnly={amountFromParts}
+          className={amountFromParts ? "bg-stone-50" : undefined}
           value={draft.amount}
           tone={tone("amount")}
           onChange={(e) => set("amount", e.target.value)}
@@ -189,7 +197,8 @@ export function MovementFields({ draft, onChange, accounts, errors, uncertain = 
 
       {afterAmount}
 
-      {money && kind !== "" && (
+      {money && kind !== "" && accountsOverride}
+      {money && kind !== "" && !accountsOverride && (
         <>
           <Field label={kind === "transfer" ? "Moved from" : "Account"} htmlFor={id("account")} error={errors.accountId}>
             <Choice id={id("account")} value={draft.accountId} options={accountOptions} tone={errors.accountId ? "invalid" : "normal"} onChange={(v) => set("accountId", v)} />
@@ -210,6 +219,7 @@ export function MovementFields({ draft, onChange, accounts, errors, uncertain = 
               onChange={(e) => set("reference", e.target.value.toUpperCase())}
             />
           </Field>
+          {afterAccount}
         </>
       )}
 

@@ -54,8 +54,9 @@ impl FundraiserRecord {
     }
 }
 
-/// Counts contributions as people see them listed: one per person sharing a
-/// payment, and one for all the payments merged into one entry.
+/// Counts records as people see them listed: a contribution once per person
+/// sharing it, a payment out once per thing it covered, and the records of a
+/// merged entry or a payment from several accounts once for them all.
 #[derive(Default)]
 struct Givers {
     groups: BTreeSet<i64>,
@@ -65,6 +66,7 @@ impl Givers {
     fn count(&mut self, r: &FundraiserRecord) -> i64 {
         match r.group_id {
             Some(group) => i64::from(self.groups.insert(group)),
+            None if r.kind == Kind::Expense => r.things(),
             None => r.people(),
         }
     }
@@ -138,7 +140,7 @@ impl Totals {
                 }
                 (Kind::Expense, _) => {
                     t.expenses_minor += amount;
-                    t.expenses_count += r.things();
+                    t.expenses_count += givers.count(r);
                 }
                 (Kind::Charge, _) => {
                     t.charges_minor += amount;

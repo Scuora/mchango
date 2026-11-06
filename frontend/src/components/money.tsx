@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { AlertTriangle, CheckCircle2, CircleDashed, FileWarning, GitCompareArrows, ListTree, Merge, Trophy } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleDashed, FileWarning, GitCompareArrows, ListTree, Merge, Trophy, Wallet } from "lucide-react";
 import { Link } from "react-router";
 import { formatKes } from "@/lib/money";
 import { ATTENTION_LABELS, KIND_LABELS, RECONCILIATION_LABELS } from "@/lib/labels";
@@ -51,6 +51,29 @@ export function ReconciliationBadge({ status }: { status: ReconciliationStatus }
 }
 
 /** The most useful short name for a record in a management list. */
+/** A payment out made from several accounts: one of its parts. */
+export function isPaidTogether(item: ListItem): boolean {
+  return item.kind === "expense" && item.group !== null;
+}
+
+/** The badge that says a record belongs with others: merged with other payments, or paid from several accounts. */
+export function GroupBadge({ item, asEntry }: { item: ListItem; asEntry: boolean }) {
+  if (!item.group) return null;
+  const count = item.group.count;
+  return (
+    <Badge tone="info">
+      {isPaidTogether(item) ? <Wallet className="size-3.5" aria-hidden /> : <Merge className="size-3.5" aria-hidden />}
+      {isPaidTogether(item)
+        ? asEntry
+          ? `Paid from ${count} accounts`
+          : "Part of a payment from several accounts"
+        : asEntry
+          ? `${count} payments merged`
+          : `Merged as ${item.group.public_name ?? "Anonymous"}`}
+    </Badge>
+  );
+}
+
 export function itemLabel(item: ListItem): string {
   if (item.kind === "contribution" && item.shares?.length) {
     const names = item.shares.map((s) => s.public_name ?? "Anonymous");
@@ -79,7 +102,8 @@ export function ChallengeTag({ name }: { name: string }) {
 
 /**
  * One record in a list. `combined` shows a merged entry as one line (its name and
- * total); `select` adds a tick box beside it for choosing payments to merge.
+ * total); `select` adds a tick box beside it for choosing payments to merge (a
+ * blank space of the same width when it cannot be merged, so rows stay aligned).
  */
 export function TransactionRow({
   item,
@@ -93,18 +117,20 @@ export function TransactionRow({
   const asGroup = combined && item.group && item.group.count > 1 ? item.group : null;
   return (
     <li className={clsx(select && "flex items-start", select?.checked && "bg-plum-50/60")}>
-      {select && (
-        <label className="grid min-h-11 shrink-0 cursor-pointer place-items-center self-stretch pl-4 sm:pl-5" title={select.disabled ? "Only money received from one person can be merged" : undefined}>
-          <input
-            type="checkbox"
-            aria-label={`Choose ${itemLabel(item)}`}
-            className="size-5 rounded border-stone-400 accent-plum-700 disabled:opacity-30"
-            checked={select.checked}
-            disabled={select.disabled}
-            onChange={(e) => select.onChange(e.target.checked)}
-          />
-        </label>
-      )}
+      {select &&
+        (select.disabled ? (
+          <span className="w-9 shrink-0 sm:w-10" aria-hidden />
+        ) : (
+          <label className="grid min-h-11 w-9 shrink-0 cursor-pointer place-items-center self-stretch pl-4 sm:w-10 sm:pl-5">
+            <input
+              type="checkbox"
+              aria-label={`Choose ${itemLabel(item)} to merge`}
+              className="size-5 rounded border-stone-400 accent-plum-700"
+              checked={select.checked}
+              onChange={(e) => select.onChange(e.target.checked)}
+            />
+          </label>
+        ))}
       <Link
         to={`/manage/transactions/${item.id}`}
         className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3 hover:bg-stone-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-plum-600 sm:px-5"
@@ -112,15 +138,10 @@ export function TransactionRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className={clsx("font-medium text-stone-900", item.removed && "line-through decoration-stone-400")}>
-              {asGroup ? (asGroup.public_name ?? "Anonymous") : itemLabel(item)}
+              {asGroup && !isPaidTogether(item) ? (asGroup.public_name ?? "Anonymous") : itemLabel(item)}
             </span>
             {item.removed && <Badge tone="neutral">Archived</Badge>}
-            {item.group && (
-              <Badge tone="info">
-                <Merge className="size-3.5" aria-hidden />
-                {asGroup ? `${asGroup.count} payments merged` : `Merged as ${item.group.public_name ?? "Anonymous"}`}
-              </Badge>
-            )}
+            <GroupBadge item={item} asEntry={asGroup !== null} />
             {(item.items?.length ?? 0) > 0 && (
               <Badge tone="neutral">
                 <ListTree className="size-3.5" aria-hidden />
@@ -129,7 +150,7 @@ export function TransactionRow({
             )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-stone-600">
-            <span>{asGroup ? `Latest ${formatNairobi(item.occurred_at)}` : formatNairobi(item.occurred_at)}</span>
+            <span>{asGroup && !isPaidTogether(item) ? `Latest ${formatNairobi(item.occurred_at)}` : formatNairobi(item.occurred_at)}</span>
             <KindBadge kind={item.kind} />
             {item.kind === "pledge" && item.pledged_by && <PledgeGroupTag by={item.pledged_by} />}
             {item.kind === "personal" && <span className="text-xs text-stone-500">not counted</span>}

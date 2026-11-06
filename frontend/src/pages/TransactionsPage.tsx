@@ -3,23 +3,38 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 import { LoadState, SaveError } from "@/components/LoadState";
 import { TransactionRow, itemLabel } from "@/components/money";
+import { TransactionTable, useWideScreen, type SortKey } from "@/components/TransactionTable";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/form";
+import { Dialog } from "@/components/ui/dialog";
+import { Field, Input, RadioGroup } from "@/components/ui/form";
 import { Choice, DateField } from "@/components/ui/pickers";
 import { Card, EmptyState, Notice } from "@/components/ui/misc";
+import { mergeWeight, nameChoices } from "@/features/merge";
 import { api, useResource } from "@/lib/api";
 import { KIND_LABELS, STATUS_FILTER_LABELS } from "@/lib/labels";
 import { formatKes } from "@/lib/money";
 import type { Account, Kind, ListItem, ListResponse, StatusFilter } from "@/lib/types";
 
-const PAGE_SIZE = 50;
+/** Every record on one page; the server's own cap. */
+const ALL = 10_000;
 const FILTER_KEYS = ["q", "kind", "from", "to", "status", "account_id"] as const;
+
+const SORTS: { value: SortKey; label: string }[] = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+  { value: "name_asc", label: "Name A–Z" },
+  { value: "name_desc", label: "Name Z–A" },
+  { value: "amount_desc", label: "Largest amount first" },
+  { value: "amount_asc", label: "Smallest amount first" },
+];
 
 export function TransactionsPage() {
   const [params, setParams] = useSearchParams();
   const accounts = useResource<Account[]>("/api/manage/accounts");
   const [search, setSearch] = useState(params.get("q") ?? "");
-  const offset = Number(params.get("offset") ?? "0") || 0;
+  const sort = (SORTS.find((s) => s.value === params.get("sort"))?.value ?? "newest") as SortKey;
+  // A table on wide screens; a list on phones.
+  const wide = useWideScreen();
 
   const query = new URLSearchParams();
   for (const key of FILTER_KEYS) {
@@ -28,8 +43,8 @@ export function TransactionsPage() {
   }
   // Merged payments are listed once, as their entry.
   query.set("combine", "true");
-  query.set("limit", String(PAGE_SIZE));
-  query.set("offset", String(offset));
+  if (sort !== "newest") query.set("sort", sort);
+  query.set("limit", String(ALL));
   const list = useResource<ListResponse>(`/api/manage/transactions?${query.toString()}`);
 
   // Debounced search keeps typing responsive.
@@ -44,19 +59,18 @@ export function TransactionsPage() {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
     else next.delete(key);
-    next.delete("offset");
     setParams(next, { replace: true });
   }
 
   const activeFilters = FILTER_KEYS.filter((k) => k !== "q" && params.get(k)).length;
   const [showFilters, setShowFilters] = useState(activeFilters > 0);
 
-  // Choosing payments to merge into one public entry.
-  const [merging, setMerging] = useState(false);
+  // Ticking payments to merge into one public entry.
   const [chosen, setChosen] = useState<Map<number, ListItem>>(new Map());
   const [mergedNote, setMergedNote] = useState<string | null>(null);
   const canMerge = (item: ListItem) => item.kind === "contribution" && !item.removed && !(item.shares?.length);
   function choose(item: ListItem, on: boolean) {
+    setMergedNote(null);
     setChosen((current) => {
       const next = new Map(current);
       if (on) next.set(item.id, item);
@@ -64,8 +78,8 @@ export function TransactionsPage() {
       return next;
     });
   }
-  function stopMerging() {
-    setMerging(false);
+  const select = (item: ListItem) => ({ checked: chosen.has(item.id), disabled: !canMerge(item), onChange: (on: boolean) => choose(item, on) });
+  function clearChosen() {
     setChosen(new Map());
   }
 
@@ -74,9 +88,6 @@ export function TransactionsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="page-title">Transactions</h1>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" icon={<Merge className="size-4" aria-hidden />} aria-pressed={merging} onClick={() => (merging ? stopMerging() : (setMerging(true), setMergedNote(null)))}>
-            {merging ? "Stop merging" : "Merge payments"}
-          </Button>
           <ButtonLink to="/manage/share" variant="secondary" icon={<Share2 className="size-4" aria-hidden />}>
             Share on WhatsApp
           </ButtonLink>
@@ -166,14 +177,6 @@ export function TransactionsPage() {
         </div>
       </Card>
 
-      {merging && (
-        <Notice tone="info" title="Merge payments from the same giver">
-          <p>
-            Tick two or more payments, say from a family that gave several times, and they are listed publicly as one entry under one name. Each payment keeps its
-            M-Pesa message, statement match and history, and the money is counted once as before. You can separate them again at any time.
-          </p>
-        </Notice>
-      )}
       {mergedNote && <Notice tone="success">{mergedNote}</Notice>}
 
       <Card>
@@ -187,76 +190,108 @@ export function TransactionsPage() {
           </EmptyState>
         ) : (
           <>
-            <p className="border-b border-stone-100 px-4 py-2 text-sm text-stone-600 sm:px-5" aria-live="polite">
-              {list.data.total} record{list.data.total === 1 ? "" : "s"}
-              {list.loading && " · updating…"}
-            </p>
-            <ul className="stagger divide-y divide-stone-100">
-              {list.data.items.map((item) => (
-                <TransactionRow
-                  key={item.id}
-                  item={item}
-                  combined
-                  select={merging ? { checked: chosen.has(item.id), disabled: !canMerge(item), onChange: (on) => choose(item, on) } : undefined}
-                />
-              ))}
-            </ul>
-            {list.data.total > PAGE_SIZE && (
-              <div className="flex items-center justify-between gap-3 border-t border-stone-100 px-4 py-3 text-sm sm:px-5">
-                <Button variant="secondary" size="sm" disabled={offset === 0} onClick={() => setOffsetParam(Math.max(0, offset - PAGE_SIZE))}>
-                  Newer
-                </Button>
-                <span className="text-stone-600">
-                  {offset + 1}–{Math.min(offset + PAGE_SIZE, list.data.total)} of {list.data.total}
-                </span>
-                <Button variant="secondary" size="sm" disabled={offset + PAGE_SIZE >= list.data.total} onClick={() => setOffsetParam(offset + PAGE_SIZE)}>
-                  Older
-                </Button>
-              </div>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-stone-100 px-4 py-2 sm:px-5">
+              <p className="text-sm text-stone-600" aria-live="polite">
+                {list.data.total > list.data.items.length ? `First ${list.data.items.length} of ${list.data.total} records` : `${list.data.total} record${list.data.total === 1 ? "" : "s"}`}
+                {list.loading && " · updating…"}
+              </p>
+              {!wide && (
+                <label className="flex items-center gap-2 text-sm text-stone-600" htmlFor="sort">
+                  Sort
+                  <span className="w-52">
+                    <Choice id="sort" value={sort} options={SORTS} onChange={(v) => update("sort", v === "newest" ? "" : v)} />
+                  </span>
+                </label>
+              )}
+            </div>
+            {wide ? (
+              <TransactionTable items={list.data.items} sort={sort} onSort={(next) => update("sort", next === "newest" ? "" : next)} select={select} />
+            ) : (
+              <ul className="stagger divide-y divide-stone-100">
+                {list.data.items.map((item) => (
+                  <TransactionRow key={item.id} item={item} combined select={select(item)} />
+                ))}
+              </ul>
             )}
           </>
         )}
       </Card>
 
-      {merging && chosen.size > 0 && (
+      {chosen.size > 0 && (
         <MergeBar
           chosen={[...chosen.values()]}
-          onCancel={stopMerging}
+          onCancel={clearChosen}
           onMerged={(name, count) => {
-            stopMerging();
-            setMergedNote(`${count} payments are now listed as “${name}”. Open any of them to rename the entry or separate a payment.`);
+            clearChosen();
+            setMergedNote(`${count} payments are now listed ${name ? `as “${name}”` : "anonymously"}. Open any of them to rename the entry or separate a payment.`);
             list.reload();
           }}
         />
       )}
     </div>
   );
-
-  function setOffsetParam(value: number) {
-    const next = new URLSearchParams(params);
-    if (value) next.set("offset", String(value));
-    else next.delete("offset");
-    setParams(next);
-    window.scrollTo({ top: 0 });
-  }
 }
 
-/** Names the merged entry and merges the chosen payments (and any entries they are already in). */
-function MergeBar({ chosen, onCancel, onMerged }: { chosen: ListItem[]; onCancel: () => void; onMerged: (name: string, count: number) => void }) {
-  const suggestion = chosen.map((c) => c.group?.public_name ?? c.public_name).find(Boolean) ?? "";
-  const [name, setName] = useState(suggestion);
+/** The chosen payments; Merge asks which of their names the merged entry takes. */
+function MergeBar({ chosen, onCancel, onMerged }: { chosen: ListItem[]; onCancel: () => void; onMerged: (name: string | null, count: number) => void }) {
+  const [naming, setNaming] = useState(false);
+  const payments = chosen.reduce((n, c) => n + mergeWeight(c).payments, 0);
+  const total = chosen.reduce((sum, c) => sum + mergeWeight(c).total_minor, 0);
+
+  return (
+    <div className="sticky bottom-3 z-20 space-y-3 rounded-xl border border-plum-200 bg-white p-4 shadow-lg sm:p-5">
+      <p className="text-sm text-stone-700">
+        <span className="font-semibold text-stone-900">{payments} payment{payments === 1 ? "" : "s"}</span> chosen, {formatKes(total)} in all:{" "}
+        {chosen.map((c) => (c.group && c.group.count > 1 ? c.group.public_name ?? "Anonymous" : itemLabel(c))).join(", ")}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={payments < 2} icon={<Merge className="size-4" aria-hidden />} onClick={() => setNaming(true)}>
+          Merge {payments > 1 ? payments : ""} payments
+        </Button>
+        <Button variant="ghost" icon={<X className="size-4" aria-hidden />} onClick={onCancel}>
+          Clear
+        </Button>
+      </div>
+      {payments < 2 && <p className="text-sm text-stone-500">Tick at least two payments to merge them into one entry, say from a family that gave several times.</p>}
+      <Dialog open={naming} onClose={() => setNaming(false)} title={`Merge ${payments} payments`}>
+        {naming && <MergeNameForm chosen={chosen} payments={payments} total={total} onBack={() => setNaming(false)} onMerged={onMerged} />}
+      </Dialog>
+    </div>
+  );
+}
+
+type NamePick = `name:${number}` | "anonymous" | "other";
+
+/** Picks the merged entry's name from the public names on the chosen payments (or another), then merges them. */
+function MergeNameForm({
+  chosen,
+  payments,
+  total,
+  onBack,
+  onMerged,
+}: {
+  chosen: ListItem[];
+  payments: number;
+  total: number;
+  onBack: () => void;
+  onMerged: (name: string | null, count: number) => void;
+}) {
+  const { names, anonymous, named } = nameChoices(chosen);
+  const [pick, setPick] = useState<NamePick>(named ? `name:${names.findIndex((n) => n.name === named)}` : anonymous ? "anonymous" : "other");
+  const [other, setOther] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const payments = chosen.reduce((n, c) => n + (c.group && c.group.count > 1 ? c.group.count : 1), 0);
-  const total = chosen.reduce((sum, c) => sum + (c.group && c.group.count > 1 ? c.group.total_minor : c.amount_minor), 0);
+  const covers = (count: number, minor: number) => (count === 1 ? formatKes(minor) : `${count} payments, ${formatKes(minor)}`);
+
+  const name = pick === "other" ? other.trim() || null : pick === "anonymous" ? null : names[Number(pick.slice(5))].name;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await api.post("/api/manage/merged", { transaction_ids: chosen.map((c) => c.id), public_name: name.trim() || null });
-      onMerged(name.trim() || "Anonymous", payments);
+      await api.post("/api/manage/merged", { transaction_ids: chosen.map((c) => c.id), public_name: name });
+      onMerged(name, payments);
     } catch (e) {
       setError(e);
     } finally {
@@ -265,26 +300,52 @@ function MergeBar({ chosen, onCancel, onMerged }: { chosen: ListItem[]; onCancel
   }
 
   return (
-    <form onSubmit={submit} className="sticky bottom-3 z-20 space-y-3 rounded-xl border border-plum-200 bg-white p-4 shadow-lg sm:p-5">
-      <p className="text-sm text-stone-700">
-        <span className="font-semibold text-stone-900">{payments} payment{payments === 1 ? "" : "s"}</span> chosen, {formatKes(total)} in all:{" "}
-        {chosen.map((c) => (c.group && c.group.count > 1 ? c.group.public_name ?? "Anonymous" : itemLabel(c))).join(", ")}
+    <form onSubmit={submit} className="space-y-4 text-[15px]">
+      <p className="text-stone-700">
+        {payments} payments, {formatKes(total)} in all, will be listed publicly as one entry. Each keeps its M-Pesa message, statement match and history, and you can
+        separate them again at any time. Which name should the entry show?
       </p>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <Field label="List them publicly as" htmlFor="merge-name" hint="Left empty, the entry shows the anonymous label." className="flex-1">
-          <Input id="merge-name" value={name} maxLength={80} placeholder="Family of …" onChange={(e) => setName(e.target.value)} />
+      <RadioGroup<NamePick>
+        name="merge-name"
+        legend="List them publicly as"
+        value={pick}
+        onChange={setPick}
+        options={[
+          ...names.map((n, i) => ({
+            value: `name:${i}` as NamePick,
+            label: (
+              <>
+                {n.name} <span className="text-stone-500">· {covers(n.payments, n.total_minor)}</span>
+              </>
+            ),
+          })),
+          {
+            value: "anonymous" as NamePick,
+            label: anonymous ? (
+              <>
+                Anonymous <span className="text-stone-500">· {anonymous === 1 ? "1 payment" : `${anonymous} payments`}</span>
+              </>
+            ) : (
+              "Anonymous"
+            ),
+          },
+          { value: "other" as NamePick, label: "Another name…" },
+        ]}
+      />
+      {pick === "other" && (
+        <Field label="Name to show" htmlFor="merge-other" hint="Left empty, the entry shows the anonymous label.">
+          <Input id="merge-other" value={other} maxLength={80} placeholder="Family of …" autoFocus onChange={(e) => setOther(e.target.value)} />
         </Field>
-        <div className="flex gap-2">
-          <Button type="submit" busy={busy} disabled={payments < 2} icon={<Merge className="size-4" aria-hidden />}>
-            Merge {payments > 1 ? payments : ""} payments
-          </Button>
-          <Button type="button" variant="ghost" icon={<X className="size-4" aria-hidden />} onClick={onCancel}>
-            Cancel
-          </Button>
-        </div>
-      </div>
-      {payments < 2 && <p className="text-sm text-stone-500">Choose at least two payments.</p>}
+      )}
       <SaveError error={error} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" busy={busy} icon={<Merge className="size-4" aria-hidden />}>
+          Merge as {name ? `“${name}”` : "anonymous"}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onBack}>
+          Back
+        </Button>
+      </div>
     </form>
   );
 }
