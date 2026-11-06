@@ -106,7 +106,7 @@ export const TEMPLATE_GROUPS: { label: string; fields: [string, string][] }[] = 
   {
     label: "The whole fundraiser (all contributions, not just this challenge)",
     fields: [
-      ["memorial_name", "e.g. Dr. Joseph Karisa Gonzi"],
+      ["memorial_name", "e.g. Daktari Joseph Karisa Gonzi"],
       ["memorial_dates", "e.g. 22 October 1952 – 1 November 2026"],
       ["tribute", "the tribute line"],
       ["all_list", "every contribution, numbered: “1. Edward Chai – KES 1,000”"],

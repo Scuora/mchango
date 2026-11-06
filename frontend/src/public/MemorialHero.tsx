@@ -14,7 +14,7 @@ import { pick, useNow } from "./programmeParts";
 // The photo settles and the text rises once per visit, not on every return to the home page.
 let played = false;
 
-/** "Dr. Joseph Karisa Gonzi" on two lines: "Dr. Joseph" over "Karisa Gonzi". */
+/** "Daktari Joseph Karisa Gonzi" on two lines: "Daktari Joseph" over "Karisa Gonzi". */
 function nameLines(name: string): string[] {
   const words = name.split(" ");
   if (words.length < 2) return [name];
