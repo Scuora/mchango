@@ -110,7 +110,7 @@ function Carousel() {
                 loading={i < 2 ? "eager" : "lazy"}
                 decoding="async"
                 alt=""
-                className="h-auto max-h-full w-auto max-w-full"
+                className="h-full w-full object-contain"
               />
             </div>
           </a>
