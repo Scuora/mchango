@@ -3,6 +3,7 @@
 // of the programme as photo cards. The wording and timing come from memorialDay.ts.
 
 import { clsx } from "clsx";
+import { Images } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import type { PublicPage } from "@/lib/types";
@@ -77,6 +78,11 @@ export function MemorialHero({ page }: { page: PublicPage }) {
                 {pick(action.label, lang)}
               </Link>
             ))}
+            {/* The photographs from his eulogy booklet, on every day of the funeral and after. */}
+            <Link to="/gallery" className="mh-btn mh-secondary gap-2">
+              <Images className="size-[18px]" aria-hidden />
+              {tr("Photo gallery", "Picha")}
+            </Link>
           </div>
         </div>
       </section>
