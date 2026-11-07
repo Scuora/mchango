@@ -1,4 +1,4 @@
-import { CalendarDays, Download, House } from "lucide-react";
+import { CalendarDays, Download, House, Images } from "lucide-react";
 import { Link } from "react-router";
 import { BOOKLET, EULOGY } from "./eulogy";
 import { localiseDates, useLang, useTr } from "./i18n";
@@ -43,6 +43,12 @@ export function EulogyPage() {
                 >
                   <Download className="size-5" aria-hidden /> {tr(`Download the booklet (PDF, ${BOOKLET.pdfSize.en})`, `Pakua kitabu (PDF, ${BOOKLET.pdfSize.sw})`)}
                 </a>
+                <Link
+                  to="/gallery"
+                  className="press inline-flex min-h-12 items-center gap-2 rounded-full border border-stone-300 px-5 font-semibold text-stone-900 no-underline hover:bg-stone-100 hover:no-underline"
+                >
+                  <Images className="size-5" aria-hidden /> {tr("Photo gallery", "Picha")}
+                </Link>
                 <Link
                   to="/programme"
                   className="press inline-flex min-h-12 items-center gap-2 rounded-full border border-stone-300 px-5 font-semibold text-stone-900 no-underline hover:bg-stone-100 hover:no-underline"

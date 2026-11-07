@@ -19,6 +19,7 @@ import { TrendsPage } from "@/public/TrendsPage";
 import { ChallengesPage as PublicChallengesPage } from "@/public/ChallengesPage";
 import { ProgrammeIndex, ProgrammePage } from "@/public/ProgrammePage";
 import { EulogyPage } from "@/public/EulogyPage";
+import { GalleryPage } from "@/public/GalleryPage";
 
 // Management is loaded separately, so visitors to the public page never
 // download it (or PrimeReact). See lib/lazyPages.
@@ -71,6 +72,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="programme" element={<ProgrammeIndex />} />
           <Route path="programme/:day" element={<ProgrammePage />} />
           <Route path="eulogy" element={<EulogyPage />} />
+          <Route path="gallery" element={<GalleryPage />} />
           <Route path="updates" element={<UpdatesPage />} />
           <Route path="updates/:id" element={<UpdatePage />} />
           <Route path="contribute" element={<ContributePage />} />

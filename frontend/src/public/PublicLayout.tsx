@@ -16,8 +16,8 @@ import { PROGRAMME, dayStatus } from "./programme";
 import { DayBadge, TodayPill, isToday, pick, useNow } from "./programmeParts";
 import { sharePage } from "./share";
 
-/** Pages that open with a dark header under the navbar (the home page, the programme and the eulogy). */
-const opensDark = (pathname: string) => pathname === "/" || pathname.startsWith("/programme") || pathname === "/eulogy";
+/** Pages that open with a dark header under the navbar (the home page, the programme, the eulogy and the gallery). */
+const opensDark = (pathname: string) => pathname === "/" || pathname.startsWith("/programme") || pathname === "/eulogy" || pathname === "/gallery";
 
 interface PublicContext {
   page: PublicPage;
