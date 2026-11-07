@@ -1,10 +1,10 @@
-import { CalendarDays, House } from "lucide-react";
+import { CalendarDays, Download, House } from "lucide-react";
 import { Link } from "react-router";
-import { EULOGY } from "./eulogy";
+import { BOOKLET, EULOGY } from "./eulogy";
 import { localiseDates, useLang, useTr } from "./i18n";
 import { usePublicPage } from "./PublicLayout";
 
-/** His eulogy, under his photograph; until the family shares it, a note that it will appear here. */
+/** His eulogy, under his photograph: the booklet page by page with a download, or the text, or a note that it will appear here. */
 export function EulogyPage() {
   const page = usePublicPage();
   const tr = useTr();
@@ -28,7 +28,45 @@ export function EulogyPage() {
         </div>
       </header>
       <article className="mx-auto max-w-3xl px-4 py-8 md:px-6 md:py-12">
-        {paragraphs.length > 0 ? (
+        {BOOKLET.pages > 0 ? (
+          <>
+            <div className="rounded-[20px] border border-[rgb(27_25_23/0.09)] bg-white p-6 md:p-8">
+              <p className="font-display text-[1.6rem] leading-snug text-stone-900">{tr("The eulogy booklet", "Kitabu cha wasifu")}</p>
+              <p className="mt-2 text-stone-600">
+                {tr(`${BOOKLET.pages} pages. Read it below, or download it to keep.`, `Kurasa ${BOOKLET.pages}. Kisome hapa chini, au kipakue ukihifadhi.`)}
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a
+                  href={BOOKLET.pdf}
+                  download
+                  className="press inline-flex min-h-12 items-center gap-2 rounded-full bg-[#0b0a09] px-5 font-semibold text-white no-underline hover:bg-[#2a2724] hover:no-underline"
+                >
+                  <Download className="size-5" aria-hidden /> {tr(`Download the booklet (PDF, ${BOOKLET.pdfSize.en})`, `Pakua kitabu (PDF, ${BOOKLET.pdfSize.sw})`)}
+                </a>
+                <Link
+                  to="/programme"
+                  className="press inline-flex min-h-12 items-center gap-2 rounded-full border border-stone-300 px-5 font-semibold text-stone-900 no-underline hover:bg-stone-100 hover:no-underline"
+                >
+                  <CalendarDays className="size-5" aria-hidden /> {tr("Funeral programme", "Ratiba ya mazishi")}
+                </Link>
+              </div>
+            </div>
+            <div className="mt-8 space-y-4 md:space-y-6">
+              {Array.from({ length: BOOKLET.pages }, (_, i) => i + 1).map((n) => (
+                <img
+                  key={n}
+                  src={BOOKLET.page(n)}
+                  width={BOOKLET.width}
+                  height={BOOKLET.height}
+                  loading={n <= 2 ? "eager" : "lazy"}
+                  decoding="async"
+                  alt={tr(`Eulogy booklet, page ${n} of ${BOOKLET.pages}`, `Kitabu cha wasifu, ukurasa ${n} kati ya ${BOOKLET.pages}`)}
+                  className="block h-auto w-full rounded-[6px] bg-white shadow-[0_10px_30px_rgb(27_25_23/0.18)]"
+                />
+              ))}
+            </div>
+          </>
+        ) : paragraphs.length > 0 ? (
           <div className="space-y-5 text-[18px] leading-[1.75] text-stone-800">
             {paragraphs.map((p, i) => (
               <p key={i}>{p}</p>
